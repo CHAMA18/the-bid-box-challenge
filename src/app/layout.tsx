@@ -24,34 +24,33 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Galina Express — Cross-Border E-Commerce Enabler in Iraq",
+  title: "The Bid Box Challenge — Agentic AI for Africa Innovation Challenge",
   description:
-    "Galina Express connects merchants from Türkiye, China, the GCC & Europe to 45 million Iraqi consumers — integrated air & road freight, customs, escrow payments and last-mile delivery under one roof.",
+    "Build an agent that reads a public tender end to end — sorts the bids, ticks off the documents, checks each bidder, compares prices and writes the report, every finding cited. Then it stops: the committee decides. Prize: a ticket to the MCP Conference in Nairobi.",
   keywords: [
-    "Galina Express",
-    "logistics",
-    "Iraq",
-    "cross-border e-commerce",
-    "freight",
-    "air cargo",
-    "last-mile delivery",
-    "customs clearance",
-    "escrow payments",
-    "GRAND Guarantee",
+    "Bid Box Challenge",
+    "Agentic AI for Africa",
+    "MCP",
+    "Model Context Protocol",
+    "Open Contracting",
+    "OCDS",
+    "public procurement",
+    "AI challenge",
+    "Nairobi",
   ],
-  authors: [{ name: "Galina Express" }],
+  authors: [{ name: "The Bid Box Challenge" }],
   openGraph: {
-    title: "Galina Express — Connecting Global Sellers to Local Buyers",
+    title: "The Bid Box Challenge — Agentic AI for Africa",
     description:
-      "Integrated cross-border logistics, flexible payments and digital trust for the Iraqi market. Track shipments live, get instant quotes, ship in 48 hours.",
-    siteName: "Galina Express",
+      "Twenty-six days of committee work in twenty minutes of agent work — with every finding cited, and a hard stop before the award. Prize: a ticket to the MCP Conference, Nairobi.",
+    siteName: "The Bid Box Challenge",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Galina Express — Cross-Border E-Commerce Enabler in Iraq",
+    title: "The Bid Box Challenge — Agentic AI for Africa",
     description:
-      "Integrated freight, customs, escrow payments and last-mile delivery between Türkiye, China, the GCC, Europe and Iraq.",
+      "Agents prepare the file, committees award the tender. Build an MCP-powered procurement agent for Africa.",
   },
 };
 

@@ -1,22 +1,20 @@
-import { TopTicker } from "@/components/galina/top-ticker";
-import { SiteHeader } from "@/components/galina/site-header";
-import { Hero } from "@/components/galina/hero";
-import { Ecosystem } from "@/components/galina/ecosystem";
-import { Tracking } from "@/components/galina/tracking";
-import { Network } from "@/components/galina/network";
-import { QuoteCalculator } from "@/components/galina/quote-calculator";
-import { Impact } from "@/components/galina/impact";
-import { Milestones } from "@/components/galina/milestones";
-import { Testimonials } from "@/components/galina/testimonials";
-import { Faq } from "@/components/galina/faq";
-import { CallToAction } from "@/components/galina/cta";
-import { SiteFooter } from "@/components/galina/site-footer";
+import { TopTicker } from "@/components/bidbox/top-ticker";
+import { SiteHeader } from "@/components/bidbox/site-header";
+import { Hero } from "@/components/bidbox/hero";
+import { Overview } from "@/components/bidbox/overview";
+import { RuleBand } from "@/components/bidbox/rule-band";
+import { Themes } from "@/components/bidbox/themes";
+import { Jargon } from "@/components/bidbox/jargon";
+import { Requirements } from "@/components/bidbox/requirements";
+import { Closing } from "@/components/bidbox/closing";
+import { SiteFooter } from "@/components/bidbox/site-footer";
 
 /**
- * Galina Express — cross-border e-commerce enabler in Iraq.
- * Inspired by galinaexpress.com, rebuilt as a world-class, fully native
- * Next.js experience: no external CDNs, live shipment tracking, an instant
- * quote engine and an animated corridor network.
+ * The Bid Box Challenge — Agentic AI for Africa Innovation Challenge.
+ * A world-class, fully native Next.js experience: an animated MCP agent-run
+ * terminal, the 26-days-vs-20-minutes clock, four challenge themes, the
+ * shared jargon, and both eligibility lists — with the non-negotiable rule
+ * front and centre: agents prepare the file, committees award the tender.
  */
 export default function Home() {
   return (
@@ -25,15 +23,12 @@ export default function Home() {
       <SiteHeader />
       <main className="w-full flex-1">
         <Hero />
-        <Ecosystem />
-        <Tracking />
-        <Network />
-        <QuoteCalculator />
-        <Impact />
-        <Milestones />
-        <Testimonials />
-        <Faq />
-        <CallToAction />
+        <Overview />
+        <RuleBand />
+        <Themes />
+        <Jargon />
+        <Requirements />
+        <Closing />
       </main>
       <SiteFooter />
     </div>
