@@ -1,44 +1,39 @@
-import { SiteHeader, SovereignTicker } from "@/components/bidbox/site-header";
-import { HeroSection } from "@/components/bidbox/hero-section";
-import { CrisisSection } from "@/components/bidbox/crisis-section";
-import { ThemesSection } from "@/components/bidbox/themes-section";
-import { JargonSection } from "@/components/bidbox/jargon-section";
-import { SimulationSection } from "@/components/bidbox/simulation-section";
-import { RequirementsSection } from "@/components/bidbox/requirements-section";
-import { RubricSection } from "@/components/bidbox/rubric-section";
-import { PrizesSection } from "@/components/bidbox/prizes-section";
-import { PortalsSection } from "@/components/bidbox/portals-section";
-import { TimelineSection } from "@/components/bidbox/timeline-section";
-import { ApplySection } from "@/components/bidbox/apply-section";
-import { SiteFooter } from "@/components/bidbox/site-footer";
+import { TopTicker } from "@/components/galina/top-ticker";
+import { SiteHeader } from "@/components/galina/site-header";
+import { Hero } from "@/components/galina/hero";
+import { Ecosystem } from "@/components/galina/ecosystem";
+import { Tracking } from "@/components/galina/tracking";
+import { Network } from "@/components/galina/network";
+import { QuoteCalculator } from "@/components/galina/quote-calculator";
+import { Impact } from "@/components/galina/impact";
+import { Milestones } from "@/components/galina/milestones";
+import { Testimonials } from "@/components/galina/testimonials";
+import { Faq } from "@/components/galina/faq";
+import { CallToAction } from "@/components/galina/cta";
+import { SiteFooter } from "@/components/galina/site-footer";
 
 /**
- * The Bid Box Challenge — Agentic AI for Africa Innovation Challenge.
- *
- * Fully native Next.js implementation of the original source: design tokens
- * ported to Tailwind v4 @theme, fonts self-hosted via next/font, icons via
- * lucide-react, and all imagery served locally. No external CDNs — the page
- * renders instantly and can never hang on third-party resources.
+ * Galina Express — cross-border e-commerce enabler in Iraq.
+ * Inspired by galinaexpress.com, rebuilt as a world-class, fully native
+ * Next.js experience: no external CDNs, live shipment tracking, an instant
+ * quote engine and an animated corridor network.
  */
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col bg-background text-on-surface font-body antialiased">
+    <div className="flex min-h-screen flex-col bg-paper font-body text-ink-900 antialiased">
+      <TopTicker />
       <SiteHeader />
-      <main className="w-full pt-20 bg-background flex-1">
-        <div className="flex flex-col w-full">
-          <SovereignTicker />
-          <HeroSection />
-          <CrisisSection />
-          <ThemesSection />
-          <JargonSection />
-          <SimulationSection />
-          <RequirementsSection />
-          <RubricSection />
-          <PrizesSection />
-          <PortalsSection />
-          <TimelineSection />
-          <ApplySection />
-        </div>
+      <main className="w-full flex-1">
+        <Hero />
+        <Ecosystem />
+        <Tracking />
+        <Network />
+        <QuoteCalculator />
+        <Impact />
+        <Milestones />
+        <Testimonials />
+        <Faq />
+        <CallToAction />
       </main>
       <SiteFooter />
     </div>

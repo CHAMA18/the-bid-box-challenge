@@ -1,20 +1,19 @@
-import type { Metadata } from "next";
-import { Newsreader, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Archivo, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
 // Self-hosted via next/font — zero runtime requests to Google, so the page
 // can never hang on external font CDNs.
-const newsreader = Newsreader({
+const archivo = Archivo({
   subsets: ["latin"],
-  style: ["normal", "italic"],
-  variable: "--font-newsreader",
+  variable: "--font-archivo",
   display: "swap",
 });
 
-const jakarta = Plus_Jakarta_Sans({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-jakarta",
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -25,37 +24,39 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "The Bid Box Challenge — Agentic AI for Africa Innovation Challenge",
+  title: "Galina Express — Cross-Border E-Commerce Enabler in Iraq",
   description:
-    "Build an agentic AI that evaluates public tenders. Governance track: Health, Finance, Digital Economy & Future of Work. MCP + open-weights, OCDS across 9 African nations. Submissions close 15th October.",
+    "Galina Express connects merchants from Türkiye, China, the GCC & Europe to 45 million Iraqi consumers — integrated air & road freight, customs, escrow payments and last-mile delivery under one roof.",
   keywords: [
-    "The Bid Box Challenge",
-    "Agentic AI",
-    "Africa",
-    "MCP",
-    "Model Context Protocol",
-    "OCDS",
-    "public procurement",
-    "open-weights",
-    "hackathon",
+    "Galina Express",
+    "logistics",
+    "Iraq",
+    "cross-border e-commerce",
+    "freight",
+    "air cargo",
+    "last-mile delivery",
+    "customs clearance",
+    "escrow payments",
+    "GRAND Guarantee",
   ],
-  authors: [{ name: "Agentic AI for Africa Innovation Challenge" }],
-  icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
-  },
+  authors: [{ name: "Galina Express" }],
   openGraph: {
-    title: "The Bid Box Challenge — Agentic AI for Africa",
+    title: "Galina Express — Connecting Global Sellers to Local Buyers",
     description:
-      "Agentic AI that evaluates public tenders. Live agent simulation, judging rubric, prizes & Nairobi Summit accelerator.",
-    siteName: "The Bid Box Challenge",
+      "Integrated cross-border logistics, flexible payments and digital trust for the Iraqi market. Track shipments live, get instant quotes, ship in 48 hours.",
+    siteName: "Galina Express",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "The Bid Box Challenge — Agentic AI for Africa",
+    title: "Galina Express — Cross-Border E-Commerce Enabler in Iraq",
     description:
-      "Build an agentic AI that evaluates public tenders. MCP + open-weights. Submissions close 15th October.",
+      "Integrated freight, customs, escrow payments and last-mile delivery between Türkiye, China, the GCC, Europe and Iraq.",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#d92616",
 };
 
 export default function RootLayout({
@@ -66,7 +67,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${newsreader.variable} ${jakarta.variable} ${jetbrains.variable} antialiased bg-background text-foreground`}
+        className={`${archivo.variable} ${inter.variable} ${jetbrains.variable} font-body antialiased bg-background text-foreground`}
       >
         {children}
         <Toaster />
