@@ -1,16 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Newsreader, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Self-hosted via next/font — zero runtime requests to Google, so the page
+// can never hang on external font CDNs.
+const newsreader = Newsreader({
   subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-newsreader",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
+  variable: "--font-jakarta",
+  display: "swap",
+});
+
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -55,7 +66,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${newsreader.variable} ${jakarta.variable} ${jetbrains.variable} antialiased bg-background text-foreground`}
       >
         {children}
         <Toaster />

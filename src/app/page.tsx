@@ -1,43 +1,46 @@
-'use client'
-
-import { useState } from 'react'
+import { SiteHeader, SovereignTicker } from "@/components/bidbox/site-header";
+import { HeroSection } from "@/components/bidbox/hero-section";
+import { CrisisSection } from "@/components/bidbox/crisis-section";
+import { ThemesSection } from "@/components/bidbox/themes-section";
+import { JargonSection } from "@/components/bidbox/jargon-section";
+import { SimulationSection } from "@/components/bidbox/simulation-section";
+import { RequirementsSection } from "@/components/bidbox/requirements-section";
+import { RubricSection } from "@/components/bidbox/rubric-section";
+import { PrizesSection } from "@/components/bidbox/prizes-section";
+import { PortalsSection } from "@/components/bidbox/portals-section";
+import { TimelineSection } from "@/components/bidbox/timeline-section";
+import { ApplySection } from "@/components/bidbox/apply-section";
+import { SiteFooter } from "@/components/bidbox/site-footer";
 
 /**
- * The Bid Box Challenge — Agentic AI for Africa Innovation Challenge
+ * The Bid Box Challenge — Agentic AI for Africa Innovation Challenge.
  *
- * The complete original source (standalone HTML document with its own
- * Tailwind config, Google Fonts, Material Symbols and interactive scripts)
- * is served byte-for-byte from /public/bidbox.html and rendered here
- * full-viewport so it runs exactly as authored.
+ * Fully native Next.js implementation of the original source: design tokens
+ * ported to Tailwind v4 @theme, fonts self-hosted via next/font, icons via
+ * lucide-react, and all imagery served locally. No external CDNs — the page
+ * renders instantly and can never hang on third-party resources.
  */
 export default function Home() {
-  const [loaded, setLoaded] = useState(false)
-
   return (
-    <main
-      aria-label="The Bid Box Challenge — Agentic AI for Africa Innovation Challenge"
-      className="fixed inset-0 overflow-hidden"
-      style={{ backgroundColor: '#0f131c' }}
-    >
-      {/* Loading state shown while the page assets (fonts, Tailwind CDN) finish loading */}
-      {!loaded && (
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4"
-        >
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/10 border-t-[#68dba9]" />
-          <p className="text-sm tracking-wider text-white/50">
-            Initializing The Bid Box Challenge…
-          </p>
+    <div className="min-h-screen flex flex-col bg-background text-on-surface font-body antialiased">
+      <SiteHeader />
+      <main className="w-full pt-20 bg-background flex-1">
+        <div className="flex flex-col w-full">
+          <SovereignTicker />
+          <HeroSection />
+          <CrisisSection />
+          <ThemesSection />
+          <JargonSection />
+          <SimulationSection />
+          <RequirementsSection />
+          <RubricSection />
+          <PrizesSection />
+          <PortalsSection />
+          <TimelineSection />
+          <ApplySection />
         </div>
-      )}
-
-      <iframe
-        src="/bidbox.html"
-        title="The Bid Box Challenge — Agentic AI for Africa Innovation Challenge"
-        className={`h-full w-full border-0 transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
-        onLoad={() => setLoaded(true)}
-      />
-    </main>
-  )
+      </main>
+      <SiteFooter />
+    </div>
+  );
 }
