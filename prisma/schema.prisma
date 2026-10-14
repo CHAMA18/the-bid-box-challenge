@@ -1,8 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Galina Express — cross-border logistics platform schema.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +9,54 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Shipment {
+  id             String          @id @default(cuid())
+  code           String          @unique // e.g. GXL-4821-BGD
+  origin         String
+  originCode     String
+  destination    String
+  destinationCode String
+  service        String // EXPRESS_AIR | STANDARD_ROAD | ECONOMY_SEA
+  status         String // BOOKED | PICKED_UP | IN_TRANSIT | CUSTOMS | OUT_FOR_DELIVERY | DELIVERED
+  weightKg       Float
+  pieces         Int
+  shipper        String
+  consignee      String
+  etaLabel       String
+  createdAt      DateTime        @default(now())
+  events         ShipmentEvent[]
 }
 
-model Post {
+model ShipmentEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  title      String
+  location   String
+  note       String?
+  timestamp  DateTime
+  done       Boolean  @default(true)
+  sortOrder  Int
+}
+
+model QuoteRequest {
+  id          String   @id @default(cuid())
+  origin      String
+  destination String
+  weightKg    Float
+  service     String
+  insurance   Boolean  @default(false)
+  priceMin    Float
+  priceMax    Float
+  transitDays Int
+  createdAt   DateTime @default(now())
+}
+
+model ContactMessage {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  name      String
+  email     String
+  company   String?
+  message   String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
