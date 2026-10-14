@@ -33,3 +33,24 @@ Stage Summary:
 - Page is live and healthy at / (native implementation, cannot hang on CDN resources; infinite-load issue resolved).
 - Repo deployed: https://github.com/CHAMA18/the-bid-box-challenge (public, main branch, upstream tracking configured).
 - .env untracked for safety; no secrets in the pushed repository. User advised to rotate the PAT since it was shared in chat.
+
+---
+Task ID: 3
+Agent: Z.ai Code (main)
+Task: Rebuild the site as a world-class Galina Express experience (inspired by galinaexpress.com) — top 1% design, live tracking, quote engine, full verification, push to GitHub.
+
+Work Log:
+- Researched galinaexpress.com via agent-browser (8 screenshots): brand = cross-border e-commerce enabler in Iraq; red/ink palette; nav (About/Ecosystem/Press/Careers/Track); GRAND Guarantee trust band; 4-step how-it-works; ecosystem wheel; 2025 milestones timeline; footer offices (Baghdad/Erbil/Istanbul/Dubai/London).
+- Generated 4 AI brand images (hero-truck, air-cargo, warehouse, lastmile) via z-ai CLI at 1344x768 (API rejects 1440x720; needs 32px multiples).
+- Prisma: replaced schema (Shipment, ShipmentEvent, QuoteRequest, ContactMessage), db:push, seeded 3 demo shipments (GXL-4821-BGD in transit, GXL-7355-EBL customs, GXL-9034-BSR out for delivery).
+- Design system: globals.css rewritten — brand red scale (#d92616 primary), ink scale, paper/sand/night surfaces, Archivo+Inter+JetBrains Mono via next/font, marquee/route-flow/ping-slow keyframes, grid utilities; layout.tsx metadata updated to Galina Express.
+- Built 14 components in src/components/galina/: logo, reveal/eyebrow, top ticker (CSS marquee), sticky header w/ framer-motion mobile menu, hero (editorial display type + animated SVG corridor map w/ animateMotion shipments + floating telemetry cards + stats + partner strip), ecosystem bento (6 cards, 3 w/ imagery), live tracking (dark band, demo chips, route progress bar, journey timeline, skeletons, error state), network corridor explorer (4 lanes, gateway sequence), quote calculator (origin/destination/weight slider/service cards/insurance → dark result card w/ breakdown), impact band (truck photo + animated counters), milestones (alternating timeline), testimonials (embla carousel + dots), FAQ (shadcn accordion), CTA contact band (form → success state + toast), footer (newsletter, offices, partners).
+- APIs: GET /api/track?code=, POST /api/quote (validated w/ zod, persists QuoteRequest), POST /api/contact (persists ContactMessage). Quote math verified: (origin+dest per-kg)×service multiplier + handling + 9% surcharge + optional 1.5% insurance.
+- Removed legacy Bid Box code (components/bidbox/*, public/bidbox.html, upload/*).
+- Fixes during build: missing cn import in reveal.tsx; embla set-state-in-effect lint rule (deferred sync via setTimeout).
+- Verification (agent-browser): desktop 1440px — all 11 sections render, hero map animates, telemetry cards float; tracking golden path (chip → API → IN TRANSIT card + timeline); corridor switcher (Türkiye→China verified); quote calculator ($215–252 for 45kg IST→BGW, breakdown correct); FAQ accordion expands; contact form submits → success state + toast; carousel arrows/dots work; mobile 390px — no horizontal scroll, hamburger menu opens/closes, tracking works; 0 console/page errors; DB persistence verified (1 contact, 1 quote row).
+- Ops: .gitignore now excludes /db and *.db (untracked db/custom.db); committed and pushed 3dd1aa3 to CHAMA18/the-bid-box-challenge main.
+
+Stage Summary:
+- / now serves a world-class Galina Express site: native Next.js 16, zero external CDNs, live API-backed tracking + instant quotes + contact intake.
+- All golden paths browser-verified end-to-end; lint clean; pushed to GitHub (3dd1aa3).
