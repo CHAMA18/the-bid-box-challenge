@@ -15,7 +15,7 @@ If you asked "did a person review the file?" — at the moment it matters, yes, 
 ## The five properties that make it agentic (and where each lives)
 
 **1. It pursues a goal across multiple steps, without being told what to do at each one.**
-The driver isn't a chat loop: it's a **LangGraph graph** (`load → extract_requirements → flag_findings → verify_findings → draft_redlines → propose_gate`). The agent decides what it still owes the goal *inside* the workflow — pinning clauses, cross-checking evidence, drafting language — one node feeding the next until it has either produced a complete committee-ready file or hit a boundary. Ask it nothing; it already knows the choreography.
+The driver isn't a chat loop: it's a **LangGraph graph** (`load_documents → plan_review → extract_requirements → flag_findings → verify_findings ⇄ revise_findings → draft_redlines → propose_gate`). The agent decides what it still owes the goal *inside* the workflow — pinning clauses, cross-checking evidence, drafting language — one node feeding the next until it has either produced a complete committee-ready file or hit a boundary. Ask it nothing; it already knows the choreography.
 
 **2. Its tools change the world, not just describe it.**
 A read-only agent is an assistant; a write-capable agent is an actor. Our agent's hands are real: `flag_finding` **writes** to the findings ledger, `draft_redline` **writes** committee redlines, `file_gate_submission` **attempts** an irreversible filing — each with typed input schemas, each logged (READ / WRITES / IRREVERSIBLE) so its footprint is always inspectable (`tools/list` even publishes the kinds).

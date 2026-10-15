@@ -96,6 +96,8 @@ The product surfaces this as **Mission Control** (live run register, human-gate 
 
 Invited teammates join a shared workspace via invite codes generated in Settings → Team Members (no email provider needed: an officer creates a code, the invitee pastes it during registration; codes expire after 14 days and can be revoked).
 
+**Named target offices and the timing benchmark** are in [`SUBMISSION/09-fit.md`](SUBMISSION/09-fit.md): Ministry of Health Procurement, KEMSA, the 47 county health units and PPRA (oversight) in Kenya, RPPA in Rwanda. The agent's measured per-pack time — 0.25–0.91 ms rule path, ~66 ms for the full review graph in template mode — is published with min–max spread in the eval report, while the **human baseline is deliberately not claimed** until a pilot measures it under the pre-registered protocol defined there. **Pilot intake is live:** the landing page's "Run a pilot tender" checklist posts to `POST /api/contact`; requests are stored in the workspace's own store — no email provider needed. The 3-minute demo script, including the gate's 422/403 refusal bridge, is [`SUBMISSION/DEMO.md`](SUBMISSION/DEMO.md).
+
 ---
 
 ## Architecture

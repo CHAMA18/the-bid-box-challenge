@@ -20,7 +20,7 @@ flowchart TB
     %% ═══════════ AGENT + OWN MCP SERVER ═══════════
     subgraph QUORUM["quorum-mcp  ·  own MCP server  ·  Bun :3031"]
         SRVR[["MCP surface — JSON-RPC 2.0 over HTTP<br/>initialize · tools/list · tools/call"]]
-        AGENT[["🤖 agentic runtime<br/>LangGraph.js — review_graph:<br/>load → extract → flag → verify → draft → propose_gate<br/>⏸ HALTS AT THE GATE — the edge to filing does not exist"]]
+        AGENT[["🤖 agentic runtime<br/>LangGraph.js — review_graph:<br/>load → plan → extract → flag → verify ⇄ repair → draft → propose_gate<br/>⏸ HALTS AT THE GATE — the edge to filing does not exist"]]
         TOOLS["MCP TOOLS (typed input schemas)<br/>📖 tender_documents_list · extract_requirements<br/>✍️ flag_finding · draft_redline<br/>🔒 file_gate_submission — IRREVERSIBLE → raises gate"]
         FG[["filing_graph — separate LangGraph graph:<br/>seal_bundle → transmit_submission<br/>runs ONLY after a named human signs the gate"]]
     end
@@ -82,7 +82,7 @@ flowchart TB
 
 | Required component | In the diagram above | In the code |
 | --- | --- | --- |
-| **Agent** | `agentic runtime` (LangGraph.js `review_graph`, 6 nodes, halts at the gate) | `mini-services/quorum-mcp/engine.ts` → `runReview()` |
+| **Agent** | `agentic runtime` (LangGraph.js `review_graph`, 8 nodes incl. plan_review + bounded repair, halts at the gate) | `mini-services/quorum-mcp/engine.ts` → `runReview()` |
 | **LLMs / models** | any OpenAI-compatible endpoint (`LLM_BASE_URL`/`LLM_MODEL`); intended: open-weights, in-region | `llmDraft()` in `engine.ts` (redlines), template fallback if unreachable |
 | **MCP server (own)** | `quorum-mcp` :3031 — JSON-RPC 2.0 `initialize`/`tools/list`/`tools/call` | `POST /mcp` in `index.ts` |
 | **MCP client/server (third-party)** | official `@modelcontextprotocol/server-filesystem`, spawned over stdio; tender docs surface as **MCP resources** | `initFsMcp()` in `engine.ts` |
@@ -105,7 +105,7 @@ Officer ──1──▶ Browser (Next.js :3000) ──3──▶ quorum-mcp :30
    │                │  mirror docs                │  tools/call — 5 typed tools (2 READ · 3 WRITE/gated)
    │                ▼                             │
    │            Firebase (identity + storage)     ├─▶ agent runtime (LangGraph review_graph:
-   │                                              │     load → extract → flag → verify → draft)
+   │                                              │     load → plan → extract → flag → verify ⇄ repair → draft)
    │  6 · signs as named approver                 │        │ stdio
    ▼                                              │        ▼
 HUMAN GATE ◀──7─ gate_pending (no graph edge ◀────┘    @modelcontextprotocol/server-filesystem
