@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  /* Keep the corner clear — the dashboard sidebar lives bottom-left */
+  devIndicators: false,
 };
 
 export default nextConfig;
