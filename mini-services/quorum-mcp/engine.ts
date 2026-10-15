@@ -575,13 +575,15 @@ export function verifyFindingReason(f: Finding, sources: Record<string, string>)
     case "R-AWARD-OVER-BUDGET": {
       const ocid = f.citation.match(/ocid ([^,]+)/)?.[1]?.trim();
       if (ocid) return text.includes(ocid) && text.includes(f.item) ? null : "record path or bidder not found in cited release";
-      /* Markdown citation ("03-bid-x.md, bid value line"): the stated value and the bidder must be in the bid. */
+      /* Markdown citation: the bidder IS the cited file (buildPack names bidders by filename, and
+         some bids never restate their own name in the body), so the content anchor is the bid's
+         own stated value line. */
       const amount = f.evidence.match(/([\d][\d,]*(?:\.\d+)?)/)?.[1];
-      return !!amount && text.includes(amount) && lower.includes(f.item.toLowerCase()) ? null : "bid value or bidder not found in cited bid";
+      return !!amount && text.includes(amount) ? null : "bid value not found in cited bid";
     }
     case "R-OVER-BUDGET": {
       const amount = f.evidence.match(/Bid value [A-Z]{3} ([\d,]+)/)?.[1];
-      return !!amount && text.includes(amount) && lower.includes(f.item.toLowerCase()) ? null : "bid value or bidder not found in cited bid";
+      return !!amount && text.includes(amount) ? null : "bid value not found in cited bid";
     }
     case "R-SPEC-DEVIATION":
       return f.evidence.length > 0 && text.includes(f.evidence) ? null : "deviation text not found in cited bid";
