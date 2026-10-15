@@ -239,6 +239,89 @@ function LiveClock() {
   );
 }
 
+/* ── Real agent status (polled, never assumed) ─────────────────────────── */
+
+type AgentHealth = {
+  ok: boolean;
+  service: string;
+  version: string;
+  uptimeSec: number;
+  fsMcp: { status: string; tools: string[] };
+  graphs: string[];
+  counts: { toolCalls: number; runs: number; gates: number; pendingGates: number };
+};
+
+type AgentStatus = { sidecar: string | null; health: AgentHealth | null };
+
+type AgentMode = "online" | "offline" | "linking";
+
+function agentModeOf(s: AgentStatus): AgentMode {
+  if (s.sidecar === null) return "linking"; /* first poll still in flight */
+  return s.health?.ok ? "online" : "offline";
+}
+
+/**
+ * Polls /api/agent-status — the server self-heals the quorum-mcp sidecar
+ * and proxies its /api/health payload. The UI shows what this returns:
+ * no hardcoded "ONLINE" anywhere.
+ */
+function useAgentStatus(): AgentStatus {
+  const [status, setStatus] = useState<AgentStatus>({ sidecar: null, health: null });
+  useEffect(() => {
+    let alive = true;
+    const pull = () =>
+      fetch("/api/agent-status")
+        .then((r) => r.json())
+        .then((d: { sidecar?: string; health?: AgentHealth | null }) => {
+          if (alive) setStatus({ sidecar: d.sidecar ?? "unavailable", health: d.health ?? null });
+        })
+        .catch(() => {
+          if (alive) setStatus((p) => ({ ...p, health: null }));
+        });
+    void pull();
+    const id = setInterval(pull, 15000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+  return status;
+}
+
+function AgentStatusBadge({ mode, className }: { mode: AgentMode; className?: string }) {
+  const label =
+    mode === "online" ? "AGENT · ONLINE" : mode === "offline" ? "AGENT · OFFLINE" : "AGENT · LINKING";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-code text-[8.5px] font-semibold tracking-[0.18em]",
+        mode === "online" && "border-ink-200 bg-white text-ink-700",
+        mode === "offline" && "border-ink-200 bg-white text-ink-400",
+        mode === "linking" && "border-ink-200 bg-white text-ink-500",
+        className
+      )}
+      role="status"
+      aria-label={`Agent status: ${mode}`}
+    >
+      <span className="relative flex h-1.5 w-1.5">
+        {mode === "online" && (
+          <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+        )}
+        <span
+          className={cn(
+            "relative inline-flex h-1.5 w-1.5 rounded-full",
+            mode === "online" && "bg-brand-600",
+            mode === "offline" && "bg-ink-300",
+            mode === "linking" && "animate-pulse bg-ink-400"
+          )}
+          aria-hidden="true"
+        />
+      </span>
+      {label}
+    </span>
+  );
+}
+
 /* ── Agent feed terminal ─────────────────────────────────────────────────── */
 
 type FeedKind = "cmd" | "step" | "ok" | "gate";
@@ -278,13 +361,13 @@ function AgentFeed() {
             <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
           </span>
-          QUORUM-AGENT · LIVE
+          QUORUM-AGENT · SAMPLE RUN
         </p>
       </div>
       <div
         className="min-h-[190px] px-4 py-4 font-code text-[10.5px] leading-[2] sm:text-[11.5px]"
         role="img"
-        aria-label="Live agent feed: the current run ingesting bids, checking documents, citing findings and queueing a human gate"
+        aria-label="Sample agent run: a scripted replay of a run ingesting bids, checking documents, citing findings and queueing a human gate"
       >
         {FEED_SCRIPT.slice(0, step).map((line) => (
           <p
@@ -1009,6 +1092,7 @@ function SidebarContent({
   active,
   user,
   counts,
+  agent,
   onNavigate,
   onNewRun,
   onSignOut,
@@ -1017,6 +1101,7 @@ function SidebarContent({
   active: SectionId;
   user: AuthUser | null;
   counts: { runs: number; gates: number; findings: number };
+  agent: AgentStatus;
   onNavigate: (id: SectionId) => void;
   onNewRun: () => void;
   onSignOut: () => void;
@@ -1097,15 +1182,35 @@ function SidebarContent({
         <div className="rounded-xl border border-white/10 bg-night-2 px-3.5 py-3">
           <p className="flex items-center gap-2 font-code text-[9px] font-semibold tracking-[0.18em] text-ink-200">
             <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-500" aria-hidden="true" />
+              {agentModeOf(agent) === "online" && (
+                <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+              )}
+              <span
+                className={cn(
+                  "relative inline-flex h-1.5 w-1.5 rounded-full",
+                  agentModeOf(agent) === "online" && "bg-brand-500",
+                  agentModeOf(agent) === "offline" && "bg-ink-600",
+                  agentModeOf(agent) === "linking" && "animate-pulse bg-ink-400"
+                )}
+                aria-hidden="true"
+              />
             </span>
-            AGENT · ONLINE
+            {agentModeOf(agent) === "online"
+              ? "AGENT · ONLINE"
+              : agentModeOf(agent) === "offline"
+                ? "AGENT · OFFLINE"
+                : "AGENT · LINKING"}
           </p>
           <p className="mt-1.5 font-code text-[7.5px] leading-[1.8] tracking-[0.16em] text-ink-500">
-            QWEN3-32B · MCP · OPEN WEIGHTS
+            {agent.health
+              ? `MCP · ${agent.health.fsMcp.tools.length} FS TOOLS · OPEN WEIGHTS`
+              : "MCP · OPEN WEIGHTS"}
             <br />
-            EVERY CLAIM CITED · 1 HUMAN GATE
+            {agent.health
+              ? `${agent.health.counts.toolCalls} TOOL CALLS LOGGED · ${agent.health.counts.pendingGates} GATE${
+                  agent.health.counts.pendingGates === 1 ? "" : "S"
+                } PENDING`
+              : "AWAITING SIDECAR TELEMETRY"}
           </p>
         </div>
 
@@ -2366,86 +2471,212 @@ function AwardLedgerView({
 
 /* ── Committee ───────────────────────────────────────────────────────────── */
 
-function CommitteeView({ firstName, onToast }: { firstName: string; onToast: (m: string) => void }) {
-  const present: { initials: string; name: string; role: string; you?: boolean }[] = [
-    { initials: "CM", name: "C. Mwangi", role: "CHAIR OF THE COMMITTEE" },
-    { initials: initialsOf(firstName), name: `${firstName} — you`, role: "PROCUREMENT OFFICER · HOLDS THE GAVEL", you: true },
-    { initials: "AB", name: "A. Banda", role: "FINANCE OFFICER" },
-    { initials: "JO", name: "J. Otieno", role: "TECHNICAL ADVISOR" },
-    { initials: "MC", name: "M. Chirwa", role: "LEGAL COUNSEL" },
-  ];
-  const openSeats = 4;
+type CommitteeData = {
+  seats: number;
+  required: number;
+  present: number;
+  open: number;
+  members: { name: string; role: string; isChair: boolean; status: "PRESENT" | "EXCUSED" }[];
+  you: { name: string } | null;
+  lastSummonsAt: string | null;
+};
+
+const NUMBER_WORDS = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+];
+
+function countWord(n: number): string {
+  return NUMBER_WORDS[n] ?? String(n);
+}
+
+function capWord(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function summonsClock(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "—";
+  }
+}
+
+function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: string) => void }) {
+  const [data, setData] = useState<CommitteeData | null>(null);
+  const [loadErr, setLoadErr] = useState(false);
+  const [summoning, setSummoning] = useState(false);
+
+  const load = useCallback(() => {
+    let alive = true;
+    setLoadErr(false);
+    fetch("/api/committee")
+      .then((r) => r.json())
+      .then((d: CommitteeData | { error: string }) => {
+        if (!alive) return;
+        if ("error" in d) setLoadErr(true);
+        else {
+          setData(d);
+          setLoadErr(false);
+        }
+      })
+      .catch(() => {
+        if (alive) setLoadErr(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => load(), [load]);
+
+  const summon = async () => {
+    if (summoning) return;
+    setSummoning(true);
+    try {
+      const res = await fetch("/api/committee/summon", { method: "POST" });
+      const d = (await res.json()) as CommitteeData | { error: string };
+      if (!res.ok || "error" in d) throw new Error("error" in d ? d.error : "failed");
+      setData(d);
+      onToast(
+        d.open === 0
+          ? "QUORUM PRESENT — THE SITTING CAN PROCEED"
+          : `SITTING SUMMONS ISSUED — ${d.open} SEAT${d.open === 1 ? "" : "S"} STILL PENDING QUORUM CALL`
+      );
+    } catch {
+      onToast("SUMMONS FAILED — COMMITTEE SERVICE UNREACHABLE");
+    } finally {
+      setSummoning(false);
+    }
+  };
+
+  /* Roll-call order: the chair opens, the gavel sits second, then the rest.
+     Excused members close the roll. Everything here comes from /api/committee —
+     stored members plus the signed-in officer; nothing is hardcoded. */
+  const roll: { initials: string; name: string; role: string; you?: boolean; excused?: boolean }[] = [];
+  if (data) {
+    const presentMembers = data.members.filter((m) => m.status === "PRESENT");
+    const excusedMembers = data.members.filter((m) => m.status === "EXCUSED");
+    const chair = presentMembers.find((m) => m.isChair);
+    const rest = presentMembers.filter((m) => !m.isChair);
+    if (chair) roll.push({ initials: initialsOf(chair.name), name: chair.name, role: chair.role });
+    if (data.you)
+      roll.push({
+        initials: initialsOf(data.you.name),
+        name: `${data.you.name} — you`,
+        role: "PROCUREMENT OFFICER · HOLDS THE GAVEL",
+        you: true,
+      });
+    rest.forEach((m) => roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role }));
+    excusedMembers.forEach((m) =>
+      roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role, excused: true })
+    );
+  }
+  const youSeatIndex = roll.findIndex((m) => m.you); /* the gavel's square on the quorum grid */
 
   return (
     <ViewShell
       fig="12"
       title="The committee"
-      sub="Nine seats, five present — the quorum the law asks for before an award counts. The agent attends every sitting; it holds no seat and no gavel."
+      sub={
+        data
+          ? `${capWord(countWord(data.seats))} seats, ${countWord(data.present)} present — the quorum the law asks for before an award counts. The agent attends every sitting; it holds no seat and no gavel.`
+          : "The roll-call is being read from the committee record — the seats, the presence, and the quorum the law asks for before an award counts."
+      }
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
-            {present.map((m, i) => (
-              <motion.div
-                key={m.name}
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
-                className={cn(
-                  "rounded-2xl border bg-white p-4 shadow-[0_1px_2px_rgba(11,12,15,0.04)]",
-                  m.you ? "border-brand-300 ring-2 ring-brand-600/15" : "border-ink-100"
-                )}
+          {loadErr ? (
+            <div className="rounded-2xl border border-dashed border-ink-200 p-8 text-center">
+              <p className="font-code text-[10px] font-bold tracking-[0.22em] text-ink-500">
+                COMMITTEE ROLL UNAVAILABLE
+              </p>
+              <p className="mt-2 font-code text-[8px] tracking-[0.18em] text-ink-400">
+                THE RECORD COULD NOT BE READ — NOTHING IS SHOWN RATHER THAN GUESSED
+              </p>
+              <button
+                type="button"
+                onClick={load}
+                className="mt-4 inline-flex h-9 items-center rounded-xl border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.18em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950"
               >
-                <div className="flex items-center gap-3">
-                  <span
-                    className={cn(
-                      "grid h-10 w-10 shrink-0 place-items-center rounded-full font-code text-[10px] font-bold text-white",
-                      m.you ? "bg-brand-600" : "bg-ink-950"
-                    )}
-                    aria-hidden="true"
-                  >
-                    {m.initials}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-[13.5px] font-semibold text-ink-950">{m.name}</p>
-                    <p className="mt-0.5 font-code text-[7px] tracking-[0.18em] text-ink-400">{m.role}</p>
-                  </div>
-                </div>
-                <span
+                RE-READ THE ROLL
+              </button>
+            </div>
+          ) : !data ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3" aria-busy="true" aria-label="Reading the committee roll">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-[104px] animate-pulse rounded-2xl border border-ink-100 bg-ink-50/60" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+              {roll.map((m, i) => (
+                <motion.div
+                  key={m.name}
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
                   className={cn(
-                    "mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em]",
-                    m.you ? "bg-brand-600 text-white" : "bg-ink-50 text-ink-700"
+                    "rounded-2xl border bg-white p-4 shadow-[0_1px_2px_rgba(11,12,15,0.04)]",
+                    m.you ? "border-brand-300 ring-2 ring-brand-600/15" : m.excused ? "border-ink-100 bg-ink-50/50" : "border-ink-100"
                   )}
                 >
-                  {m.you ? (
-                    <>
-                      <span className="relative flex h-1.5 w-1.5">
-                        <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-white" aria-hidden="true" />
-                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" aria-hidden="true" />
-                      </span>
-                      YOU · GAVEL
-                    </>
-                  ) : (
-                    "PRESENT"
-                  )}
-                </span>
-              </motion.div>
-            ))}
-            {Array.from({ length: openSeats }).map((_, i) => (
-              <motion.div
-                key={`open-${i}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: 0.3 + 0.05 * i, ease: EASE }}
-                className="grid place-items-center rounded-2xl border border-dashed border-ink-200 p-4 text-center"
-              >
-                <div>
-                  <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">SEAT OPEN</p>
-                  <p className="mt-1 font-code text-[7px] tracking-[0.18em] text-ink-300">QUORUM CALL PENDING</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={cn(
+                        "grid h-10 w-10 shrink-0 place-items-center rounded-full font-code text-[10px] font-bold text-white",
+                        m.you ? "bg-brand-600" : "bg-ink-950"
+                      )}
+                      aria-hidden="true"
+                    >
+                      {m.initials}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13.5px] font-semibold text-ink-950">{m.name}</p>
+                      <p className="mt-0.5 font-code text-[7px] tracking-[0.18em] text-ink-400">{m.role}</p>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em]",
+                      m.you
+                        ? "bg-brand-600 text-white"
+                        : m.excused
+                          ? "border border-ink-200 bg-white text-ink-400"
+                          : "bg-ink-50 text-ink-700"
+                    )}
+                  >
+                    {m.you ? (
+                      <>
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-white" aria-hidden="true" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" aria-hidden="true" />
+                        </span>
+                        YOU · GAVEL
+                      </>
+                    ) : m.excused ? (
+                      "EXCUSED"
+                    ) : (
+                      "PRESENT"
+                    )}
+                  </span>
+                </motion.div>
+              ))}
+              {Array.from({ length: data.open }).map((_, i) => (
+                <motion.div
+                  key={`open-${i}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5, delay: 0.3 + 0.05 * i, ease: EASE }}
+                  className="grid place-items-center rounded-2xl border border-dashed border-ink-200 p-4 text-center"
+                >
+                  <div>
+                    <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">SEAT OPEN</p>
+                    <p className="mt-1 font-code text-[7px] tracking-[0.18em] text-ink-300">QUORUM CALL PENDING</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid content-start gap-4 sm:gap-6">
@@ -2455,37 +2686,55 @@ function CommitteeView({ firstName, onToast }: { firstName: string; onToast: (m:
               <div className="flex items-center justify-between gap-4">
                 <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">Quorum</h3>
                 <div className="grid grid-cols-3 gap-1" aria-hidden="true">
-                  {Array.from({ length: 9 }).map((_, i) => (
-                    <span
-                      key={i}
-                      className={cn(
-                        "h-2 w-2 rounded-[2px]",
-                        i === 4 ? "bg-brand-500" : [0, 2, 6, 8].includes(i) ? "bg-white" : "border border-white/25"
-                      )}
-                    />
-                  ))}
+                  {data
+                    ? Array.from({ length: data.seats }).map((_, i) => (
+                        <span
+                          key={i}
+                          className={cn(
+                            "h-2 w-2 rounded-[2px]",
+                            i === youSeatIndex
+                              ? "bg-brand-500"
+                              : i < data.present
+                                ? "bg-white"
+                                : "border border-white/25"
+                          )}
+                        />
+                      ))
+                    : Array.from({ length: 9 }).map((_, i) => (
+                        <span key={i} className="h-2 w-2 rounded-[2px] border border-white/25" />
+                      ))}
                 </div>
               </div>
               <p className="mt-4 font-display text-[40px] font-black leading-none tracking-[-0.02em]">
-                5<span className="text-brand-400">/</span>9
+                {data ? data.present : "—"}
+                <span className="text-brand-400">/</span>
+                {data ? data.seats : "—"}
               </p>
               <p className="mt-3 text-[12.5px] leading-relaxed text-ink-300">
                 The minimum of members a committee needs before an award becomes lawful — the mark on the door is that
                 threshold, drawn.
               </p>
               <p className="mt-4 font-code text-[8px] tracking-[0.18em] text-ink-400">
-                PRESENT TODAY 5 · OPEN {openSeats} · A SITTING REQUIRES 5
+                {data
+                  ? `PRESENT TODAY ${data.present} · OPEN ${data.open} · A SITTING REQUIRES ${data.required}`
+                  : "READING THE COMMITTEE RECORD…"}
               </p>
             </div>
           </div>
           <GavelProtocolCard />
           <button
             type="button"
-            onClick={() => onToast("SITTING SUMMONS QUEUED — 4 SEATS PENDING QUORUM CALL")}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.18em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950"
+            onClick={summon}
+            disabled={!data || summoning}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.18em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            SUMMON THE SITTING
+            {summoning ? "ISSUING SUMMONS…" : "SUMMON THE SITTING"}
           </button>
+          {data?.lastSummonsAt && (
+            <p className="text-center font-code text-[8px] tracking-[0.18em] text-ink-400">
+              LAST SUMMONS {summonsClock(data.lastSummonsAt)} · RECORDED IN THE COMMITTEE REGISTER
+            </p>
+          )}
         </div>
       </div>
     </ViewShell>
@@ -2898,6 +3147,10 @@ export function Dashboard({
   const [flow, setFlow] = useState<FlowState>({ refs: [], decided: false, awarded: false });
   const completionTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  /* Live agent health — the pill and sidebar render what the stack reports. */
+  const agent = useAgentStatus();
+  const agentMode = agentModeOf(agent);
+
   /* Clock + date */
   useEffect(() => {
     const first = requestAnimationFrame(() => setNow(new Date()));
@@ -3088,7 +3341,7 @@ export function Dashboard({
       case "mc-ledger":
         return <AwardLedgerView ledger={ledger} awaiting={queue.length} onToast={onToast} />;
       case "mc-committee":
-        return <CommitteeView firstName={firstName} onToast={onToast} />;
+        return <CommitteeView user={user} onToast={onToast} />;
       case "mc-rules":
         return <RulesView onToast={onToast} />;
       case "mc-stack":
@@ -3118,6 +3371,7 @@ export function Dashboard({
             active={active}
             user={user}
             counts={{ runs: runs.length, gates: queue.length, findings: openFindings }}
+            agent={agent}
             onNavigate={switchTo}
             onNewRun={() => setModalOpen(true)}
             onSignOut={onSignOut}
@@ -3184,6 +3438,7 @@ export function Dashboard({
                   active={active}
                   user={user}
                   counts={{ runs: runs.length, gates: queue.length, findings: openFindings }}
+                  agent={agent}
                   onNavigate={switchTo}
                   onNewRun={() => {
                     setNavOpen(false);
@@ -3231,13 +3486,7 @@ export function Dashboard({
                 <LiveClock />
                 <span className="text-ink-200">·</span> LOCAL
               </p>
-              <span className="hidden items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1.5 font-code text-[8.5px] font-semibold tracking-[0.18em] text-ink-700 md:inline-flex">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
-                </span>
-                AGENT · ONLINE
-              </span>
+              <AgentStatusBadge mode={agentMode} className="hidden md:inline-flex" />
             </div>
           </div>
         </div>
