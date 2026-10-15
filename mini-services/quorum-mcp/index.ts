@@ -337,6 +337,40 @@ Bun.serve({
       return json({ run }, 201);
     }
 
+    if (path === "/api/source-requests" && req.method === "GET") {
+      return json({ requests: [...state.sourceRequests].reverse() });
+    }
+
+    if (path === "/api/source-requests" && req.method === "POST") {
+      const body = await readBody(req);
+      const name = String(body.name ?? "").trim();
+      const requestedBy = String(body.requestedBy ?? "").trim();
+      if (!name) return json({ error: "name required" }, 422);
+      if (!requestedBy) return json({ error: "requestedBy required" }, 422);
+      const request = {
+        id: `srq_${randomUUID().slice(0, 8)}`,
+        name,
+        kind: String(body.kind ?? "").trim() || "DATA SOURCE",
+        note: String(body.note ?? "").trim() || undefined,
+        requestedBy,
+        createdAt: new Date().toISOString(),
+        status: "PENDING" as const,
+      };
+      state.sourceRequests.push(request);
+      saveState();
+      appendLog({
+        actor: requestedBy,
+        server: "quorum-mcp",
+        tool: "request_source",
+        kind: "WRITES",
+        inputs: { name, kind: request.kind },
+        outputs: { id: request.id, status: "PENDING" },
+        status: "OK",
+        durationMs: 1,
+      });
+      return json({ request }, 201);
+    }
+
     if (path.startsWith("/api/gates/") && req.method === "POST") {
       const id = path.match(/^\/api\/gates\/([^/]+)/)?.[1] ?? "";
       const body = await readBody(req);

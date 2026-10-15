@@ -1,0 +1,25 @@
+{
+  "gate": {
+    "id": "gate_9ocvj0",
+    "runId": "run_0c419ce7",
+    "tenderId": "TEST-001",
+    "tool": "file_gate_submission",
+    "inputs": {
+      "bidder": "bidder",
+      "value": "NOT STATED IN BID",
+      "attachments": 1,
+      "findings": [],
+      "drafts": []
+    },
+    "status": "APPROVED",
+    "createdAt": "2026-10-15T18:33:48.010Z",
+    "approver": "Chungu424",
+    "note": "Signed by the committee",
+    "decidedAt": "2026-10-15T18:36:00.693Z"
+  },
+  "receipt": {
+    "submissionId": "SUB-MV9VQGJD",
+    "hash": "1b1da837363f65678a5c49687482a0e8",
+    "portal": "egp-portal (simulated)"
+  }
+}
