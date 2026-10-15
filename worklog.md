@@ -280,3 +280,22 @@ Work Log:
 Stage Summary:
 - Every checklist line now has live, inspectable proof: public repo (pending the user's one-command push), working demo (gateway path verified), real MCP integration (own server + official fs-MCP + LangGraph + open-weights, all logged), human-in-the-loop (gate → named human → receipt, re-verified today), accurate representation (README maps claims to code; artifacts removed).
 - Blocking item for the user (not code): `git push origin main` from a credentialed terminal — or use /home/z/quorum-submission.bundle. 16 commits are local-only; the commit window makes pushing urgent.
+
+---
+Task ID: 12
+Agent: Z.ai Code (main)
+Task: Push the project to GitHub (user instruction "push to github")
+
+Work Log:
+- Inspected repo state: clean working tree, main @ 2245553, origin = https://github.com/CHAMA18/the-bid-box-challenge.git, 18 unpushed commits.
+- Security audit of the unpushed range (origin/main..HEAD): no .env, no *.db, no credential files; token-pattern scan (ghp_/github_pat_/AKIA/sk-/private keys) clean; tool-results/ and upload/ artifacts already dropped in 65611a2. 87 files, +11021/−6879.
+- Verified remote repo is PUBLIC anonymously: https://github.com/CHAMA18/the-bid-box-challenge returns HTTP 200 (private repos 404). GitHub API rate-limited (403, shared sandbox IP) — HTML check used instead.
+- Attempted push: rejected (no credentials). No PAT/SSH/token exists in this sandbox session; the earlier-session PAT was used one-off, never persisted, and rotation was advised.
+- Refreshed offline full-history backup: git bundle --all → /home/z/quorum-submission.bundle (complete history through HEAD; sha1, verified).
+
+Stage Summary:
+- Push is fully staged and safety-checked; only blocker is authentication. One-off push command ready:
+  git push https://<FRESH_PAT>@github.com/CHAMA18/the-bid-box-challenge.git main
+- Token must be user-provided (fine-grained, Contents: read/write on the-bid-box-challenge). Do not persist; verify .git/config stays clean after push (use inline URL, not remote rewrite).
+- Repo confirmed public & accessible (submission checklist item ① satisfied).
+- Evaluator README.md arrives on the remote with this push (not yet on origin/main).
