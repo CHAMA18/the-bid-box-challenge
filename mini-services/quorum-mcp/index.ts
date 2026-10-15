@@ -25,6 +25,8 @@ import {
   type Gate,
   type Run,
 } from "./store";
+import { handleReportRequest } from "./report";
+import { listSampleTenders, readSampleDocument } from "./samples";
 import {
   approverAllowed,
   bindEngine,
@@ -316,6 +318,12 @@ Bun.serve({
       return json({ runs: [...state.runs].reverse() });
     }
 
+    /* Sourced report — downloadable Markdown, one file per run */
+    if (/^\/api\/runs\/[^/]+\/report$/.test(path) && req.method === "GET") {
+      const id = decodeURIComponent(path.match(/^\/api\/runs\/([^/]+)\/report$/)![1]);
+      return handleReportRequest(id);
+    }
+
     if (path === "/api/runs" && req.method === "POST") {
       const body = await readBody(req);
       const tenderId = String(body.tenderId ?? "").trim();
@@ -335,6 +343,26 @@ Bun.serve({
       saveState();
       void import("./engine").then((m) => m.runReview(run));
       return json({ run }, 201);
+    }
+
+    if (path === "/api/sample-tenders") {
+      return json({ samples: await listSampleTenders() });
+    }
+
+    if (path.startsWith("/api/sample-tenders/") && req.method === "GET") {
+      const match = path.match(/^\/api\/sample-tenders\/([^/]+)\/docs\/([^/]+)$/);
+      if (match) {
+        const doc = await readSampleDocument(match[1], match[2]);
+        if (!doc) return json({ error: "not found" }, 404);
+        return json({ doc });
+      }
+      const ref = path.match(/^\/api\/sample-tenders\/([^/]+)$/)?.[1];
+      if (ref) {
+        const sample = (await listSampleTenders()).find((s) => s.ref === ref);
+        if (!sample) return json({ error: "not found" }, 404);
+        return json({ sample });
+      }
+      return json({ error: "not found" }, 404);
     }
 
     if (path === "/api/source-requests" && req.method === "GET") {
