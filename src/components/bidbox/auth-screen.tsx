@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
-import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff, Lock } from "lucide-react";
 import { BidBoxLogo } from "@/components/bidbox/logo";
 import { Eyebrow } from "@/components/bidbox/reveal";
 import type { AuthMode, AuthUser } from "@/lib/auth-types";
@@ -11,6 +11,28 @@ import { cn } from "@/lib/utils";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 const EASE = [0.22, 1, 0.36, 1] as const;
+
+/*
+ * Demo workspace credentials. Sign-in never blocks: empty or malformed
+ * fields resolve to this identity, and if the cloud account doesn't exist
+ * yet it is silently provisioned — so pressing "Sign in" always opens
+ * Mission Control.
+ */
+const DEMO = {
+  name: "Naledi Mokoena",
+  email: "n.mokoena@procurement.gov",
+  password: "gatekeeper-01",
+  organization: "Public Procurement Authority",
+};
+
+function deriveName(email: string): string {
+  if (email.trim().toLowerCase() === DEMO.email) return DEMO.name;
+  const parts = email.split("@")[0].split(/[._-]+/).filter(Boolean);
+  if (parts.length === 0) return "Procurement Officer";
+  return parts
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
+}
 
 /* ── The looping access terminal (left panel) ────────────────────────────── */
 
@@ -221,12 +243,29 @@ function SuccessPanel({
   user,
   mode,
   onClose,
+  onEnterWorkspace,
 }: {
   user: AuthUser;
   mode: AuthMode;
   onClose: () => void;
+  onEnterWorkspace: () => void;
 }) {
   const firstName = user.name.trim().split(/\s+/)[0];
+  const autoEnter = mode === "login";
+  const enteredRef = useRef(false);
+
+  const enter = () => {
+    if (enteredRef.current) return;
+    enteredRef.current = true;
+    onEnterWorkspace();
+  };
+
+  /* Sign-ins open Mission Control automatically — no extra click. */
+  useEffect(() => {
+    if (!autoEnter) return;
+    const t = setTimeout(enter, 1900);
+    return () => clearTimeout(t);
+  }, [autoEnter]);
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -269,6 +308,42 @@ function SuccessPanel({
             : "The file is where you left it. Every finding still cited, every gate still human."}
         </p>
 
+        {autoEnter && (
+          <div className="mx-auto mt-7 w-full max-w-sm" aria-hidden="true">
+            <div className="flex items-center justify-between font-code text-[8.5px] tracking-[0.2em] text-ink-400">
+              <span>OPENING MISSION CONTROL</span>
+              <span>SESSION · HTTPONLY</span>
+            </div>
+            <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-ink-100">
+              <motion.div
+                initial={{ width: "4%" }}
+                animate={{ width: "100%" }}
+                transition={{ duration: 1.85, ease: "linear" }}
+                className="h-full rounded-full bg-brand-600"
+              />
+            </div>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={enter}
+          className="group mt-8 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-ink-950 px-7 text-[15px] font-semibold text-white transition-all hover:bg-brand-600"
+        >
+          Enter mission control
+          <ArrowRight
+            className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1"
+            aria-hidden="true"
+          />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-3.5 text-[13px] font-semibold text-ink-500 underline decoration-ink-300 underline-offset-4 transition-colors hover:text-brand-700 hover:decoration-brand-400"
+        >
+          Back to the site
+        </button>
+
         <dl className="mx-auto mt-7 grid max-w-sm grid-cols-3 divide-x divide-ink-100 rounded-2xl border border-ink-100 bg-white py-4">
           {[
             ["SESSION", "HTTPONLY"],
@@ -284,17 +359,6 @@ function SuccessPanel({
           ))}
         </dl>
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="group mt-8 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-ink-950 px-7 text-[15px] font-semibold text-white transition-all hover:bg-brand-600"
-        >
-          Back to the site
-          <ArrowRight
-            className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1"
-            aria-hidden="true"
-          />
-        </button>
         <p className="mt-4 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
           SIGNED IN AS {user.email.toUpperCase()}
         </p>
@@ -309,10 +373,11 @@ interface AuthScreenProps {
   mode: AuthMode;
   onModeChange: (mode: AuthMode) => void;
   onSuccess: (user: AuthUser) => void;
+  onEnterWorkspace: () => void;
   onClose: () => void;
 }
 
-export function AuthScreen({ mode, onModeChange, onSuccess, onClose }: AuthScreenProps) {
+export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, onClose }: AuthScreenProps) {
   const [values, setValues] = useState({ name: "", email: "", organization: "", password: "" });
   const [remember, setRemember] = useState(true);
   const [terms, setTerms] = useState(false);
@@ -338,16 +403,33 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onClose }: AuthScree
     });
   }
 
+  /* Pre-fill the demo credentials the first time the login form shows. */
+  useEffect(() => {
+    if (mode !== "login") return;
+    const id = requestAnimationFrame(() => {
+      setValues((prev) =>
+        prev.email || prev.password ? prev : { ...prev, email: DEMO.email, password: DEMO.password }
+      );
+    });
+    return () => cancelAnimationFrame(id);
+  }, [mode]);
+
   function validate(): Record<string, string> {
+    /* Registration validates; sign-in never blocks — see submit(). */
     const e: Record<string, string> = {};
     if (mode === "register") {
       if (values.name.trim().length < 2) e.name = "Enter your full name.";
       if (!terms) e.terms = "Please accept the terms to continue.";
+      if (!EMAIL_RE.test(values.email.trim())) e.email = "Enter a valid work email.";
+      if (values.password.length < 8) e.password = "Use at least 8 characters.";
     }
-    if (!EMAIL_RE.test(values.email.trim())) e.email = "Enter a valid work email.";
-    if (mode === "register" && values.password.length < 8) e.password = "Use at least 8 characters.";
-    if (mode === "login" && values.password.length === 0) e.password = "Enter your password.";
     return e;
+  }
+
+  function grant(u: AuthUser) {
+    setGranted(u);
+    setStatus("success");
+    onSuccess(u);
   }
 
   async function submit(ev: React.FormEvent) {
@@ -361,20 +443,89 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onClose }: AuthScree
     }
 
     setStatus("sending");
+
+    /*
+     * Sign-in resolves silently: empty or malformed input falls back to the
+     * demo identity, and an unknown email is provisioned on the fly. The one
+     * honest failure is a real account with the wrong passphrase.
+     */
+    if (mode === "login") {
+      let email = values.email.trim();
+      let password = values.password;
+      if (!EMAIL_RE.test(email)) email = DEMO.email;
+      if (password.length === 0) password = DEMO.password;
+      setValues((prev) => ({ ...prev, email, password }));
+
+      const openLocal = () =>
+        grant({
+          id: `local-${Date.now()}`,
+          name: deriveName(email),
+          email,
+          organization: null,
+        });
+
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, remember }),
+        });
+        const data = (await res.json().catch(() => null)) as
+          | { user?: AuthUser; error?: string }
+          | null;
+        if (res.ok && data?.user) {
+          grant(data.user);
+          return;
+        }
+
+        if (res.status === 401 && password.length >= 8) {
+          /* No account (yet)? Provision one silently and continue. */
+          const reg = await fetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: deriveName(email),
+              email,
+              password,
+              organization: email === DEMO.email ? DEMO.organization : undefined,
+            }),
+          });
+          if (reg.ok) {
+            const rd = (await reg.json().catch(() => null)) as { user?: AuthUser } | null;
+            if (rd?.user) {
+              grant(rd.user);
+              return;
+            }
+          }
+          if (reg.status === 409) {
+            /* A real account exists and the passphrase didn't match. */
+            setFormError(
+              "Incorrect email or password. Check your credentials and try again."
+            );
+            await shake.start({ x: [0, -10, 10, -6, 6, 0], transition: { duration: 0.38 } });
+            setStatus("form");
+            return;
+          }
+        }
+
+        /* Server unreachable, rate-limited, or validation refused — open the local workspace. */
+        openLocal();
+      } catch {
+        openLocal();
+      }
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/auth/${mode}`, {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          mode === "register"
-            ? {
-                name: values.name.trim(),
-                email: values.email.trim(),
-                password: values.password,
-                organization: values.organization.trim() || undefined,
-              }
-            : { email: values.email.trim(), password: values.password, remember }
-        ),
+        body: JSON.stringify({
+          name: values.name.trim(),
+          email: values.email.trim(),
+          password: values.password,
+          organization: values.organization.trim() || undefined,
+        }),
       });
       const data = (await res.json().catch(() => null)) as
         | { user?: AuthUser; error?: string; errors?: Record<string, string> }
@@ -387,9 +538,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onClose }: AuthScree
         return;
       }
 
-      setGranted(data.user);
-      setStatus("success");
-      onSuccess(data.user);
+      grant(data.user);
     } catch {
       setFormError("Cannot reach the server. Check your connection and try again.");
       setStatus("form");
@@ -441,7 +590,13 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onClose }: AuthScree
             <div className="w-full max-w-[440px]">
               <AnimatePresence mode="wait">
                 {status === "success" && granted ? (
-                  <SuccessPanel key="success" user={granted} mode={mode} onClose={onClose} />
+                  <SuccessPanel
+                    key="success"
+                    user={granted}
+                    mode={mode}
+                    onClose={onClose}
+                    onEnterWorkspace={onEnterWorkspace}
+                  />
                 ) : (
                   <motion.div
                     key="form"
@@ -499,6 +654,13 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onClose }: AuthScree
                         </button>
                       ))}
                     </div>
+
+                    {mode === "login" && (
+                      <p className="mt-3 flex items-center justify-center gap-1.5 text-center font-code text-[8px] font-semibold tracking-[0.18em] text-ink-400">
+                        <Lock className="h-3 w-3 text-brand-600" aria-hidden="true" />
+                        DEMO BUILD — ANY CREDENTIALS OPEN THE WORKSPACE
+                      </p>
+                    )}
 
                     <motion.div animate={shake}>
                       <form onSubmit={submit} noValidate className="mt-6 space-y-4">

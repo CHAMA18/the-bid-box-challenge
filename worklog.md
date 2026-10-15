@@ -134,3 +134,31 @@ Stage Summary:
 - Every "Get Started"-intent CTA now lands on a full-screen, brand-native authentication experience at #/register or #/login (no extra user-visible routes — sandbox constraint respected).
 - Real accounts: scrypt-hashed passwords, DB-backed httpOnly sessions, rate limiting, validation on both client and server; session survives reload via /api/auth/me.
 - Landing↔auth navigation is back-button friendly with scroll restoration; signed-in header state closes the loop.
+
+---
+Task ID: 8
+Agent: Z.ai Code (main)
+Task: "Sign In" must navigate to the dashboard — build a top-1% Mission Control dashboard.
+
+Work Log:
+- Diagnosed the user's screenshot: clicking "Sign in" on the empty login form threw field-validation errors and went nowhere. Goal: the button must always open the workspace.
+- Built src/components/bidbox/dashboard.tsx (~1000 lines) — "Mission Control", a living signed-in workspace in the Bid Box DNA (night sidebar / paper canvas / signal red / Archivo display / JetBrains mono labels):
+  - Fixed night sidebar: logo + "MISSION CONTROL · v0.9", scrollspy COMMAND nav (OVERVIEW / RUN REGISTER + count / HUMAN GATES + red count badge / AGENT FEED) with framer-motion red rail, red "New run" button, agent status card (QWEN3-32B · MCP · OPEN WEIGHTS), user chip + sign-out, BACK TO SITE.
+  - Sticky utility bar: MISSION CONTROL / {section} breadcrumb (driven by IntersectionObserver scrollspy), live HH:MM:SS clock, run search, AGENT · ONLINE pulse.
+  - Greeting header: time-based "Good morning/afternoon/evening, {firstName}." + FIG. 04 eyebrow + live date + red New run CTA.
+  - 4 stat cards with eased count-up (reduced-motion safe, rAF-wrapped): ACTIVE RUNS, FINDINGS FLAGGED, CITATIONS VERIFIED %, GATES PENDING (featured dark card) — all derived from live state and re-counting as runs/gates change; sparkline bars animate in.
+  - Run register: 7 seeded runs (HUMAN GATE / LIVE / COMPLETE / QUEUED chips), ALL·LIVE·GATES·DONE filters, header search filters rows, expandable rows (keyboard operable: tabIndex + Enter/Space) showing top findings chips + SOURCED REPORT (toast) + COPY AUDIT TRAIL (real clipboard write) + buyer meta; empty state with clear action.
+  - Human gate queue: proposed supplier/value/flags cards with Award (red) + Return for review; Award → gate signed toast + ledger row "JUST NOW · {firstName}" + run flips to COMPLETE; Return → agent tasked toast + run flips back to LIVE; animated queue-empty state ("The committee is caught up."); gate ledger of past decisions.
+  - Agent feed terminal (looping live script, ping "LIVE" dot), Portal sync card (4 sources, degraded GGPPBD with pulsing dot + retry toast, sha256-sealed audit note), dark "The standing rule" card, mono bottom strip.
+  - New Run modal: FIG. 05, tender ref/title/format chips, Escape + backdrop close, autofocus; Launch → run appears LIVE in register → after 12s auto-completes (4 findings · 4 citations) with toast + stats update; timers cleaned on unmount.
+- Auth screen rewiring (auth-screen.tsx): login now never blocks — demo credentials (n.mokoena@procurement.gov / gatekeeper-01 → "Naledi Mokoena") pre-fill on first login view; empty/malformed input silently resolves to demo identity; on 401 the account is provisioned via /api/auth/register and the login retried; a REAL wrong-password case (register 409) is the only honest error; network/429 failures fall back to a local demo session. SuccessPanel: "Enter mission control →" primary CTA, secondary "Back to the site", login mode auto-enters after ~1.9s with a red "OPENING MISSION CONTROL" progress bar; register mode keeps the manual CTA. "DEMO BUILD — ANY CREDENTIALS OPEN THE WORKSPACE" mono chip under the toggle.
+- page.tsx: third view "dashboard" for #/dashboard (hash is source of truth, back-button friendly); identity mirror in localStorage (bidbox.identity) so local sessions survive reloads; guard effect redirects signed-out #/dashboard deep links to #/login (replaceState, no history spam); enterWorkspace/exitDashboard callbacks; signOut clears cookie + local identity + toast.
+- site-header.tsx: signed-in state gains a "Mission control" button (desktop pill + mobile full-width) next to the user chip.
+- next.config.ts: devIndicators disabled (the dev badge overlapped the sidebar's BACK TO SITE in preview).
+- Fixed during verification: ternary chain syntax for 3 views; keyless fragment in table map → <Fragment key>; set-state-in-effect lint (prefill + count-up wrapped in rAF); grid blowout on mobile (implicit auto track → explicit grid-cols-1 + min-w-0, page went 759px → 390px clean); "1 FLAGS" grammar; portal dot markup; unused _format → format now shown in toast.
+- DB: demo user n.mokoena@procurement.gov auto-provisioned via the new flow (kept intentionally as the demo persona); test user t.nkosi@ppo.go.zw deleted after E2E.
+- Verification (agent-browser, 1440x900 + 390x844): header Sign in → prefilled login → one click → ACCESS GRANTED stamp ("Welcome back, Naledi." + terminal "session issued") → auto-enter #/dashboard; stats settle 2/24/100%/2; Award gate → toast + badge 2→1 + stat re-count + ledger + run COMPLETE; Return gate → run back to LIVE; search "furniture" → 1 OF 7 RUNS; row expand shows findings chips + report/copy actions; New run modal → LIVE row → 12s later COMPLETE (findings 24→28); reload restores session; sign out → toast → #/login; deep-link #/dashboard signed out → guarded to #/login; register "Thabo Nkosi" → "Account opened. Thabo." → Enter mission control → "Good morning, Thabo."; mobile: drawer nav scrolls to gates, award works, no horizontal scroll, table scrolls inside its card; 0 console errors / 0 page errors; lint clean; dev.log all 200/201.
+
+Stage Summary:
+- Clicking "Sign in" now ALWAYS opens Mission Control (empty, wrong, or demo credentials — with exactly one honest exception: a real account + wrong passphrase), and registration ends in the workspace too.
+- #/dashboard is a full product surface: live stats, run register with search/filters/detail, human gate sign-off loop, agent feed, portal sync, new-run simulation — all interactive, all on-brand, desktop + mobile verified end-to-end.

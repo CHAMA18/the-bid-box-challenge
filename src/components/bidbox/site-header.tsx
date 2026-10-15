@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUpRight, LogOut, Menu, X } from "lucide-react";
+import { ArrowUpRight, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { BidBoxLogo } from "@/components/bidbox/logo";
 import type { AuthUser } from "@/lib/auth-types";
 import { cn } from "@/lib/utils";
@@ -26,12 +26,14 @@ export function SiteHeader({
   onGetStarted,
   onSignIn,
   onSignOut,
+  onDashboard,
 }: {
   user: AuthUser | null;
   authReady: boolean;
   onGetStarted: () => void;
   onSignIn: () => void;
   onSignOut: () => void;
+  onDashboard: () => void;
 }) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
@@ -92,6 +94,18 @@ export function SiteHeader({
                   {user.name}
                 </span>
               </span>
+              <button
+                type="button"
+                onClick={onDashboard}
+                className="group inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-950 px-4 text-[13px] font-semibold text-white transition-all hover:bg-brand-600"
+              >
+                <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
+                Mission control
+                <ArrowUpRight
+                  className="h-3.5 w-3.5 opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                  aria-hidden="true"
+                />
+              </button>
               <button
                 type="button"
                 onClick={onSignOut}
@@ -162,26 +176,40 @@ export function SiteHeader({
               {!authReady ? (
                 <div className="mt-2 h-12 animate-pulse rounded-xl bg-ink-100/70" aria-hidden="true" />
               ) : user ? (
-                <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-3">
-                  <span
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-950 font-code text-[10px] font-bold text-white"
-                    aria-hidden="true"
-                  >
-                    {initialsOf(user.name)}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-ink-900">
-                    {user.name}
-                  </span>
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-3">
+                    <span
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-950 font-code text-[10px] font-bold text-white"
+                      aria-hidden="true"
+                    >
+                      {initialsOf(user.name)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-ink-900">
+                      {user.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        onSignOut();
+                      }}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-ink-200 px-3.5 text-[12.5px] font-semibold text-ink-700 transition-all hover:border-brand-300 hover:text-brand-700"
+                    >
+                      <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+                      Sign out
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
                       setOpen(false);
-                      onSignOut();
+                      onDashboard();
                     }}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-ink-200 px-3.5 text-[12.5px] font-semibold text-ink-700 transition-all hover:border-brand-300 hover:text-brand-700"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-ink-950 px-4 py-3.5 text-[15px] font-semibold text-white"
                   >
-                    <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-                    Sign out
+                    <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
+                    Mission control
+                    <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
               ) : (
