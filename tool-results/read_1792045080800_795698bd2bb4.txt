@@ -1,0 +1,1030 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useRef, useState } from "react";
+     4→import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
+     5→import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff, Lock } from "lucide-react";
+     6→import { BidBoxLogo } from "@/components/bidbox/logo";
+     7→import { Eyebrow } from "@/components/bidbox/reveal";
+     8→import type { AuthMode, AuthUser } from "@/lib/auth-types";
+     9→import { cn } from "@/lib/utils";
+    10→
+    11→const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    12→
+    13→const EASE = [0.22, 1, 0.36, 1] as const;
+    14→
+    15→/*
+    16→ * Demo workspace credentials. Sign-in never blocks: empty or malformed
+    17→ * fields resolve to this identity, and if the cloud account doesn't exist
+    18→ * yet it is silently provisioned — so pressing "Sign in" always opens
+    19→ * Mission Control.
+    20→ */
+    21→const DEMO = {
+    22→  name: "Naledi Mokoena",
+    23→  email: "n.mokoena@procurement.gov",
+    24→  password: "gatekeeper-01",
+    25→  organization: "Public Procurement Authority",
+    26→};
+    27→
+    28→function deriveName(email: string): string {
+    29→  if (email.trim().toLowerCase() === DEMO.email) return DEMO.name;
+    30→  const parts = email.split("@")[0].split(/[._-]+/).filter(Boolean);
+    31→  if (parts.length === 0) return "Procurement Officer";
+    32→  return parts
+    33→    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    34→    .join(" ");
+    35→}
+    36→
+    37→/* ── The looping access terminal (left panel) ────────────────────────────── */
+    38→
+    39→type LineKind = "cmd" | "step" | "ok" | "gate";
+    40→const SCRIPT: { text: string; kind: LineKind }[] = [
+    41→  { text: "bidbox-agent run --tender KE-NCB-104293 --format ocds", kind: "cmd" },
+    42→  { text: "▸ ingesting 214 pages · 4 bids parsed", kind: "step" },
+    43→  { text: "▸ document checklist — 16/16 present", kind: "step" },
+    44→  { text: "▸ cross-checking the supplier registry", kind: "step" },
+    45→  { text: "▸ 3 findings flagged · every claim cited", kind: "step" },
+    46→  { text: "✓ run complete — 6 findings · 6 citations · 0 unsourced", kind: "ok" },
+    47→  { text: "⏸ human gate — the committee awards the tender", kind: "gate" },
+    48→];
+    49→
+    50→function AccessTerminal({ grantedFirstName }: { grantedFirstName: string | null }) {
+    51→  const [step, setStep] = useState(0);
+    52→  const done = step >= SCRIPT.length;
+    53→
+    54→  useEffect(() => {
+    55→    if (step >= SCRIPT.length) {
+    56→      const t = setTimeout(() => setStep(0), 4600);
+    57→      return () => clearTimeout(t);
+    58→    }
+    59→    const t = setTimeout(() => setStep((s) => s + 1), step === 0 ? 750 : 640);
+    60→    return () => clearTimeout(t);
+    61→  }, [step]);
+    62→
+    63→  return (
+    64→    <div className="w-full max-w-md rounded-2xl border border-white/10 bg-night-2/90 shadow-[0_36px_90px_rgba(0,0,0,0.5)]">
+    65→      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+    66→        <div className="flex items-center gap-1.5" aria-hidden="true">
+    67→          <span className="h-2.5 w-2.5 rounded-full bg-brand-600/90" />
+    68→          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
+    69→          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
+    70→        </div>
+    71→        <p className="font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
+    72→          BIDBOX-AGENT · LIVE
+    73→        </p>
+    74→      </div>
+    75→      <div
+    76→        className="min-h-[178px] px-4 py-4 font-code text-[10.5px] leading-[1.95] sm:text-[11.5px]"
+    77→        role="img"
+    78→        aria-label="Animated terminal: a Bid Box agent run ingesting a tender, checking documents, citing findings and stopping at the human gate"
+    79→      >
+    80→        {SCRIPT.slice(0, step).map((line) => (
+    81→          <p
+    82→            key={line.text}
+    83→            className={cn(
+    84→              "transition-colors",
+    85→              line.kind === "cmd" && "text-ink-200",
+    86→              line.kind === "step" && "text-ink-400",
+    87→              line.kind === "ok" && "font-semibold text-white",
+    88→              line.kind === "gate" && "text-brand-300"
+    89→            )}
+    90→          >
+    91→            {line.kind === "cmd" && <span className="mr-2 text-brand-400">$</span>}
+    92→            {line.text}
+    93→          </p>
+    94→        ))}
+    95→        {!done && (
+    96→          <span className="mt-1 inline-block h-3.5 w-[7px] animate-pulse bg-brand-500" aria-hidden="true" />
+    97→        )}
+    98→        {grantedFirstName && (
+    99→          <p className="mt-1 font-semibold text-brand-300">
+   100→            ✓ session issued — welcome, {grantedFirstName}
+   101→          </p>
+   102→        )}
+   103→      </div>
+   104→    </div>
+   105→  );
+   106→}
+   107→
+   108→/* ── Brand panel (left, dark) ────────────────────────────────────────────── */
+   109→
+   110→const FACTS = ["26 DAYS → 20 MIN", "100% CITED", "1 HUMAN GATE"];
+   111→
+   112→function CornerTicks() {
+   113→  const tick = "pointer-events-none absolute h-4 w-4 border-white/25";
+   114→  return (
+   115→    <div aria-hidden="true">
+   116→      <span className={cn(tick, "left-5 top-5 border-l border-t")} />
+   117→      <span className={cn(tick, "right-5 top-5 border-r border-t")} />
+   118→      <span className={cn(tick, "bottom-5 left-5 border-b border-l")} />
+   119→      <span className={cn(tick, "bottom-5 right-5 border-b border-r")} />
+   120→    </div>
+   121→  );
+   122→}
+   123→
+   124→function BrandPanel({ grantedFirstName }: { grantedFirstName: string | null }) {
+   125→  return (
+   126→    <aside className="relative hidden flex-col justify-between overflow-hidden bg-night lg:flex">
+   127→      <div className="bg-grid-dark pointer-events-none absolute inset-0" aria-hidden="true" />
+   128→      <div
+   129→        className="pointer-events-none absolute -left-44 top-1/3 h-[420px] w-[420px] rounded-full bg-brand-600/10 blur-[130px]"
+   130→        aria-hidden="true"
+   131→      />
+   132→      <CornerTicks />
+   133→
+   134→      <div className="relative p-10 xl:p-14">
+   135→        <p className="flex items-center gap-2.5 font-code text-[10px] font-semibold uppercase tracking-[0.3em] text-ink-400">
+   136→          <span className="inline-block h-[2px] w-6 bg-brand-500" aria-hidden="true" />
+   137→          FIG. 03 — Secure access
+   138→        </p>
+   139→        <h2 className="mt-6 max-w-md font-display text-[32px] font-black leading-[1.08] tracking-[-0.02em] text-white xl:text-[38px]">
+   140→          The agent reads the file.{" "}
+   141→          <span className="text-brand-500">You</span> still award the tender.
+   142→        </h2>
+   143→        <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-300">
+   144→          Your account is the last mile of that promise — every run, every finding and every
+   145→          sign-off is tied to a named human. No ghost decisions.
+   146→        </p>
+   147→        <div className="mt-8">
+   148→          <AccessTerminal grantedFirstName={grantedFirstName} />
+   149→        </div>
+   150→      </div>
+   151→
+   152→      <div className="relative p-10 pt-0 xl:p-14 xl:pt-0">
+   153→        <ul className="flex flex-wrap gap-2.5" aria-label="What a Bid Box run guarantees">
+   154→          {FACTS.map((fact) => (
+   155→            <li
+   156→              key={fact}
+   157→              className="rounded-full border border-white/15 px-3.5 py-1.5 font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-200"
+   158→            >
+   159→              {fact}
+   160→            </li>
+   161→          ))}
+   162→        </ul>
+   163→        <div className="mt-6 border-l-2 border-brand-600 pl-4">
+   164→          <p className="max-w-md font-code text-[10px] leading-[1.9] tracking-[0.16em] text-ink-400">
+   165→            BID BOX PREPARES THE FILE.
+   166→            <br />
+   167→            IT NEVER AWARDS THE TENDER.
+   168→          </p>
+   169→        </div>
+   170→      </div>
+   171→    </aside>
+   172→  );
+   173→}
+   174→
+   175→/* ── Compact brand strip (mobile) ────────────────────────────────────────── */
+   176→
+   177→function BrandStrip() {
+   178→  return (
+   179→    <div className="relative overflow-hidden bg-night px-5 py-7 lg:hidden">
+   180→      <div className="bg-grid-dark pointer-events-none absolute inset-0" aria-hidden="true" />
+   181→      <div className="relative">
+   182→        <p className="flex items-center gap-2.5 font-code text-[9px] font-semibold uppercase tracking-[0.28em] text-ink-400">
+   183→          <span className="inline-block h-[2px] w-5 bg-brand-500" aria-hidden="true" />
+   184→          FIG. 03 — Secure access
+   185→        </p>
+   186→        <p className="mt-3 font-display text-[21px] font-black leading-[1.12] tracking-[-0.015em] text-white">
+   187→          The agent reads. <span className="text-brand-500">You</span> award.
+   188→        </p>
+   189→        <ul className="mt-4 flex flex-wrap gap-2" aria-label="What a Bid Box run guarantees">
+   190→          {FACTS.map((fact) => (
+   191→            <li
+   192→              key={fact}
+   193→              className="rounded-full border border-white/15 px-3 py-1 font-code text-[8.5px] font-semibold tracking-[0.16em] text-ink-200"
+   194→            >
+   195→              {fact}
+   196→            </li>
+   197→          ))}
+   198→        </ul>
+   199→      </div>
+   200→    </div>
+   201→  );
+   202→}
+   203→
+   204→/* ── Form primitives ─────────────────────────────────────────────────────── */
+   205→
+   206→function inputCls(invalid?: boolean) {
+   207→  return cn(
+   208→    "h-12 w-full rounded-xl border bg-white px-4 text-[14.5px] text-ink-900 outline-none transition-all placeholder:text-ink-300",
+   209→    invalid
+   210→      ? "border-brand-500 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/15"
+   211→      : "border-ink-200 hover:border-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+   212→  );
+   213→}
+   214→
+   215→function FieldError({ id, message }: { id: string; message?: string }) {
+   216→  if (!message) return null;
+   217→  return (
+   218→    <p id={id} className="mt-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-brand-700">
+   219→      <CircleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+   220→      {message}
+   221→    </p>
+   222→  );
+   223→}
+   224→
+   225→const PW_CHECKS: { label: string; test: (pw: string) => boolean }[] = [
+   226→  { label: "8+ CHARS", test: (pw) => pw.length >= 8 },
+   227→  { label: "NUMBER", test: (pw) => /\d/.test(pw) },
+   228→  { label: "UPPER + LOWER", test: (pw) => /[a-z]/.test(pw) && /[A-Z]/.test(pw) },
+   229→  { label: "SYMBOL", test: (pw) => /[^A-Za-z0-9]/.test(pw) },
+   230→];
+   231→
+   232→const PW_META = [
+   233→  { label: "AWAITING INPUT", seg: "bg-ink-300" },
+   234→  { label: "WEAK", seg: "bg-brand-600" },
+   235→  { label: "FAIR", seg: "bg-brand-400" },
+   236→  { label: "GOOD", seg: "bg-ink-500" },
+   237→  { label: "STRONG", seg: "bg-ink-950" },
+   238→];
+   239→
+   240→/* ── Success panel — the stamp ───────────────────────────────────────────── */
+   241→
+   242→function SuccessPanel({
+   243→  user,
+   244→  mode,
+   245→  onClose,
+   246→  onEnterWorkspace,
+   247→}: {
+   248→  user: AuthUser;
+   249→  mode: AuthMode;
+   250→  onClose: () => void;
+   251→  onEnterWorkspace: () => void;
+   252→}) {
+   253→  const firstName = user.name.trim().split(/\s+/)[0];
+   254→  const autoEnter = mode === "login";
+   255→  const enteredRef = useRef(false);
+   256→
+   257→  const enter = () => {
+   258→    if (enteredRef.current) return;
+   259→    enteredRef.current = true;
+   260→    onEnterWorkspace();
+   261→  };
+   262→
+   263→  /* Sign-ins open Mission Control automatically — no extra click. */
+   264→  useEffect(() => {
+   265→    if (!autoEnter) return;
+   266→    const t = setTimeout(enter, 1900);
+   267→    return () => clearTimeout(t);
+   268→  }, [autoEnter]);
+   269→  return (
+   270→    <motion.div
+   271→      initial={{ opacity: 0 }}
+   272→      animate={{ opacity: 1 }}
+   273→      transition={{ duration: 0.3 }}
+   274→      className="w-full max-w-[440px] text-center"
+   275→      aria-live="polite"
+   276→    >
+   277→      <motion.div
+   278→        initial={{ scale: 2.3, opacity: 0, rotate: -17 }}
+   279→        animate={{ scale: 1, opacity: 1, rotate: -6 }}
+   280→        transition={{ type: "spring", stiffness: 240, damping: 16, delay: 0.18 }}
+   281→        className="mx-auto inline-block rounded-lg border-[3px] border-brand-600 px-7 py-3.5 shadow-[0_20px_50px_rgba(217,38,22,0.28)]"
+   282→      >
+   283→        <p className="font-display text-[22px] font-black tracking-[0.1em] text-brand-600 sm:text-[25px]">
+   284→          ACCESS GRANTED
+   285→        </p>
+   286→      </motion.div>
+   287→
+   288→      <motion.div
+   289→        initial={{ opacity: 0, y: 18 }}
+   290→        animate={{ opacity: 1, y: 0 }}
+   291→        transition={{ duration: 0.55, delay: 0.34, ease: EASE }}
+   292→      >
+   293→        <h1 className="mt-9 font-display text-[32px] font-black leading-[1.06] tracking-[-0.02em] text-ink-950 sm:text-[38px]">
+   294→          {mode === "register" ? (
+   295→            <>
+   296→              Account opened<span className="text-brand-600">.</span>
+   297→            </>
+   298→          ) : (
+   299→            <>
+   300→              Welcome back<span className="text-brand-600">,</span>
+   301→            </>
+   302→          )}{" "}
+   303→          {firstName}.
+   304→        </h1>
+   305→        <p className="mx-auto mt-3 max-w-sm text-[15px] leading-relaxed text-ink-600">
+   306→          {mode === "register"
+   307→            ? "Your workspace is live. Connect a portal, map your checklist — and remember: the committee still holds the pen."
+   308→            : "The file is where you left it. Every finding still cited, every gate still human."}
+   309→        </p>
+   310→
+   311→        {autoEnter && (
+   312→          <div className="mx-auto mt-7 w-full max-w-sm" aria-hidden="true">
+   313→            <div className="flex items-center justify-between font-code text-[8.5px] tracking-[0.2em] text-ink-400">
+   314→              <span>OPENING MISSION CONTROL</span>
+   315→              <span>SESSION · HTTPONLY</span>
+   316→            </div>
+   317→            <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-ink-100">
+   318→              <motion.div
+   319→                initial={{ width: "4%" }}
+   320→                animate={{ width: "100%" }}
+   321→                transition={{ duration: 1.85, ease: "linear" }}
+   322→                className="h-full rounded-full bg-brand-600"
+   323→              />
+   324→            </div>
+   325→          </div>
+   326→        )}
+   327→
+   328→        <button
+   329→          type="button"
+   330→          onClick={enter}
+   331→          className="group mt-8 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-ink-950 px-7 text-[15px] font-semibold text-white transition-all hover:bg-brand-600"
+   332→        >
+   333→          Enter mission control
+   334→          <ArrowRight
+   335→            className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1"
+   336→            aria-hidden="true"
+   337→          />
+   338→        </button>
+   339→        <button
+   340→          type="button"
+   341→          onClick={onClose}
+   342→          className="mt-3.5 text-[13px] font-semibold text-ink-500 underline decoration-ink-300 underline-offset-4 transition-colors hover:text-brand-700 hover:decoration-brand-400"
+   343→        >
+   344→          Back to the site
+   345→        </button>
+   346→
+   347→        <dl className="mx-auto mt-7 grid max-w-sm grid-cols-3 divide-x divide-ink-100 rounded-2xl border border-ink-100 bg-white py-4">
+   348→          {[
+   349→            ["SESSION", "HTTPONLY"],
+   350→            ["PASSWORD", "SCRYPT"],
+   351→            ["GATE", "HUMAN"],
+   352→          ].map(([k, v]) => (
+   353→            <div key={k} className="px-2">
+   354→              <dt className="font-code text-[8.5px] tracking-[0.22em] text-ink-400">{k}</dt>
+   355→              <dd className="mt-1 font-code text-[11px] font-bold tracking-[0.06em] text-ink-950">
+   356→                {v}
+   357→              </dd>
+   358→            </div>
+   359→          ))}
+   360→        </dl>
+   361→
+   362→        <p className="mt-4 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
+   363→          SIGNED IN AS {user.email.toUpperCase()}
+   364→        </p>
+   365→      </motion.div>
+   366→    </motion.div>
+   367→  );
+   368→}
+   369→
+   370→/* ── The screen ──────────────────────────────────────────────────────────── */
+   371→
+   372→interface AuthScreenProps {
+   373→  mode: AuthMode;
+   374→  onModeChange: (mode: AuthMode) => void;
+   375→  onSuccess: (user: AuthUser) => void;
+   376→  onEnterWorkspace: () => void;
+   377→  onClose: () => void;
+   378→}
+   379→
+   380→export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, onClose }: AuthScreenProps) {
+   381→  const [values, setValues] = useState({ name: "", email: "", organization: "", password: "" });
+   382→  const [remember, setRemember] = useState(true);
+   383→  const [terms, setTerms] = useState(false);
+   384→  const [showPw, setShowPw] = useState(false);
+   385→  const [errors, setErrors] = useState<Record<string, string>>({});
+   386→  const [formError, setFormError] = useState<string | null>(null);
+   387→  const [status, setStatus] = useState<"form" | "sending" | "success">("form");
+   388→  const [granted, setGranted] = useState<AuthUser | null>(null);
+   389→  const [memoOpen, setMemoOpen] = useState(false);
+   390→  const shake = useAnimationControls();
+   391→
+   392→  const pwScore = PW_CHECKS.filter((c) => c.test(values.password)).length;
+   393→  const pwMeta = PW_META[pwScore];
+   394→  const firstName = granted?.name.trim().split(/\s+/)[0] ?? null;
+   395→
+   396→  function set(field: keyof typeof values, v: string) {
+   397→    setValues((prev) => ({ ...prev, [field]: v }));
+   398→    setErrors((prev) => {
+   399→      if (!prev[field]) return prev;
+   400→      const next = { ...prev };
+   401→      delete next[field];
+   402→      return next;
+   403→    });
+   404→  }
+   405→
+   406→  /* Pre-fill the demo credentials the first time the login form shows. */
+   407→  useEffect(() => {
+   408→    if (mode !== "login") return;
+   409→    const id = requestAnimationFrame(() => {
+   410→      setValues((prev) =>
+   411→        prev.email || prev.password ? prev : { ...prev, email: DEMO.email, password: DEMO.password }
+   412→      );
+   413→    });
+   414→    return () => cancelAnimationFrame(id);
+   415→  }, [mode]);
+   416→
+   417→  function validate(): Record<string, string> {
+   418→    /* Registration validates; sign-in never blocks — see submit(). */
+   419→    const e: Record<string, string> = {};
+   420→    if (mode === "register") {
+   421→      if (values.name.trim().length < 2) e.name = "Enter your full name.";
+   422→      if (!terms) e.terms = "Please accept the terms to continue.";
+   423→      if (!EMAIL_RE.test(values.email.trim())) e.email = "Enter a valid work email.";
+   424→      if (values.password.length < 8) e.password = "Use at least 8 characters.";
+   425→    }
+   426→    return e;
+   427→  }
+   428→
+   429→  function grant(u: AuthUser) {
+   430→    setGranted(u);
+   431→    setStatus("success");
+   432→    onSuccess(u);
+   433→  }
+   434→
+   435→  async function submit(ev: React.FormEvent) {
+   436→    ev.preventDefault();
+   437→    setFormError(null);
+   438→    const errs = validate();
+   439→    setErrors(errs);
+   440→    if (Object.keys(errs).length > 0) {
+   441→      await shake.start({ x: [0, -10, 10, -6, 6, 0], transition: { duration: 0.38 } });
+   442→      return;
+   443→    }
+   444→
+   445→    setStatus("sending");
+   446→
+   447→    /*
+   448→     * Sign-in resolves silently: empty or malformed input falls back to the
+   449→     * demo identity, and an unknown email is provisioned on the fly. The one
+   450→     * honest failure is a real account with the wrong passphrase.
+   451→     */
+   452→    if (mode === "login") {
+   453→      let email = values.email.trim();
+   454→      let password = values.password;
+   455→      if (!EMAIL_RE.test(email)) email = DEMO.email;
+   456→      if (password.length === 0) password = DEMO.password;
+   457→      setValues((prev) => ({ ...prev, email, password }));
+   458→
+   459→      const openLocal = () =>
+   460→        grant({
+   461→          id: `local-${Date.now()}`,
+   462→          name: deriveName(email),
+   463→          email,
+   464→          organization: null,
+   465→        });
+   466→
+   467→      try {
+   468→        const res = await fetch("/api/auth/login", {
+   469→          method: "POST",
+   470→          headers: { "Content-Type": "application/json" },
+   471→          body: JSON.stringify({ email, password, remember }),
+   472→        });
+   473→        const data = (await res.json().catch(() => null)) as
+   474→          | { user?: AuthUser; error?: string }
+   475→          | null;
+   476→        if (res.ok && data?.user) {
+   477→          grant(data.user);
+   478→          return;
+   479→        }
+   480→
+   481→        if (res.status === 401 && password.length >= 8) {
+   482→          /* No account (yet)? Provision one silently and continue. */
+   483→          const reg = await fetch("/api/auth/register", {
+   484→            method: "POST",
+   485→            headers: { "Content-Type": "application/json" },
+   486→            body: JSON.stringify({
+   487→              name: deriveName(email),
+   488→              email,
+   489→              password,
+   490→              organization: email === DEMO.email ? DEMO.organization : undefined,
+   491→            }),
+   492→          });
+   493→          if (reg.ok) {
+   494→            const rd = (await reg.json().catch(() => null)) as { user?: AuthUser } | null;
+   495→            if (rd?.user) {
+   496→              grant(rd.user);
+   497→              return;
+   498→            }
+   499→          }
+   500→          if (reg.status === 409) {
+   501→            /* A real account exists and the passphrase didn't match. */
+   502→            setFormError(
+   503→              "Incorrect email or password. Check your credentials and try again."
+   504→            );
+   505→            await shake.start({ x: [0, -10, 10, -6, 6, 0], transition: { duration: 0.38 } });
+   506→            setStatus("form");
+   507→            return;
+   508→          }
+   509→        }
+   510→
+   511→        /* Server unreachable, rate-limited, or validation refused — open the local workspace. */
+   512→        openLocal();
+   513→      } catch {
+   514→        openLocal();
+   515→      }
+   516→      return;
+   517→    }
+   518→
+   519→    try {
+   520→      const res = await fetch("/api/auth/register", {
+   521→        method: "POST",
+   522→        headers: { "Content-Type": "application/json" },
+   523→        body: JSON.stringify({
+   524→          name: values.name.trim(),
+   525→          email: values.email.trim(),
+   526→          password: values.password,
+   527→          organization: values.organization.trim() || undefined,
+   528→        }),
+   529→      });
+   530→      const data = (await res.json().catch(() => null)) as
+   531→        | { user?: AuthUser; error?: string; errors?: Record<string, string> }
+   532→        | null;
+   533→
+   534→      if (!res.ok || !data?.user) {
+   535→        if (data?.errors) setErrors(data.errors);
+   536→        setFormError(data?.error ?? "Something went wrong on our side. Try again.");
+   537→        setStatus("form");
+   538→        return;
+   539→      }
+   540→
+   541→      grant(data.user);
+   542→    } catch {
+   543→      setFormError("Cannot reach the server. Check your connection and try again.");
+   544→      setStatus("form");
+   545→    }
+   546→  }
+   547→
+   548→  return (
+   549→    <div className="flex min-h-screen flex-col bg-paper font-body text-ink-900 antialiased">
+   550→      {/* Top bar */}
+   551→      <header className="relative z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-night px-4 py-3.5 sm:px-8">
+   552→        <button
+   553→          type="button"
+   554→          onClick={onClose}
+   555→          aria-label="Back to the Bid Box site"
+   556→          className="rounded-lg outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-brand-500"
+   557→        >
+   558→          <BidBoxLogo variant="light" />
+   559→        </button>
+   560→        <div className="flex items-center gap-4 sm:gap-6">
+   561→          <p className="hidden items-center gap-2.5 font-code text-[9px] tracking-[0.22em] text-ink-400 md:flex">
+   562→            <span className="relative flex h-1.5 w-1.5">
+   563→              <span
+   564→                className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500"
+   565→                aria-hidden="true"
+   566→              />
+   567→              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+   568→            </span>
+   569→            SECURE · SCRYPT-HASHED · HTTPONLY SESSION
+   570→          </p>
+   571→          <button
+   572→            type="button"
+   573→            onClick={onClose}
+   574→            className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/15 px-4 text-[12.5px] font-semibold text-ink-200 transition-all hover:border-white/40 hover:text-white"
+   575→          >
+   576→            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+   577→            Back to site
+   578→          </button>
+   579→        </div>
+   580→      </header>
+   581→
+   582→      <div className="grid flex-1 lg:grid-cols-2">
+   583→        <BrandPanel grantedFirstName={firstName} />
+   584→
+   585→        {/* Form column */}
+   586→        <main className="relative flex flex-col bg-paper">
+   587→          <BrandStrip />
+   588→
+   589→          <div className="flex flex-1 items-center justify-center px-4 py-12 sm:px-10 lg:py-16">
+   590→            <div className="w-full max-w-[440px]">
+   591→              <AnimatePresence mode="wait">
+   592→                {status === "success" && granted ? (
+   593→                  <SuccessPanel
+   594→                    key="success"
+   595→                    user={granted}
+   596→                    mode={mode}
+   597→                    onClose={onClose}
+   598→                    onEnterWorkspace={onEnterWorkspace}
+   599→                  />
+   600→                ) : (
+   601→                  <motion.div
+   602→                    key="form"
+   603→                    initial={{ opacity: 0, y: 18 }}
+   604→                    animate={{ opacity: 1, y: 0 }}
+   605→                    exit={{ opacity: 0, y: -10, transition: { duration: 0.18 } }}
+   606→                    transition={{ duration: 0.45, ease: EASE }}
+   607→                  >
+   608→                    <Eyebrow>
+   609→                      {mode === "register" ? "FIG. 01 — Request access" : "FIG. 02 — Sign in"}
+   610→                    </Eyebrow>
+   611→                    <h1 className="mt-4 font-display text-[36px] font-black leading-[1.04] tracking-[-0.025em] text-ink-950 sm:text-[42px]">
+   612→                      {mode === "register" ? (
+   613→                        <>
+   614→                          Create your account<span className="text-brand-600">.</span>
+   615→                        </>
+   616→                      ) : (
+   617→                        <>
+   618→                          Welcome back<span className="text-brand-600">.</span>
+   619→                        </>
+   620→                      )}
+   621→                    </h1>
+   622→                    <p className="mt-3 text-[15px] leading-relaxed text-ink-600">
+   623→                      {mode === "register"
+   624→                        ? "One account for your procurement team. The agent prepares the file — you keep the gavel."
+   625→                        : "Sign in to your Bid Box workspace. The file is waiting, every finding cited."}
+   626→                    </p>
+   627→
+   628→                    {/* Mode switch */}
+   629→                    <div
+   630→                      className="mt-7 grid grid-cols-2 rounded-full border border-ink-200 bg-white p-1"
+   631→                      role="tablist"
+   632→                      aria-label="Choose register or sign in"
+   633→                    >
+   634→                      {(["register", "login"] as const).map((m) => (
+   635→                        <button
+   636→                          key={m}
+   637→                          type="button"
+   638→                          role="tab"
+   639→                          aria-selected={mode === m}
+   640→                          onClick={() => onModeChange(m)}
+   641→                          className="relative h-9 rounded-full text-[13px] font-semibold transition-colors"
+   642→                        >
+   643→                          {mode === m && (
+   644→                            <motion.span
+   645→                              layoutId="auth-mode-pill"
+   646→                              className="absolute inset-0 rounded-full bg-ink-950"
+   647→                              transition={{ type: "spring", stiffness: 520, damping: 42 }}
+   648→                              aria-hidden="true"
+   649→                            />
+   650→                          )}
+   651→                          <span className={cn("relative", mode === m ? "text-white" : "text-ink-500")}>
+   652→                            {m === "register" ? "New here" : "Sign in"}
+   653→                          </span>
+   654→                        </button>
+   655→                      ))}
+   656→                    </div>
+   657→
+   658→                    {mode === "login" && (
+   659→                      <p className="mt-3 flex items-center justify-center gap-1.5 text-center font-code text-[8px] font-semibold tracking-[0.18em] text-ink-400">
+   660→                        <Lock className="h-3 w-3 text-brand-600" aria-hidden="true" />
+   661→                        DEMO BUILD — ANY CREDENTIALS OPEN THE WORKSPACE
+   662→                      </p>
+   663→                    )}
+   664→
+   665→                    <motion.div animate={shake}>
+   666→                      <form onSubmit={submit} noValidate className="mt-6 space-y-4">
+   667→                        <AnimatePresence initial={false}>
+   668→                          {mode === "register" && (
+   669→                            <motion.div
+   670→                              key="name"
+   671→                              initial={{ opacity: 0, height: 0 }}
+   672→                              animate={{ opacity: 1, height: "auto" }}
+   673→                              exit={{ opacity: 0, height: 0 }}
+   674→                              transition={{ duration: 0.28, ease: EASE }}
+   675→                              className="overflow-hidden"
+   676→                            >
+   677→                              <label
+   678→                                htmlFor="auth-name"
+   679→                                className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500"
+   680→                              >
+   681→                                FULL NAME
+   682→                              </label>
+   683→                              <input
+   684→                                id="auth-name"
+   685→                                type="text"
+   686→                                value={values.name}
+   687→                                onChange={(e) => set("name", e.target.value)}
+   688→                                placeholder="Naledi Mokoena"
+   689→                                autoComplete="name"
+   690→                                autoFocus
+   691→                                aria-invalid={!!errors.name}
+   692→                                aria-describedby={errors.name ? "auth-name-error" : undefined}
+   693→                                className={inputCls(!!errors.name)}
+   694→                              />
+   695→                              <FieldError id="auth-name-error" message={errors.name} />
+   696→                            </motion.div>
+   697→                          )}
+   698→                        </AnimatePresence>
+   699→
+   700→                        <div>
+   701→                          <label
+   702→                            htmlFor="auth-email"
+   703→                            className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500"
+   704→                          >
+   705→                            WORK EMAIL
+   706→                          </label>
+   707→                          <input
+   708→                            id="auth-email"
+   709→                            type="email"
+   710→                            value={values.email}
+   711→                            onChange={(e) => set("email", e.target.value)}
+   712→                            placeholder="n.mokoena@procurement.gov"
+   713→                            autoComplete="email"
+   714→                            {...(mode === "login" ? { autoFocus: true } : {})}
+   715→                            aria-invalid={!!errors.email}
+   716→                            aria-describedby={errors.email ? "auth-email-error" : undefined}
+   717→                            className={inputCls(!!errors.email)}
+   718→                          />
+   719→                          <FieldError id="auth-email-error" message={errors.email} />
+   720→                        </div>
+   721→
+   722→                        <AnimatePresence initial={false}>
+   723→                          {mode === "register" && (
+   724→                            <motion.div
+   725→                              key="org"
+   726→                              initial={{ opacity: 0, height: 0 }}
+   727→                              animate={{ opacity: 1, height: "auto" }}
+   728→                              exit={{ opacity: 0, height: 0 }}
+   729→                              transition={{ duration: 0.28, ease: EASE }}
+   730→                              className="overflow-hidden"
+   731→                            >
+   732→                              <label
+   733→                                htmlFor="auth-org"
+   734→                                className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500"
+   735→                              >
+   736→                                ORGANISATION <span className="text-ink-300">· OPTIONAL</span>
+   737→                              </label>
+   738→                              <input
+   739→                                id="auth-org"
+   740→                                type="text"
+   741→                                value={values.organization}
+   742→                                onChange={(e) => set("organization", e.target.value)}
+   743→                                placeholder="Public procurement authority"
+   744→                                autoComplete="organization"
+   745→                                aria-invalid={!!errors.organization}
+   746→                                aria-describedby={errors.organization ? "auth-org-error" : undefined}
+   747→                                className={inputCls(!!errors.organization)}
+   748→                              />
+   749→                              <FieldError id="auth-org-error" message={errors.organization} />
+   750→                            </motion.div>
+   751→                          )}
+   752→                        </AnimatePresence>
+   753→
+   754→                        <div>
+   755→                          <div className="mb-1.5 flex items-baseline justify-between">
+   756→                            <label
+   757→                              htmlFor="auth-password"
+   758→                              className="font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500"
+   759→                            >
+   760→                              PASSWORD
+   761→                            </label>
+   762→                            {mode === "register" && (
+   763→                              <span className="font-code text-[8.5px] tracking-[0.14em] text-ink-300">
+   764→                                MIN. 8 CHARACTERS
+   765→                              </span>
+   766→                            )}
+   767→                          </div>
+   768→                          <div className="relative">
+   769→                            <input
+   770→                              id="auth-password"
+   771→                              type={showPw ? "text" : "password"}
+   772→                              value={values.password}
+   773→                              onChange={(e) => set("password", e.target.value)}
+   774→                              placeholder={mode === "register" ? "Create a passphrase" : "Your passphrase"}
+   775→                              autoComplete={mode === "register" ? "new-password" : "current-password"}
+   776→                              aria-invalid={!!errors.password}
+   777→                              aria-describedby={errors.password ? "auth-password-error" : undefined}
+   778→                              className={cn(inputCls(!!errors.password), "pr-12")}
+   779→                            />
+   780→                            <button
+   781→                              type="button"
+   782→                              onClick={() => setShowPw((v) => !v)}
+   783→                              aria-label={showPw ? "Hide password" : "Show password"}
+   784→                              className="absolute right-2.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700"
+   785→                            >
+   786→                              {showPw ? (
+   787→                                <EyeOff className="h-4.5 w-4.5" aria-hidden="true" />
+   788→                              ) : (
+   789→                                <Eye className="h-4.5 w-4.5" aria-hidden="true" />
+   790→                              )}
+   791→                            </button>
+   792→                          </div>
+   793→                          <FieldError id="auth-password-error" message={errors.password} />
+   794→
+   795→                          {/* Strength meter */}
+   796→                          {mode === "register" && values.password.length > 0 && (
+   797→                            <div className="mt-3" aria-live="polite">
+   798→                              <div className="flex items-center justify-between gap-3">
+   799→                                <div className="flex gap-1.5" aria-hidden="true">
+   800→                                  {[0, 1, 2, 3].map((i) => (
+   801→                                    <span
+   802→                                      key={i}
+   803→                                      className={cn(
+   804→                                        "h-1.5 w-10 rounded-full transition-colors duration-300",
+   805→                                        i < pwScore ? pwMeta.seg : "bg-ink-100"
+   806→                                      )}
+   807→                                    />
+   808→                                  ))}
+   809→                                </div>
+   810→                                <p className="font-code text-[9px] font-bold tracking-[0.18em] text-ink-500">
+   811→                                  {pwMeta.label}
+   812→                                </p>
+   813→                              </div>
+   814→                              <ul className="mt-2.5 flex flex-wrap gap-1.5" aria-label="Password requirements">
+   815→                                {PW_CHECKS.map((c) => {
+   816→                                  const ok = c.test(values.password);
+   817→                                  return (
+   818→                                    <li
+   819→                                      key={c.label}
+   820→                                      className={cn(
+   821→                                        "rounded-md px-2 py-1 font-code text-[8.5px] font-semibold tracking-[0.14em] transition-colors duration-300",
+   822→                                        ok ? "bg-ink-950 text-white" : "bg-ink-50 text-ink-400"
+   823→                                      )}
+   824→                                    >
+   825→                                      {ok ? "✓ " : ""}
+   826→                                      {c.label}
+   827→                                    </li>
+   828→                                  );
+   829→                                })}
+   830→                              </ul>
+   831→                            </div>
+   832→                          )}
+   833→                        </div>
+   834→
+   835→                        {/* Mode-specific row */}
+   836→                        {mode === "register" ? (
+   837→                          <div>
+   838→                            <label className="flex cursor-pointer items-start gap-3 rounded-xl px-0.5 py-1">
+   839→                              <input
+   840→                                type="checkbox"
+   841→                                className="peer sr-only"
+   842→                                checked={terms}
+   843→                                onChange={(e) => {
+   844→                                  setTerms(e.target.checked);
+   845→                                  setErrors((prev) => {
+   846→                                    if (!prev.terms) return prev;
+   847→                                    const next = { ...prev };
+   848→                                    delete next.terms;
+   849→                                    return next;
+   850→                                  });
+   851→                                }}
+   852→                                aria-invalid={!!errors.terms}
+   853→                                aria-describedby={errors.terms ? "auth-terms-error" : undefined}
+   854→                              />
+   855→                              <span
+   856→                                aria-hidden="true"
+   857→                                className={cn(
+   858→                                  "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-all",
+   859→                                  terms
+   860→                                    ? "border-brand-600 bg-brand-600 text-white"
+   861→                                    : errors.terms
+   862→                                      ? "border-brand-500 bg-white"
+   863→                                      : "border-ink-300 bg-white"
+   864→                                )}
+   865→                              >
+   866→                                <svg
+   867→                                  viewBox="0 0 12 12"
+   868→                                  className="h-3 w-3"
+   869→                                  fill="none"
+   870→                                  stroke="currentColor"
+   871→                                  strokeWidth="2.4"
+   872→                                  strokeLinecap="round"
+   873→                                  strokeLinejoin="round"
+   874→                                >
+   875→                                  <path d="m2.5 6.5 2.4 2.4L9.5 4" />
+   876→                                </svg>
+   877→                              </span>
+   878→                              <span className="text-[13px] leading-snug text-ink-600">
+   879→                                I agree to the{" "}
+   880→                                <span className="font-semibold text-ink-900">terms of use</span> and
+   881→                                the <span className="font-semibold text-ink-900">acceptable-use policy</span>.
+   882→                              </span>
+   883→                            </label>
+   884→                            <FieldError id="auth-terms-error" message={errors.terms} />
+   885→                          </div>
+   886→                        ) : (
+   887→                          <div>
+   888→                            <div className="flex items-center justify-between">
+   889→                              <label className="flex cursor-pointer items-center gap-2.5">
+   890→                                <input
+   891→                                  type="checkbox"
+   892→                                  className="peer sr-only"
+   893→                                  checked={remember}
+   894→                                  onChange={(e) => setRemember(e.target.checked)}
+   895→                                />
+   896→                                <span
+   897→                                  aria-hidden="true"
+   898→                                  className={cn(
+   899→                                    "grid h-5 w-5 place-items-center rounded-md border transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600/30",
+   900→                                    remember
+   901→                                      ? "border-brand-600 bg-brand-600 text-white"
+   902→                                      : "border-ink-300 bg-white"
+   903→                                  )}
+   904→                                >
+   905→                                  <svg
+   906→                                    viewBox="0 0 12 12"
+   907→                                    className="h-3 w-3"
+   908→                                    fill="none"
+   909→                                    stroke="currentColor"
+   910→                                    strokeWidth="2.4"
+   911→                                    strokeLinecap="round"
+   912→                                    strokeLinejoin="round"
+   913→                                  >
+   914→                                    <path d="m2.5 6.5 2.4 2.4L9.5 4" />
+   915→                                  </svg>
+   916→                                </span>
+   917→                                <span className="text-[13px] font-medium text-ink-700">
+   918→                                  Keep me signed in
+   919→                                </span>
+   920→                              </label>
+   921→                              <button
+   922→                                type="button"
+   923→                                onClick={() => setMemoOpen((v) => !v)}
+   924→                                aria-expanded={memoOpen}
+   925→                                className="text-[13px] font-semibold text-ink-600 underline decoration-ink-300 underline-offset-4 transition-colors hover:text-brand-700 hover:decoration-brand-400"
+   926→                              >
+   927→                                Forgot access?
+   928→                              </button>
+   929→                            </div>
+   930→                            <AnimatePresence initial={false}>
+   931→                              {memoOpen && (
+   932→                                <motion.div
+   933→                                  initial={{ opacity: 0, height: 0 }}
+   934→                                  animate={{ opacity: 1, height: "auto" }}
+   935→                                  exit={{ opacity: 0, height: 0 }}
+   936→                                  transition={{ duration: 0.28, ease: EASE }}
+   937→                                  className="overflow-hidden"
+   938→                                >
+   939→                                  <div className="mt-3 rounded-xl border border-ink-200 bg-sand px-4 py-3.5" role="note">
+   940→                                    <p className="font-code text-[9px] font-semibold tracking-[0.2em] text-ink-500">
+   941→                                      MEMO — ACCESS RESET
+   942→                                    </p>
+   943→                                    <p className="mt-1.5 text-[13px] leading-relaxed text-ink-700">
+   944→                                      Password resets are issued by your organisation’s gate
+   945→                                      administrator — include your work email in the request. Pilot
+   946→                                      users: reply to your onboarding mail.
+   947→                                    </p>
+   948→                                  </div>
+   949→                                </motion.div>
+   950→                              )}
+   951→                            </AnimatePresence>
+   952→                          </div>
+   953→                        )}
+   954→
+   955→                        {/* Form-level error */}
+   956→                        <AnimatePresence>
+   957→                          {formError && (
+   958→                            <motion.p
+   959→                              initial={{ opacity: 0, y: -8 }}
+   960→                              animate={{ opacity: 1, y: 0 }}
+   961→                              exit={{ opacity: 0 }}
+   962→                              role="alert"
+   963→                              className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] font-semibold leading-snug text-brand-800"
+   964→                            >
+   965→                              <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+   966→                              {formError}
+   967→                            </motion.p>
+   968→                          )}
+   969→                        </AnimatePresence>
+   970→
+   971→                        {/* Submit */}
+   972→                        <button
+   973→                          type="submit"
+   974→                          disabled={status === "sending"}
+   975→                          className="group inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-ink-950 text-[15px] font-semibold text-white transition-all hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-70"
+   976→                        >
+   977→                          {status === "sending" ? (
+   978→                            <>
+   979→                              <span
+   980→                                className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+   981→                                aria-hidden="true"
+   982→                              />
+   983→                              {mode === "register" ? "Opening account…" : "Verifying…"}
+   984→                            </>
+   985→                          ) : (
+   986→                            <>
+   987→                              {mode === "register" ? "Create account" : "Sign in"}
+   988→                              <ArrowRight
+   989→                                className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1"
+   990→                                aria-hidden="true"
+   991→                              />
+   992→                            </>
+   993→                          )}
+   994→                        </button>
+   995→                      </form>
+   996→                    </motion.div>
+   997→
+   998→                    {/* Switch mode */}
+   999→                    <p className="mt-5 text-center text-[13.5px] text-ink-500">
+  1000→                      {mode === "register" ? "Already have access?" : "New to Bid Box?"}{" "}
+  1001→                      <button
+  1002→                        type="button"
+  1003→                        onClick={() => onModeChange(mode === "register" ? "login" : "register")}
+  1004→                        className="font-semibold text-brand-700 underline decoration-brand-300 underline-offset-4 transition-colors hover:text-brand-800 hover:decoration-brand-500"
+  1005→                      >
+  1006→                        {mode === "register" ? "Sign in" : "Create an account"}
+  1007→                      </button>
+  1008→                    </p>
+  1009→
+  1010→                    <p className="mt-7 text-center font-code text-[8.5px] tracking-[0.22em] text-ink-400">
+  1011→                      SCRYPT-HASHED PASSWORDS · HTTPONLY SESSIONS · NO TRACKERS
+  1012→                    </p>
+  1013→                  </motion.div>
+  1014→                )}
+  1015→              </AnimatePresence>
+  1016→            </div>
+  1017→          </div>
+  1018→
+  1019→          {/* Right column footer */}
+  1020→          <div className="border-t border-ink-100 px-4 py-4 text-center sm:px-10">
+  1021→            <p className="font-code text-[8.5px] tracking-[0.24em] text-ink-400">
+  1022→              THE BID BOX · AGENTIC PROCUREMENT · THE COMMITTEE SIGNS — THE AGENT NEVER DOES
+  1023→            </p>
+  1024→          </div>
+  1025→        </main>
+  1026→      </div>
+  1027→    </div>
+  1028→  );
+  1029→}
+  1030→

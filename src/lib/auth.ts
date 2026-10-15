@@ -9,7 +9,7 @@ const scrypt = promisify(_scrypt) as (
   keylen: number
 ) => Promise<Buffer>;
 
-export const SESSION_COOKIE = "bidbox_session";
+export const SESSION_COOKIE = "quorum_session";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /* ── Passwords (scrypt, no native deps) ─────────────────────────────────── */

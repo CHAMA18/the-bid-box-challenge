@@ -2,35 +2,35 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { TopTicker } from "@/components/bidbox/top-ticker";
-import { SiteHeader } from "@/components/bidbox/site-header";
-import { Hero } from "@/components/bidbox/hero";
-import { Overview } from "@/components/bidbox/overview";
-import { RuleBand } from "@/components/bidbox/rule-band";
-import { UseCases } from "@/components/bidbox/use-cases";
-import { Platform } from "@/components/bidbox/platform";
-import { InsideBox } from "@/components/bidbox/inside-box";
-import { ReportMock } from "@/components/bidbox/report-mock";
-import { ProofBand } from "@/components/bidbox/proof-band";
-import { Pricing } from "@/components/bidbox/pricing";
-import { GetStarted } from "@/components/bidbox/get-started";
-import { SiteFooter } from "@/components/bidbox/site-footer";
-import { AuthScreen } from "@/components/bidbox/auth-screen";
-import { Dashboard } from "@/components/bidbox/dashboard";
+import { TopTicker } from "@/components/quorum/top-ticker";
+import { SiteHeader } from "@/components/quorum/site-header";
+import { Hero } from "@/components/quorum/hero";
+import { Overview } from "@/components/quorum/overview";
+import { RuleBand } from "@/components/quorum/rule-band";
+import { UseCases } from "@/components/quorum/use-cases";
+import { Platform } from "@/components/quorum/platform";
+import { InsideRun } from "@/components/quorum/inside-box";
+import { ReportMock } from "@/components/quorum/report-mock";
+import { ProofBand } from "@/components/quorum/proof-band";
+import { Pricing } from "@/components/quorum/pricing";
+import { GetStarted } from "@/components/quorum/get-started";
+import { SiteFooter } from "@/components/quorum/site-footer";
+import { AuthScreen } from "@/components/quorum/auth-screen";
+import { Dashboard } from "@/components/quorum/dashboard";
 import type { AuthMode, AuthUser } from "@/lib/auth-types";
 
 /**
- * Bid Box — agentic tender review for public procurement.
+ * Quorum — agentic tender review for public procurement.
  * Three views on one route: the landing page, the full-screen
  * authentication screen (#/register, #/login) and Mission Control
  * (#/dashboard) — all back-button friendly via the URL hash.
- * The non-negotiable rule stands everywhere: Bid Box prepares the file,
+ * The non-negotiable rule stands everywhere: Quorum prepares the file,
  * the committee awards the tender.
  */
 
 /* Local identity mirror — keeps a demo/local session alive across reloads
    when no httpOnly cloud session exists. */
-const IDENTITY_KEY = "bidbox.identity";
+const IDENTITY_KEY = "quorum.identity";
 
 function readLocalIdentity(): AuthUser | null {
   try {
@@ -205,7 +205,7 @@ export default function Home() {
                 <RuleBand />
                 <UseCases />
                 <Platform />
-                <InsideBox />
+                <InsideRun />
                 <ReportMock />
                 <ProofBand />
                 <Pricing />
