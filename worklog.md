@@ -261,3 +261,22 @@ Work Log:
 Stage Summary:
 - The auth screen now has a real, world-class federated path: Google Sign-In via the user's "public-tender" Firebase project (popup verified live end-to-end), with a never-blocking demo fallback so the workspace always opens.
 - "AGENTIC PROCUREMENT" is gone from the auth screen (header + footer) while the landing keeps its brand lockup; the tagline is now a one-prop switch on QuorumLogo if global removal is ever wanted.
+
+---
+Task ID: 12
+Agent: Z.ai Code (main)
+Task: Submission readiness — audit the repo against the final checklist (public repo, demo link, MCP evidence, human-in-the-loop, accurate representation, commit window) and close every gap.
+
+Work Log:
+- Git audit: working tree had auto-committed everything (Task 11 included); branch was 13+ commits ahead of origin/main — the ENTIRE post-landing build (MCP server, dashboard, auth, rebrand) was missing from GitHub. Push retry failed: no credentials in the sandbox (no helper, no ~/.git-credentials, no gh, no token env) — same blocker as Task 6.
+- Repo hygiene: untracked + ignored tool-session artifacts (tool-results/, upload/) that had been committed; committed 65611a2.
+- Evaluator experience: wrote README.md (checklist→code map: own MCP server & 5 tools, third-party fs-MCP with rationale, LangGraph.js graphs halting at the gate by construction, open-weights GLM drafting, tool-log.jsonl append-only audit, named-human gate; quickstart, architecture diagram, API surface incl. a curl-able tools/list, 90-second evaluator walkthrough); gave mini-services/quorum-mcp its own package.json (bun run dev/start) and added root "mcp" script (e08314b).
+- Push fallback: created a verified full-history git bundle at /home/z/quorum-submission.bundle (2.6MB) so the 16 unpushed commits can be pushed from any credentialed environment.
+- Live verification through the gateway (:81 — the evaluator path): demo sign-in → Mission Control → AGENT STACK console shows QUORUM-MCP ONLINE, SERVER-FILESYSTEM MCP · CONNECTED, LANGGRAPH.JS · 2 GRAPHS, 16 TOOL CALLS LOGGED, all six architecture layers, five tools with kinds; fired RUN FULL REVIEW (tool calls 16→29, gate raised live); HUMAN GATES view → Award on the MRI gate → toast + ledger row + queue decrement. Human-in-the-loop verified end-to-end today.
+- BUG FOUND + FIXED: the append-only audit file never existed on disk — appendLog used Bun.file(path).name (returns the BASENAME) inside Bun.writeSync with {append:true}, throwing silently on every call; the audit spine existed only in memory. Replaced with node:fs appendFileSync (creates the file) in store.ts; restarted sidecar; tool-log.jsonl now persists — seeded with a logged READ (tender_documents_list) and an IRREVERSIBLE file_gate_submission → PENDING_GATE, plus a pending gate (gate_5e0yph) left in the queue for evaluators to approve (a18c28a).
+- RESILIENCE: sandbox reaps shell-spawned background processes between tool sessions (setsid+nohup died twice), but the platform-started Next server survives. Made Next own the sidecar: src/instrumentation.ts spawns quorum-mcp detached on server boot (port-guarded), src/lib/mcp-boot.ts shared ensure logic, GET /api/mcp-ensure self-heal route, and stack-console's poll fires the ensure call — the live stack can no longer be OFFLINE for an evaluator. Verified: killed sidecar → /api/mcp-ensure → "spawned" → survived across sessions → MCP calls + audit writes work.
+- Final state: lint clean, 0 console/page errors through the gateway, stack console ONLINE with pending gate + audit entries visible; git clean; bundle refreshed.
+
+Stage Summary:
+- Every checklist line now has live, inspectable proof: public repo (pending the user's one-command push), working demo (gateway path verified), real MCP integration (own server + official fs-MCP + LangGraph + open-weights, all logged), human-in-the-loop (gate → named human → receipt, re-verified today), accurate representation (README maps claims to code; artifacts removed).
+- Blocking item for the user (not code): `git push origin main` from a credentialed terminal — or use /home/z/quorum-submission.bundle. 16 commits are local-only; the commit window makes pushing urgent.
