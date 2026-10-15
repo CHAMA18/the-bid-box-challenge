@@ -6,18 +6,18 @@ import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
 import { cn } from "@/lib/utils";
 
 const CHECKLIST = [
-  { id: "repo", label: "Public repo — OSI licence, one-command README" },
-  { id: "video", label: "Demo video < 3 min — unedited agent run on screen" },
-  { id: "desc", label: "~300-word description — theme, institution, workflow" },
-  { id: "arch", label: "ARCHITECTURE.md — one page, built vs borrowed" },
-  { id: "evals", label: "EVALS.md — 8+ test tasks, one honest failure" },
+  { id: "portal", label: "Connect a portal — OCDS in, no scraping" },
+  { id: "checklist", label: "Map your checklist — the documents your committee requires" },
+  { id: "pilot", label: "Run a pilot tender — unedited, on live notices" },
+  { id: "review", label: "Review findings — every claim carries its citation" },
+  { id: "gate", label: "Sign the gate — the committee awards" },
 ];
 
 /**
- * Closing band — the scope line, plus an interactive readiness checklist
- * mirroring the five submission artefacts.
+ * Get started — the product path from portal to first sourced report,
+ * with an interactive first-run readiness checklist.
  */
-export function Closing() {
+export function GetStarted() {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const count = CHECKLIST.filter((c) => checked[c.id]).length;
   const ready = count === CHECKLIST.length;
@@ -27,49 +27,49 @@ export function Closing() {
   }
 
   return (
-    <section id="submit" className="scroll-mt-20 bg-brand-600">
+    <section id="get-started" className="scroll-mt-20 bg-brand-600">
       <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="grid items-center gap-12 lg:grid-cols-12 lg:gap-16">
           {/* Statement */}
           <div className="lg:col-span-7">
             <Reveal>
               <Eyebrow tone="light" className="text-white/80">
-                Before you write a line of code
+                Getting started
               </Eyebrow>
             </Reveal>
             <Reveal delay={0.08}>
               <h2 className="mt-5 font-display text-[36px] font-black leading-[1.04] tracking-[-0.025em] text-white sm:text-[52px]">
-                Three tools that work beat nine that half-work.
+                Start with one tender. Scale when the file convinces you.
               </h2>
             </Reveal>
             <Reveal delay={0.16}>
               <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-white/85">
-                In five days, scope is the skill we are watching for.
+                Your first run takes about twenty minutes — on a real portal, with real notices.
               </p>
             </Reveal>
             <Reveal delay={0.22}>
               <div className="mt-9 flex flex-wrap items-center gap-3.5">
                 <a
-                  href="#requirements"
+                  href="#inside"
                   className="group inline-flex h-[52px] items-center gap-2 rounded-full bg-ink-950 px-7 text-[15px] font-semibold text-white transition-all hover:bg-ink-900 hover:shadow-[0_14px_36px_rgba(11,12,15,0.35)]"
                 >
-                  Re-check the requirements
+                  See what&apos;s inside
                   <ArrowRight
                     className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1"
                     aria-hidden="true"
                   />
                 </a>
                 <a
-                  href="#jargon"
+                  href="#platform"
                   className="inline-flex h-[52px] items-center rounded-full border border-white/35 px-7 text-[15px] font-semibold text-white transition-all hover:border-white hover:bg-white/10"
                 >
-                  Back to the jargon
+                  Under the hood
                 </a>
               </div>
             </Reveal>
           </div>
 
-          {/* Readiness checklist */}
+          {/* First-run readiness checklist */}
           <Reveal delay={0.14} className="lg:col-span-5">
             <div className="rounded-3xl bg-white p-6 shadow-[0_32px_80px_rgba(11,12,15,0.35)] sm:p-8">
               <div className="flex items-center justify-between gap-4">
@@ -79,10 +79,10 @@ export function Closing() {
                   </span>
                   <div>
                     <p className="font-code text-[9.5px] font-semibold tracking-[0.24em] text-ink-500">
-                      SUBMISSION READINESS
+                      FIRST-RUN READINESS
                     </p>
                     <p className="font-display text-[18px] font-extrabold tracking-tight text-ink-950">
-                      {ready ? "Ready to submit" : `${count} of ${CHECKLIST.length} ready`}
+                      {ready ? "Ready for your first run" : `${count} of ${CHECKLIST.length} ready`}
                     </p>
                   </div>
                 </div>
@@ -103,7 +103,7 @@ export function Closing() {
                 aria-valuenow={count}
                 aria-valuemin={0}
                 aria-valuemax={CHECKLIST.length}
-                aria-label="Submission readiness"
+                aria-label="First-run readiness"
               >
                 <div
                   className="h-full rounded-full bg-brand-600 transition-all duration-500 ease-out"
@@ -163,8 +163,8 @@ export function Closing() {
                 )}
               >
                 {ready
-                  ? "FIVE FOR FIVE — SHIP IT TO THE BID BOX"
-                  : "TICK ALL FIVE — THE BID BOX ONLY OPENS ON A COMPLETE FILE"}
+                  ? "FIVE FOR FIVE — READY FOR YOUR FIRST RUN"
+                  : "TICK ALL FIVE — YOUR FIRST RUN TAKES ABOUT TWENTY MINUTES"}
               </p>
             </div>
           </Reveal>

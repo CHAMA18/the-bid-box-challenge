@@ -15,7 +15,7 @@ interface Line {
 }
 
 /**
- * One faithful pass of the kind of run the challenge asks for:
+ * One faithful pass of a Bid Box run:
  * OCDS in, logged MCP tool calls, every finding carrying a citation,
  * and a hard stop at the human gate.
  */
@@ -161,7 +161,7 @@ export function AgentRun() {
             <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />
           </span>
           <span className="font-code text-[10.5px] font-semibold tracking-[0.16em] text-ink-400">
-            bidbox-agent — evaluation run
+            bidbox-agent — sample run
           </span>
         </div>
         <span className="hidden font-code text-[9px] tracking-[0.22em] text-ink-600 sm:block">MCP · LOGGED · OCDS</span>

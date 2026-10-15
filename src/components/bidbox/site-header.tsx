@@ -9,9 +9,9 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { label: "Overview", href: "#overview" },
-  { label: "Themes", href: "#themes" },
-  { label: "Jargon", href: "#jargon" },
-  { label: "Requirements", href: "#requirements" },
+  { label: "Use cases", href: "#use-cases" },
+  { label: "Platform", href: "#platform" },
+  { label: "Inside the box", href: "#inside" },
 ];
 
 export function SiteHeader() {
@@ -41,7 +41,7 @@ export function SiteHeader() {
       )}
     >
       <div className="mx-auto flex h-[72px] w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Link href="/" aria-label="The Bid Box Challenge home" onClick={() => setOpen(false)}>
+        <Link href="/" aria-label="Bid Box home" onClick={() => setOpen(false)}>
           <BidBoxLogo />
         </Link>
 
@@ -59,16 +59,16 @@ export function SiteHeader() {
 
         <div className="hidden items-center gap-2.5 lg:flex">
           <a
-            href="#requirements"
+            href="#inside"
             className="inline-flex h-10 items-center gap-2 rounded-full border border-ink-200 bg-white px-4 text-[13.5px] font-semibold text-ink-800 transition-all hover:border-ink-300 hover:shadow-sm"
           >
-            The brief
+            Inside the box
           </a>
           <a
-            href="#submit"
+            href="#get-started"
             className="group inline-flex h-10 items-center gap-1.5 rounded-full bg-brand-600 px-5 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700 hover:shadow-[0_10px_26px_rgba(217,38,22,0.36)]"
           >
-            Submit your build
+            Get started
             <ArrowUpRight
               className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
               aria-hidden="true"
@@ -109,11 +109,11 @@ export function SiteHeader() {
                 </a>
               ))}
               <a
-                href="#submit"
+                href="#get-started"
                 onClick={() => setOpen(false)}
                 className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white"
               >
-                Submit your build
+                Get started
                 <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
               </a>
             </nav>

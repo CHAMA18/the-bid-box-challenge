@@ -1,7 +1,7 @@
-import { Braces, Crosshair, FileSearch, Scale, Ticket, Timer } from "lucide-react";
+import { Braces, Crosshair, FileSearch, Globe, Scale, Timer } from "lucide-react";
 
 const ITEMS = [
-  { icon: Ticket, text: "PRIZE · A TICKET TO THE MCP CONFERENCE, NAIROBI" },
+  { icon: Globe, text: "BUILT FOR PUBLIC PROCUREMENT ACROSS AFRICA" },
   { icon: Scale, text: "AGENTS PREPARE THE FILE — COMMITTEES AWARD THE TENDER" },
   { icon: FileSearch, text: "EVERY FINDING CITED, OR IT DOESN'T COUNT" },
   { icon: Timer, text: "26 DAYS OF COMMITTEE WORK · ~20 MINUTES OF AGENT WORK" },
@@ -9,11 +9,11 @@ const ITEMS = [
   { icon: Crosshair, text: "THREE TOOLS THAT WORK BEAT NINE THAT HALF-WORK" },
 ];
 
-/** Top announcement ticker — challenge facts marquee. */
+/** Top announcement ticker — product facts marquee. */
 export function TopTicker() {
   const row = [...ITEMS, ...ITEMS];
   return (
-    <div className="relative overflow-hidden bg-ink-950 py-2" aria-label="Challenge announcements">
+    <div className="relative overflow-hidden bg-ink-950 py-2" aria-label="Bid Box announcements">
       <div className="flex w-max animate-marquee items-center gap-10 pr-10">
         {row.map((item, i) => (
           <span

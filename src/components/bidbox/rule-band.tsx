@@ -35,7 +35,7 @@ export function RuleBand() {
           <div className="lg:col-span-8">
             <Reveal delay={0.08}>
               <h2 className="font-display text-[34px] font-black leading-[1.06] tracking-[-0.025em] text-white sm:text-[48px]">
-                Your agent prepares the file.{" "}
+                Bid Box prepares the file.{" "}
                 <span className="text-brand-400">It never awards the tender.</span>
               </h2>
             </Reveal>
