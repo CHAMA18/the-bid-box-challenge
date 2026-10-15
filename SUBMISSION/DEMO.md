@@ -36,24 +36,28 @@ and the audit line it maps to.
 
 ## 1:20–2:20 — The gate refuses (the failure bridge)
 
-**Do:** open the HUMAN GATE queue → click APPROVE → submit with the **name empty**.
+**Do (terminal, side by side):** post the raw gate contract:
 
-**Show:** **`422` — approval refused without a name.**
+```bash
+curl -s -X POST localhost:3031/api/gates/<GATE_ID>/decision \
+  -H 'content-type: application/json' -d '{"decision":"APPROVE"}'
+# → HTTP 422  "A named human is required — provide the approving officer's full name."
 
-**Do:** type a name that is not on the roster → submit.
-
-**Show:** **`403` — not a PRESENT member of the committee roster.**
+curl -s -X POST localhost:3031/api/gates/<GATE_ID>/decision \
+  -H 'content-type: application/json' -d '{"decision":"APPROVE","approver":"Mallory Intruder"}'
+# → HTTP 403  not a PRESENT member of the committee roster and not the signed-in officer
+```
 
 **Say:** "This is the whole thesis. The agent prepared everything — and the only path
 to filing runs through a name the roster knows. Not a prompt, not a policy: the edge
-from the gate to filing does not exist in the graph. This refusal is HTTP status
-codes, not theatre." (If asked for the raw contract: `POST /api/gates/:id/decision`
-returns 422 / 403 / 503-fail-closed.)
+from the gate to filing does not exist in the graph. These refusals are HTTP status
+codes, not theatre." (503 fail-closed when the roster can't be read.)
 
-**Do:** sign as the named PRESENT approver → approve.
+**Do (browser):** in the Approvals board, click **Award** on the run you just watched.
+The gate signs with **your session identity** — the named human on the record.
 
 **Show:** sha-256 seal → `transmit_submission` → receipt written → run flips to
-**FILED**, receipt ID on the ledger.
+**FILED**, receipt ID (`SUB-…`) on the ledger.
 
 ## 2:20–3:00 — The record
 
