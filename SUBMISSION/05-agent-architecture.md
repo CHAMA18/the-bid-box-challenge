@@ -27,7 +27,7 @@ Everything it can and cannot do is fixed by a tool registry, so reviewers can ch
 
 ## Which model, and what is it used for?
 
-- **Open-weights Llama, served in-region** (`LLM_BASE_URL` / `LLM_MODEL`, OpenAI-compatible endpoint) — public-health procurement data never leaves the country.
+- **OpenAI-compatible LLM endpoint** (`LLM_BASE_URL` / `LLM_MODEL`). Intended: open-weights Llama served in-region, so public-health procurement data never leaves the country. The current `.env.local` endpoint is a hosted, out-of-region model.
 - The model does **exactly one job**: drafting committee-ready redlines for flagged clauses (`draft_redline` → `llmDraft`: system+user prompt → strict-JSON clause `{proposed, rationale}` → draft record + audit entry).
 - If inference is unreachable, the tool **degrades to a deterministic template** so a run never stalls silently.
 - Everything *safety-critical* — requirement pinning, findings, verification — is **deterministic code, not model guesses**. A hallucinated finding cannot reach the committee, because findings never come from the model in the first place.
@@ -88,7 +88,7 @@ The same server also exposes an officer-facing **source-request queue** (REST, l
 
 Three storage layers, each with a clear role:
 
-1. **The web app's database (SQLite via Prisma):** `User`, `Session`, `CommitteeMember` (the roster the gate checks against), `SystemSetting`, `ContactMessage`.
+1. **The web app's store (one JSON file, `db/quorum-store.json`):** `User`, `Session`, `CommitteeMember` (the roster the gate checks against), `SystemSetting`, `ContactMessage`.
 2. **The agent's file-backed state (in `mini-services/quorum-mcp/data/`):** `state.json` (runs/gates/receipts), `tool-log.jsonl` (the audit line set), submission recipes (`data/submissions/*.json`), and the tender documents on disk the filesystem MCP reads.
 3. **Firebase:** identity mirror and document storage — officer uploads mirror to Firebase Storage and land in the tender directory the agent reads.
 
@@ -100,7 +100,7 @@ Three storage layers, each with a clear role:
 - The browser reaches both through a **same-origin gateway** (`/api/*?XTransformPort=3031`) — no CORS, and the agent is never directly exposed to the internet.
 
 **Outbound:**
-- The **Llama inference endpoint** (in-region) for redline drafting.
+- The **LLM endpoint** for redline drafting (intended: in-region open-weights; currently a hosted model).
 - The **committee roster read** from the web app — fail-closed on failure.
 - The **e-GP procurement portal** for award transmission (simulated in the demo, with real sha-256 receipts).
 - **Firebase** (authentication and object storage).
@@ -117,8 +117,8 @@ Three storage layers, each with a clear role:
 | Runtime | **Bun** — one process model for both the web app and the MCP sidecar | Fast test loop, one install, same TS everywhere |
 | Orchestration | **LangGraph.js** (`@langchain/langgraph` / `@langchain/core`) | The *only* framework we found where "the graph simply doesn't contain that edge" is a first-class design choice |
 | Agent protocol | **MCP**: our own JSON-RPC 2.0/HTTP server + the official `@modelcontextprotocol/server-filesystem` | Our design principles plus a critical third-party capability we didn't want to hand-roll |
-| LLM | Open-weights **Llama**, in-region OpenAI-compatible endpoint with template fallback | Data sovereignty: procurement records stay inside the jurisdiction even at model time |
-| Databases | SQLite via Prisma 6 (users/roster/settings) + file-backed state & append-only audit JSONL on the agent side | Structured relational data where it's relational; append-only text where it's auditable evidence |
+| LLM | OpenAI-compatible endpoint with template fallback. Intended: open-weights Llama, in-region | Data sovereignty holds only if the endpoint is in-region; the current one is not |
+| Databases | One dependency-free JSON file for the web app (users/roster/settings) + file-backed state & append-only audit JSONL on the agent side | Small, inspectable store with no native dependencies; append-only text where it's auditable evidence |
 | Identity & storage | Firebase Auth (email/passphrase + Google) + Storage mirror | Real authentication without building a password system; documents mirrored both sides |
 | Infra | nginx (reverse proxy), systemd (process supervision), one `t4g.small` EC2 in `af-south-1`, Route 53 zone | Small, boring, cheap to run — everything reproducible from the repo |
 | Tests | Bun test runner (`engine.test.ts`, 26 tests: green) | The agent safety rules (roster fail-closed, citations required) are enforced by tests, not only by docs |
@@ -128,4 +128,4 @@ Three storage layers, each with a clear role:
 - **The halt is structural** — no edge to filing exists in the review graph.
 - **The gate is identity-checked** — a *named* human, against a roster, fail-closed.
 - **Every action is recorded** — one append-only line per tool call.
-- **The data stays in-country** — open weights, in-region inference.
+- **The data stays in-country** — by design: open weights, in-region inference (not yet true of the current endpoint).

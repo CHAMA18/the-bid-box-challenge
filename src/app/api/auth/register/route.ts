@@ -1,21 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { db } from "@/lib/db";
 import {
-  clientKey,
-  createSession,
-  hashPassword,
-  publicUser,
-  rateLimit,
-  sessionCookieOptions,
-  SESSION_COOKIE,
-} from "@/lib/auth";
+  createUser,
+  findInviteByCode,
+  findUserByEmail,
+  updateInvite,
+} from "@/lib/db";
+import { clientKey, hashPassword, publicUser, rateLimit } from "@/lib/auth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
  * POST /api/auth/register — create an account and open a session.
  * Body: { name, email, password, organization? }
- * 201 → { user } + httpOnly session cookie
+ * 201 → { user, verification: "required" } (no session until the email is verified)
  * 400 → { error, errors? }  409 → email taken  429 → rate limited
  */
 export async function POST(req: NextRequest) {
@@ -48,7 +45,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Check the highlighted fields.", errors }, { status: 400 });
   }
 
-  const existing = await db.user.findUnique({ where: { email } });
+  const existing = findUserByEmail(email);
   if (existing) {
     return NextResponse.json(
       {
@@ -60,26 +57,27 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = await hashPassword(password);
-  const user = await db.user.create({
-    data: { name, email, password: passwordHash, organization: organization || null },
-  });
+  const user = createUser({ name, email, password: passwordHash, organization: organization || null });
 
   /* If they brought a workspace invite code: claim it (PENDING + unexpired only). */
   let claimedInvite: { code: string; role: string } | null = null;
   if (inviteCode) {
-    const invite = await db.workspaceInvite.findUnique({ where: { code: inviteCode } }).catch(() => null);
+    const invite = findInviteByCode(inviteCode);
     if (invite && invite.status === "PENDING" && Date.now() - invite.createdAt.getTime() <= 14 * 86_400_000) {
-      await db.workspaceInvite.update({
-        where: { id: invite.id },
-        data: { status: "CLAIMED", claimedBy: user.id, claimedByEmail: user.email, claimedAt: new Date() },
+      updateInvite(invite.id, {
+        status: "CLAIMED",
+        claimedBy: user.id,
+        claimedByEmail: user.email,
+        claimedAt: new Date(),
       });
       claimedInvite = { code: invite.code, role: invite.role };
     }
     /* An unknown/expired/claimed code is not an error — registration still works as a standalone account. */
   }
 
-  const { token, expiresAt } = await createSession(user.id, true);
-  const res = NextResponse.json({ user: publicUser(user), invite: claimedInvite }, { status: 201 });
-  res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
-  return res;
+  /* No session yet: the account opens only after the Firebase verification link is confirmed. */
+  return NextResponse.json(
+    { user: publicUser(user), invite: claimedInvite, verification: "required" },
+    { status: 201 }
+  );
 }

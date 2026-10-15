@@ -34,7 +34,7 @@ flowchart TB
     end
 
     %% ═══════════ EXTERNAL APIs ═══════════
-    LLM["☁️ LLM endpoint — open-weights Llama<br/>served IN-REGION via LLM_BASE_URL/LLM_MODEL<br/>(OpenAI-compatible · procurement data never leaves jurisdiction)"]
+    LLM["☁️ LLM endpoint — OpenAI-compatible model<br/>via LLM_BASE_URL/LLM_MODEL<br/>(intended: open-weights, served in-region)"]
     EGP["🏛️ e-GP procurement portal<br/>(award transmission — simulated in demo)"]
     BOR["🔎 Beneficial-ownership registry<br/>(bidder matching — source requested, pending)"]
     FB["<img src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjhlbSIgaGVpZ2h0PSIxZW0iIHZpZXdCb3g9IjAgMCAyNTYgMzIyIj48cGF0aCBmaWxsPSIjZmY5MTAwIiBkPSJNODAuMTggMzEyLjI5NWMxMy40NTUgNS40MTQgMjguMDUgOC42MjggNDMuMzc2IDkuMTYzYTEyNy41IDEyNy41IDAgMCAwIDU4LjA5OC0xMS43MWMtMjEuMTQ1LTguMzA3LTQwLjI5NC0yMC40NTUtNTYuNjM4LTM1LjU2Yy0xMC41OTQgMTYuOTYzLTI2LjI2MyAzMC4zNi00NC44MzUgMzguMTA3Ii8+PHBhdGggZmlsbD0iI2ZmYzQwMCIgZD0iTTEyNS4wMTMgMjc0LjE5M2MtMzcuMzA3LTM0LjUwNC01OS45MzktODQuNDQ0LTU4LjAyNi0xMzkuMjE4Yy4wNjItMS43OC4xNTYtMy41NTcuMjY2LTUuMzM0YTk2LjYzIDk2LjYzIDAgMCAwLTUwLjQ1Ni41MjhDNi44MzggMTQ3LjYxNC44MjggMTY3LjYzLjA3OSAxODkuMDY5Qy0xLjg1MyAyNDQuNDAzIDMxLjYzMiAyOTIuNzUgODAuMTc4IDMxMi4zYzE4LjU3Mi03Ljc0NyAzNC4yNC0yMS4xMyA0NC44MzUtMzguMTA3Ii8+PHBhdGggZmlsbD0iI2ZmOTEwMCIgZD0iTTEyNS4wMTUgMjc0LjE5MWM4LjY3NC0xMy44OCAxMy45MzMtMzAuMTU0IDE0LjU0NS00Ny42ODdjMS42MS00Ni4xMi0yOS4zOTQtODUuNzk0LTcyLjMwNi05Ni44NjVjLS4xMSAxLjc3Ny0uMjAzIDMuNTU1LS4yNjUgNS4zMzRjLTEuOTEzIDU0Ljc3NSAyMC43MTkgMTA0LjcxNCA1OC4wMjYgMTM5LjIxOCIvPjxwYXRoIGZpbGw9IiNkZDJjMDAiIGQ9Ik0xMzQuNzYxIDBjLTI0LjQ0IDE5LjU4LTQzLjczOCA0NS4zOTYtNTUuNDE0IDc1LjEzNmExODAuNSAxODAuNSAwIDAgMC0xMi4xMTMgNTQuNTE1YzQyLjkxMiAxMS4wNyA3My45MTcgNTAuNzQ1IDcyLjMwNiA5Ni44NjVjLS42MTIgMTcuNTMyLTUuODg3IDMzLjc5LTE0LjU0NSA0Ny42ODdhMTgwLjcgMTgwLjcgMCAwIDAgNTYuNjM3IDM1LjU2YzQyLjQ0MS0xOS42MTggNzIuNTUzLTYxLjgzMyA3NC4yOTctMTExLjc2NGMxLjEyOS0zMi4zNTEtMTEuMy02MS4xODQtMjguODY0LTg1LjUyMUMyMDguNTE3IDg2LjczOCAxMzQuNzYgMCAxMzQuNzYgMCIvPjwvc3ZnPg==' width='22' height='27' style='vertical-align:-4px'/> Firebase<br/>identity (Google Sign-In / email) + document storage"]
@@ -83,11 +83,11 @@ flowchart TB
 | Required component | In the diagram above | In the code |
 | --- | --- | --- |
 | **Agent** | `agentic runtime` (LangGraph.js `review_graph`, 6 nodes, halts at the gate) | `mini-services/quorum-mcp/engine.ts` → `runReview()` |
-| **LLMs / models** | open-weights Llama, in-region endpoint (`LLM_BASE_URL`/`LLM_MODEL`) | `llmDraft()` in `engine.ts` (redlines), template fallback if unreachable |
+| **LLMs / models** | any OpenAI-compatible endpoint (`LLM_BASE_URL`/`LLM_MODEL`); intended: open-weights, in-region | `llmDraft()` in `engine.ts` (redlines), template fallback if unreachable |
 | **MCP server (own)** | `quorum-mcp` :3031 — JSON-RPC 2.0 `initialize`/`tools/list`/`tools/call` | `POST /mcp` in `index.ts` |
 | **MCP client/server (third-party)** | official `@modelcontextprotocol/server-filesystem`, spawned over stdio; tender docs surface as **MCP resources** | `initFsMcp()` in `engine.ts` |
 | **MCP tools** | 5 registered tools: 2 READ, 3 state-changing (`flag_finding`, `draft_redline`, gated `file_gate_submission`) | `TOOLS` registry in `engine.ts` |
-| **External APIs** | e-GP portal (award transmit), Llama inference endpoint, beneficial-ownership registry (requested), Firebase (auth + storage) | `executeFiling()` receipt → `egp-portal`; `src/instrumentation.ts` etc. |
+| **External APIs** | e-GP portal (award transmit), LLM endpoint, beneficial-ownership registry (requested), Firebase (auth + storage) | `executeFiling()` receipt → `egp-portal`; `src/instrumentation.ts` etc. |
 | **Data sources** | tender pack dir, `tool-log.jsonl` audit, `state.json` (runs/gates), submission receipts | `mini-services/quorum-mcp/data/` |
 | **Human-in-the-loop** | the gate: irreversible filing parked (`gate_pending`) until a *named* approver signs; refused 422 without a name, 403 if not on the committee roster | `decideGate()` in `index.ts` → `POST /api/gates/:id/decision` |
 | **Overall data flow** | numbered steps 1→11: upload → run launch → tool calls → graph review → gate → named sign-off → seal & file → receipt → audit trail | the node edges above |
@@ -115,5 +115,5 @@ HUMAN GATE ◀──7─ gate_pending (no graph edge ◀────┘    @mode
    ▼
 filing_graph (separate graph) ──▶ seal sha-256 ──▶ e-GP portal ──▶ receipts data/submissions/*.json
                                           ▲
-drafting ──▶ Llama (open weights, IN-REGION)    audit: every call → tool-log.jsonl (append-only)
+drafting ──▶ configured LLM endpoint    audit: every call → tool-log.jsonl (append-only)
 ```

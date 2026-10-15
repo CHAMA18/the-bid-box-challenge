@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { db } from "@/lib/db";
+import { findUserByEmail } from "@/lib/db";
 import {
   clientKey,
   createSession,
@@ -40,11 +40,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Check the highlighted fields.", errors }, { status: 400 });
   }
 
-  const user = await db.user.findUnique({ where: { email } });
+  const user = findUserByEmail(email);
   if (!user || !(await verifyPassword(password, user.password))) {
     return NextResponse.json(
       { error: "Incorrect email or password. Check your credentials and try again." },
       { status: 401 }
+    );
+  }
+
+  if (!user.emailVerified) {
+    return NextResponse.json(
+      {
+        code: "EMAIL_UNVERIFIED",
+        error: "Verify your email to finish signing in. We'll send a fresh verification link.",
+      },
+      { status: 403 }
     );
   }
 

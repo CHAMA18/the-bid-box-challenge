@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { createContactMessage } from "@/lib/db";
 
 const ContactSchema = z.object({
   name: z.string().min(2).max(120),
@@ -27,13 +27,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const saved = await db.contactMessage.create({
-      data: {
-        name: parsed.data.name.trim(),
-        email: parsed.data.email.trim().toLowerCase(),
-        company: parsed.data.company?.trim() || null,
-        message: parsed.data.message.trim(),
-      },
+    const saved = createContactMessage({
+      name: parsed.data.name.trim(),
+      email: parsed.data.email.trim().toLowerCase(),
+      company: parsed.data.company?.trim() || null,
+      message: parsed.data.message.trim(),
     });
     return NextResponse.json({ ok: true, id: saved.id }, { status: 201 });
   } catch {

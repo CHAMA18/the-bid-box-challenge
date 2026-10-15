@@ -1,6 +1,10 @@
 import { randomBytes, scrypt as _scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { db } from "@/lib/db";
+import {
+  createSession as storeCreateSession,
+  deleteSessionByToken,
+  findSessionWithUser,
+} from "@/lib/db";
 import type { AuthUser } from "@/lib/auth-types";
 
 const scrypt = promisify(_scrypt) as (
@@ -33,7 +37,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
 export async function createSession(userId: string, remember: boolean) {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + (remember ? 30 : 1) * DAY_MS);
-  await db.session.create({ data: { token, userId, expiresAt } });
+  storeCreateSession(userId, expiresAt, token);
   return { token, expiresAt };
 }
 
@@ -59,13 +63,13 @@ export function clearedCookieOptions() {
 
 export async function getUserFromToken(token: string | undefined) {
   if (!token) return null;
-  const session = await db.session.findUnique({ where: { token }, include: { user: true } });
-  if (!session) return null;
-  if (session.expiresAt.getTime() < Date.now()) {
-    await db.session.delete({ where: { id: session.id } }).catch(() => undefined);
+  const found = findSessionWithUser(token);
+  if (!found) return null;
+  if (found.session.expiresAt.getTime() < Date.now()) {
+    deleteSessionByToken(token);
     return null;
   }
-  return session.user;
+  return found.user;
 }
 
 export function publicUser(u: { id: string; name: string; email: string; organization: string | null }): AuthUser {

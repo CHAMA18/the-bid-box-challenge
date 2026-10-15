@@ -32,7 +32,7 @@ export function buildReport(runId: string): { filename: string; markdown: string
 
   lines.push(`# Sourced report — tender ${run.tenderId}`);
   lines.push("");
-  lines.push(`> Prepared by the quorum-agent (MCP tool registry, open-weights graphs).`);
+  lines.push(`> Prepared by the quorum-agent (MCP tool registry, LangGraph.js graphs).`);
   lines.push(`> The agent prepares the file; the committee awards the tender.`);
   lines.push("");
   lines.push("| Field | Value |");

@@ -36,7 +36,7 @@ The agent's abilities live in a tool registry served over real **MCP JSON-RPC 2.
 | An agent with write-hands and an irreversible ambition it can only reach through a human | A chatbot — there is no chat loop; the agent initiates the work itself |
 | Deterministic compliance logic + generative drafting — reliability where it's law, flexibility where it's prose | A bare model wrapper — the LLM does exactly one job (redline prose) and never decides compliance |
 | An interop surface (MCP) other agents/systems can drive | A cron job — every action is conditioned on what the agent actually read |
-| Honest about degradation — if the in-region Llama endpoint is down, `draft_redline` falls back to a template, and the run completes rather than stalling | An autonomous filer — no prompt, no injection, and no graph path can file without a named human's signature |
+| Honest about degradation — if the LLM endpoint is down, `draft_redline` falls back to a template, and the run completes rather than stalling | An autonomous filer — no prompt, no injection, and no graph path can file without a named human's signature |
 
 ## The honest scope note
 

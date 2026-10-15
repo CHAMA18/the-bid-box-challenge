@@ -31,6 +31,9 @@ const firebaseConfig = {
   measurementId: "G-4WV68QCHHL",
 };
 
+/** Public web API key — also used server-side for ID token verification. */
+export const firebaseWebApiKey = firebaseConfig.apiKey;
+
 /* ── internals ─────────────────────────────────────────────────────────────── */
 
 type FirebaseAppModule = typeof import("firebase/app");
@@ -145,9 +148,71 @@ export async function syncFirebaseIdentity(input: FirebaseIdentityInput): Promis
   }
 }
 
+/* ── Email verification ────────────────────────────────────────────────────── */
+
+export interface EmailVerificationState {
+  verified: boolean;
+  sent: boolean;
+}
+
+/**
+ * Make sure the Firebase identity for this email exists and has a verification
+ * email on its way. Creates the user (or signs in to it when it already exists),
+ * then sends `sendEmailVerification`. Resolves null when Firebase is unavailable
+ * (e.g. Email/Password provider not enabled yet) so the UI can say so honestly.
+ */
+export async function startEmailVerification(input: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<EmailVerificationState | null> {
+  try {
+    const pair = await getAuthLazy();
+    if (!pair) return null;
+    const { mod, auth } = pair;
+    let user;
+    try {
+      const cred = await mod.createUserWithEmailAndPassword(auth, input.email, input.password);
+      user = cred.user;
+      if (input.name) await mod.updateProfile(user, { displayName: input.name });
+    } catch (err) {
+      if (!(typeof err === "object" && err && "code" in err && err.code === "auth/email-already-in-use")) {
+        throw err;
+      }
+      user = (await mod.signInWithEmailAndPassword(auth, input.email, input.password)).user;
+    }
+    if (user.emailVerified) return { verified: true, sent: false };
+    await mod.sendEmailVerification(user);
+    return { verified: false, sent: true };
+  } catch (err) {
+    debugLog("verify-email", err);
+    return null;
+  }
+}
+
+/**
+ * Reload the signed-in Firebase user. If their email is now verified, return a
+ * fresh ID token for the server to check; otherwise null.
+ */
+export async function getVerifiedIdToken(): Promise<string | null> {
+  try {
+    const pair = await getAuthLazy();
+    const user = pair?.auth.currentUser;
+    if (!user) return null;
+    await user.reload();
+    if (!user.emailVerified) return null;
+    return await user.getIdToken(true);
+  } catch (err) {
+    debugLog("verify-check", err);
+    return null;
+  }
+}
+
 /* ── Google sign-in ────────────────────────────────────────────────────────── */
 
 export interface GoogleIdentity {
+  /** Firebase ID token — the server verifies it before opening a session. */
+  idToken: string;
   uid: string;
   name: string;
   email: string;
@@ -169,10 +234,11 @@ export async function signInWithGooglePopup(): Promise<GoogleIdentity | null> {
     provider.setCustomParameters({ prompt: "select_account" });
 
     const popup = mod.signInWithPopup(auth, provider).then(
-      (cred) => {
+      async (cred) => {
         const user = cred.user;
         if (!user.email) return null;
-        return { uid: user.uid, name: user.displayName ?? "", email: user.email };
+        const idToken = await user.getIdToken();
+        return { idToken, uid: user.uid, name: user.displayName ?? "", email: user.email };
       },
       (err) => {
         debugLog("google-signin", err);

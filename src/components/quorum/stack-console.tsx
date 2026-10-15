@@ -347,7 +347,7 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
             <MonoLabel className="text-ink-300">RUN THE GRAPH — LIVE</MonoLabel>
             <p className="mt-2.5 text-[13px] leading-relaxed text-ink-200">
               Fire <span className="font-code text-[11.5px] text-white">review_graph</span> at the MRI tender. Reads via
-              the filesystem MCP, flags against three rules, drafts with open weights, then raises a gate.
+              the filesystem MCP, flags against three rules, drafts redlines with the configured LLM (or the template fallback), then raises a gate.
             </p>
             <button
               type="button"
