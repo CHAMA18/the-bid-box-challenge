@@ -22,44 +22,46 @@ const EMPTY: LiveTotals = { tenders: 0, findings: 0, drafts: 0, runs: 0 };
 function CountUp({ value }: { value: number }) {
   const reduce = useReducedMotion();
   const [display, setDisplay] = useState(0);
+  const [started, setStarted] = useState(false);
+  const [done, setDone] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
-  const started = useRef(false);
 
+  // Arm the animation when the counter first scrolls into view.
   useEffect(() => {
-    // Already animated once: follow later value changes (live data arrives async).
-    if (started.current) {
-      setDisplay(value);
-      return;
-    }
     const el = ref.current;
-    if (!el) return;
+    if (!el || started) return;
     const io = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting || started.current) return;
-        started.current = true;
+        if (!entry.isIntersecting || started) return;
         io.disconnect();
-        // Reduced motion: no animation — show the final value immediately.
-        if (reduce) {
-          setDisplay(value);
-          return;
-        }
-        const t0 = performance.now();
-        const DURATION = 1400;
-        const tick = (now: number) => {
-          const p = Math.min(1, (now - t0) / DURATION);
-          const eased = 1 - Math.pow(1 - p, 3);
-          setDisplay(value * eased);
-          if (p < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
+        setStarted(true);
       },
       { threshold: 0.4 }
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [value, reduce]);
+  }, [started]);
 
-  return <span ref={ref}>{Math.round(display).toLocaleString("en-US")}</span>;
+  // One eased count-up, cancelled cleanly; the final value is derived at render time
+  // (`done`), so later live-data changes show up without touching state in an effect.
+  useEffect(() => {
+    if (!started || reduce || done) return;
+    const t0 = performance.now();
+    const DURATION = 1400;
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / DURATION);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(value * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else setDone(true);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [started, reduce, value, done]);
+
+  const shown = !started ? 0 : done ? value : display;
+  return <span ref={ref}>{Math.round(shown).toLocaleString("en-US")}</span>;
 }
 
 /**
