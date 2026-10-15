@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff, Lock } from "lucide-re
 import { QuorumLogo } from "@/components/quorum/logo";
 import { Eyebrow } from "@/components/quorum/reveal";
 import type { AuthMode, AuthUser } from "@/lib/auth-types";
+import { syncFirebaseIdentity } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -456,13 +457,16 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
       if (password.length === 0) password = DEMO.password;
       setValues((prev) => ({ ...prev, email, password }));
 
-      const openLocal = () =>
+      const openLocal = () => {
+        /* Mirror the demo identity into Firebase Auth too (best-effort). */
+        void syncFirebaseIdentity({ name: deriveName(email), email, password, mode: "login" });
         grant({
           id: `local-${Date.now()}`,
           name: deriveName(email),
           email,
           organization: null,
         });
+      };
 
       try {
         const res = await fetch("/api/auth/login", {
@@ -474,6 +478,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
           | { user?: AuthUser; error?: string }
           | null;
         if (res.ok && data?.user) {
+          void syncFirebaseIdentity({ name: data.user.name, email, password, mode: "login" });
           grant(data.user);
           return;
         }
@@ -493,6 +498,12 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
           if (reg.ok) {
             const rd = (await reg.json().catch(() => null)) as { user?: AuthUser } | null;
             if (rd?.user) {
+              void syncFirebaseIdentity({
+                name: rd.user.name,
+                email,
+                password,
+                mode: "register",
+              });
               grant(rd.user);
               return;
             }
@@ -538,6 +549,12 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
         return;
       }
 
+      void syncFirebaseIdentity({
+        name: data.user.name,
+        email: values.email.trim(),
+        password: values.password,
+        mode: "register",
+      });
       grant(data.user);
     } catch {
       setFormError("Cannot reach the server. Check your connection and try again.");

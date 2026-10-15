@@ -9,6 +9,7 @@ import {
   ChevronDown,
   CircleAlert,
   CircleCheck,
+  CloudUpload,
   Copy,
   Database,
   Download,
@@ -17,6 +18,7 @@ import {
   Files,
   Gavel,
   Gauge,
+  HardDrive,
   ListChecks,
   Lock,
   LogOut,
@@ -36,6 +38,7 @@ import {
 import { QuorumLogo } from "@/components/quorum/logo";
 import { StackConsole } from "@/components/quorum/stack-console";
 import type { AuthUser } from "@/lib/auth-types";
+import { uploadTenderDocument } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 
 /**
@@ -423,7 +426,15 @@ const SAMPLE_TITLES = [
 
 const WIZARD_STEPS = ["DETAILS", "DOCUMENTS", "SCOPE"] as const;
 
-type StagedDoc = { id: string; name: string; size: string; status: "RECEIVED" | "PARSING" | "INDEXED" };
+type StagedDoc = {
+  id: string;
+  name: string;
+  size: string;
+  status: "RECEIVED" | "PARSING" | "INDEXED";
+  /* Cloud mirror state — present only for real uploaded files (the sample
+     pack is simulated, so it carries none). SYNCING → CLOUD | LOCAL. */
+  storage?: "SYNCING" | "CLOUD" | "LOCAL";
+};
 
 /* A realistic pack for the sample tender — the notice, the OCDS release,
    three sealed bids and their certificates (health theme throughout). */
@@ -487,6 +498,34 @@ function DocStatusChip({ status }: { status: StagedDoc["status"] }) {
   );
 }
 
+/* Cloud-mirror chip for real uploads — Firebase Storage when the project
+   allows it, the local vault when it doesn't. Never an error, always honest. */
+function StorageChip({ storage }: { storage: NonNullable<StagedDoc["storage"]> }) {
+  if (storage === "SYNCING")
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-brand-700">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+        </span>
+        SYNC
+      </span>
+    );
+  if (storage === "CLOUD")
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-ink-200 bg-white px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-600">
+        <CloudUpload className="h-2.5 w-2.5" aria-hidden="true" />
+        CLOUD
+      </span>
+    );
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-ink-200 bg-white px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-400">
+      <HardDrive className="h-2.5 w-2.5" aria-hidden="true" />
+      VAULT
+    </span>
+  );
+}
+
 function NewRunModal({
   open,
   onClose,
@@ -506,6 +545,7 @@ function NewRunModal({
   const refInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docsRef = useRef<StagedDoc[]>([]);
+  const filesRef = useRef<Map<string, File>>(new Map());
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   /* Every fresh open is a fresh tender: back to step one, no pack staged. */
@@ -514,6 +554,7 @@ function NewRunModal({
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
     docsRef.current = [];
+    filesRef.current.clear();
     const id = requestAnimationFrame(() => {
       setStep(0);
       setDocs([]);
@@ -555,29 +596,50 @@ function NewRunModal({
     });
   };
 
-  const addDocs = (items: { name: string; size: string }[]) => {
+  const addDocs = (items: { name: string; size: string; file?: File }[]) => {
     const seen = new Set(docsRef.current.map((d) => d.name));
     const fresh = items
       .filter((i) => !seen.has(i.name))
       .slice(0, 12)
-      .map((i, idx) => ({
-        id: `doc-${Date.now()}-${idx}-${i.name}`,
-        name: i.name,
-        size: i.size,
-        status: "RECEIVED" as const,
-      }));
-    if (fresh.length === 0) return;
+      .map((i, idx) => {
+        const id = `doc-${Date.now()}-${idx}-${i.name}`;
+        if (i.file) filesRef.current.set(id, i.file);
+        return {
+          id,
+          name: i.name,
+          size: i.size,
+          status: "RECEIVED" as const,
+        };
+      });
+    if (fresh.length === 0) return [];
     docsRef.current = [...docsRef.current, ...fresh];
     setDocs(docsRef.current);
     runPipeline(fresh);
+    return fresh;
   };
 
   const stageLocalFiles = (list: FileList | null) => {
     if (!list || list.length === 0) return;
-    addDocs(Array.from(list).map((f) => ({ name: f.name, size: formatBytes(f.size) })));
+    const fresh = addDocs(
+      Array.from(list).map((f) => ({ name: f.name, size: formatBytes(f.size), file: f }))
+    );
+    /* Every real file mirrors to Firebase Storage (project "public-tender")
+       in parallel with the ingestion pipeline. If the bucket is unreachable
+       the document simply stays in the local vault — never an error. */
+    fresh.forEach((d) => {
+      const file = filesRef.current.get(d.id);
+      if (!file) return;
+      setDocs((cur) => cur.map((x) => (x.id === d.id ? { ...x, storage: "SYNCING" } : x)));
+      void uploadTenderDocument(ref.trim() || "UNREFERENCED", file).then((result) => {
+        setDocs((cur) =>
+          cur.map((x) => (x.id === d.id ? { ...x, storage: result ? "CLOUD" : "LOCAL" } : x))
+        );
+      });
+    });
   };
 
   const indexed = docs.filter((d) => d.status === "INDEXED").length;
+  const cloudSynced = docs.filter((d) => d.storage === "CLOUD").length;
   const checksOn = SCOPE_CHECKS.filter((c) => checks[c.id]).length;
   const canLeaveDocs = docs.length > 0;
 
@@ -749,7 +811,9 @@ function NewRunModal({
                         <div className="flex items-baseline justify-between gap-3">
                           <p className="font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">TENDER PACK</p>
                           <p className="font-code text-[8.5px] tracking-[0.14em] text-ink-400" aria-live="polite">
-                            {docs.length === 0 ? "NO DOCUMENTS STAGED" : `INDEXED ${indexed} OF ${docs.length}`}
+                            {docs.length === 0
+                              ? "NO DOCUMENTS STAGED"
+                              : `INDEXED ${indexed} OF ${docs.length}${cloudSynced > 0 ? ` · ${cloudSynced} CLOUD` : ""}`}
                           </p>
                         </div>
                         <div
@@ -784,6 +848,9 @@ function NewRunModal({
                           <p className="mt-2.5 text-[14px] font-semibold text-ink-900">Drop the tender pack here</p>
                           <p className="mt-1 font-code text-[8px] tracking-[0.16em] text-ink-400">
                             NOTICE · BIDS · OCDS JSON · PRICE SCHEDULES · EMAILS — UP TO 12 FILES
+                          </p>
+                          <p className="mt-1.5 font-code text-[7.5px] tracking-[0.16em] text-ink-300">
+                            REAL FILES MIRROR TO FIREBASE STORAGE · PROJECT “PUBLIC-TENDER”
                           </p>
                           <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                             <button
@@ -828,6 +895,7 @@ function NewRunModal({
                                 <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-800">{d.name}</span>
                                 <span className="shrink-0 font-code text-[8px] tracking-[0.08em] text-ink-300">{d.size}</span>
                                 <DocStatusChip status={d.status} />
+                                {d.storage && <StorageChip storage={d.storage} />}
                               </li>
                             ))}
                           </ul>
@@ -885,7 +953,8 @@ function NewRunModal({
                         </div>
                       </div>
                       <p className="rounded-xl bg-paper px-4 py-3 text-center font-code text-[9px] font-bold tracking-[0.16em] text-ink-700">
-                        {docs.length} DOCUMENT{docs.length === 1 ? "" : "S"} · {checksOn} CHECK{checksOn === 1 ? "" : "S"} · EST. 11 MIN
+                        {docs.length} DOCUMENT{docs.length === 1 ? "" : "S"}
+                        {cloudSynced > 0 ? ` · ${cloudSynced} CLOUD` : ""} · {checksOn} CHECK{checksOn === 1 ? "" : "S"} · EST. 11 MIN
                       </p>
                     </>
                   )}
