@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T13:00:10.757Z",
+  "generatedAt": "2026-10-16T13:10:22.457Z",
   "labeller": "one human reviewer, one pass over the source documents, written before the engine was run on them. Not independently double-labelled.",
   "covered_means": "a rule in the engine is designed to raise this finding type. covered:false items measure what the rule set does not claim to catch. Coverage flags track the CURRENT rule set: when a rule lands (e.g. plan_review deep-value parsing of markdown bid values, 2026-10-16), the flags it covers flip to true — the labels themselves are never edited after their original single pass.",
   "summary": {
@@ -25,6 +25,13 @@
     },
     "identicalAcrossRuns": "6/6 tenders",
     "llmCallsPerRun": 0,
+    "mutation": {
+      "repeatsPerMutation": 5,
+      "executed": 23,
+      "skipped": 1,
+      "overallDetectionRate": 100,
+      "note": "Detection = the engine raises (or, for the removed-ceiling guard, drops) the expected finding. Skipped = the mutation's precondition did not hold for that tender; reported, never counted as a pass."
+    },
     "heldOut": {
       "tenders": [
         "KE-PHC-2026-311",
@@ -70,7 +77,33 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.94
+      "medianMs": 0.93,
+      "msRange": [
+        0.76,
+        5.35
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     },
     {
       "tender": "KE-MOH-2026-117",
@@ -105,7 +138,33 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.81
+      "medianMs": 1.02,
+      "msRange": [
+        0.78,
+        1.25
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     },
     {
       "tender": "KE-NCB-104293",
@@ -118,7 +177,33 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.49
+      "medianMs": 0.58,
+      "msRange": [
+        0.45,
+        0.71
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": null,
+          "skipped": true
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     },
     {
       "tender": "KE-PHC-2026-311",
@@ -140,7 +225,33 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.55
+      "medianMs": 0.66,
+      "msRange": [
+        0.54,
+        8.62
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     },
     {
       "tender": "KE-WRA-2026-058",
@@ -160,7 +271,33 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.57
+      "medianMs": 0.43,
+      "msRange": [
+        0.38,
+        0.45
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     },
     {
       "tender": "RW-UMUCYO-2027-006",
@@ -173,7 +310,33 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.48
+      "medianMs": 0.4,
+      "msRange": [
+        0.38,
+        0.42
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     }
   ],
   "data_quality_notes": [

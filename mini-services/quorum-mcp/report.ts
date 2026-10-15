@@ -1,4 +1,4 @@
-import { state, toolLog, type Finding, type Gate } from "./store";
+import { state, toolLog, type Finding, type Gate, type Run } from "./store";
 
 /**
  * GET /api/runs/:id/report — the sourced report as a downloadable Markdown file.
@@ -20,6 +20,21 @@ function gateWord(g: Gate | undefined): string {
   if (g.status === "REJECTED") return `RETURNED by ${g.approver ?? "—"}${g.note ? ` — "${g.note}"` : ""}`;
   if (g.status === "PENDING") return `AWAITING NAMED SIGN-OFF (gate ${g.id})`;
   return g.status;
+}
+
+/* Explicit, conservative price assumptions for the cost line. These are ASSUMPTIONS, not a
+   quote — replace them with the endpoint's real pricing. Every sourced report labels the
+   estimate as estimated, and records the token counts it was computed from. */
+const ASSUMED_USD_PER_MTOK = { input: 2, output: 8 };
+
+function costLine(run: Run): string {
+  const u = run.usage ?? { drafts: 0, llmDrafts: 0, promptTokens: 0, completionTokens: 0 };
+  const tokens = u.promptTokens + u.completionTokens;
+  const usd = (u.promptTokens / 1e6) * ASSUMED_USD_PER_MTOK.input + (u.completionTokens / 1e6) * ASSUMED_USD_PER_MTOK.output;
+  if (tokens === 0) {
+    return `Template mode — 0 model tokens, estimated model spend **$0.0000**. Redlines came from the deterministic fallback, so the recorded cost is drafting latency only.`;
+  }
+  return `Estimated model spend **$${usd.toFixed(4)}** for ${tokens.toLocaleString()} tokens (${u.promptTokens.toLocaleString()} in / ${u.completionTokens.toLocaleString()} out) across ${u.drafts} draft(s), ${u.llmDrafts} from the model. Assumes USD ${ASSUMED_USD_PER_MTOK.input.toFixed(2)}/1M input + USD ${ASSUMED_USD_PER_MTOK.output.toFixed(2)}/1M output — an explicit assumption, not a quote; replace with the endpoint's real pricing.`;
 }
 
 export function buildReport(runId: string): { filename: string; markdown: string } | null {
@@ -45,6 +60,22 @@ export function buildReport(runId: string): { filename: string; markdown: string
   lines.push(`| Human gate | ${gateWord(gate)} |`);
   lines.push("");
 
+  if (run.plan) {
+    lines.push(`## Review plan (${run.plan.source})`);
+    lines.push("");
+    lines.push(
+      `Decided before any rule ran — ${run.plan.source === "llm" ? `by the model (\`${run.plan.model ?? "llm"}\`)` : "by deterministic pack inspection (no model configured)"}. ${run.plan.note}`,
+    );
+    lines.push("");
+    lines.push("| Plan field | Value |");
+    lines.push("| --- | --- |");
+    lines.push(`| Value parsing | ${run.plan.parseMarkdownValues ? "deep (markdown bid values + OCDS records)" : "OCDS records only"} |`);
+    lines.push(`| Rule focus | ${run.plan.focusRules.join(" > ")} |`);
+    lines.push(`| Max redline drafts | ${run.plan.maxDrafts} |`);
+    lines.push(`| Pack | ${run.plan.pack.files} files · ${run.plan.pack.bids} bids · ${run.plan.pack.ocdsRecords} OCDS records |`);
+    lines.push("");
+  }
+
   lines.push("## Review timeline");
   lines.push("");
   if (run.progress.length > 0) for (const step of run.progress) lines.push(`- ${step}`);
@@ -69,6 +100,9 @@ export function buildReport(runId: string): { filename: string; markdown: string
       lines.push(`- **Issue:** ${f.item}`);
       lines.push(`- **Evidence:** ${f.evidence}`);
       lines.push(`- **Citation:** \`${f.citation}\``);
+      if (f.repaired) {
+        lines.push(`- **Self-check repair:** initially refused by verify_findings; re-anchored by the bounded repair loop (verify → revise → verify) and re-confirmed against the cited document.`);
+      }
       const draft = run.drafts.find((d) => d.findingId === f.id);
       if (draft) {
         lines.push(`- **Original clause:** ${mdEscape(draft.original)}`);
@@ -106,6 +140,11 @@ export function buildReport(runId: string): { filename: string; markdown: string
       );
     }
   } else lines.push("_No audit entries reference this run._");
+  lines.push("");
+
+  lines.push("## Run cost (estimated)");
+  lines.push("");
+  lines.push(costLine(run));
   lines.push("");
 
   lines.push("---");
