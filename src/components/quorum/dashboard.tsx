@@ -4458,6 +4458,9 @@ export function Dashboard({
   }, [navOpen]);
 
   const firstName = firstNameOf(user);
+  /* Full-width focus mode: the Approvals view is the committee's desk —
+     the navigation steps aside so the section spans the entire screen. */
+  const focusGates = active === "mc-gates";
   const hour = now?.getHours() ?? 10;
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
@@ -4617,25 +4620,33 @@ export function Dashboard({
         Skip to mission control
       </a>
 
-      {/* Desktop sidebar */}
-      <aside
-        className="fixed inset-y-0 left-0 z-40 hidden w-[264px] flex-col border-r border-white/5 bg-night lg:flex"
-        aria-label="Mission control sidebar"
-      >
-        <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-50" aria-hidden="true" />
-        <div className="relative flex h-full flex-col">
-          <SidebarContent
-            active={active}
-            user={user}
-            counts={{ runs: runs.length, gates: queue.length, findings: openFindings }}
-            agent={agent}
-            onNavigate={switchTo}
-            onNewRun={() => setModalOpen(true)}
-            onSignOut={onSignOut}
-            onExit={onExit}
-          />
-        </div>
-      </aside>
+      {/* Desktop sidebar — steps aside while the Approvals view holds the screen */}
+      <AnimatePresence>
+        {!focusGates && (
+          <motion.aside
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ duration: 0.32, ease: EASE }}
+            className="fixed inset-y-0 left-0 z-40 hidden w-[264px] flex-col border-r border-white/5 bg-night lg:flex"
+            aria-label="Mission control sidebar"
+          >
+            <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-50" aria-hidden="true" />
+            <div className="relative flex h-full flex-col">
+              <SidebarContent
+                active={active}
+                user={user}
+                counts={{ runs: runs.length, gates: queue.length, findings: openFindings }}
+                agent={agent}
+                onNavigate={switchTo}
+                onNewRun={() => setModalOpen(true)}
+                onSignOut={onSignOut}
+                onExit={onExit}
+              />
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
       {/* Mobile top bar */}
       <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/10 bg-night px-4 py-3 lg:hidden">
@@ -4669,7 +4680,10 @@ export function Dashboard({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-[60] bg-night/70 backdrop-blur-sm lg:hidden"
+              className={cn(
+                "fixed inset-0 z-[60] bg-night/70 backdrop-blur-sm",
+                !focusGates && "lg:hidden"
+              )}
               onClick={() => setNavOpen(false)}
               aria-hidden="true"
             />
@@ -4678,7 +4692,10 @@ export function Dashboard({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ duration: 0.32, ease: EASE }}
-              className="fixed inset-y-0 left-0 z-[61] w-[290px] bg-night lg:hidden"
+              className={cn(
+                "fixed inset-y-0 left-0 z-[61] w-[290px] bg-night",
+                !focusGates && "lg:hidden"
+              )}
               aria-label="Mission control menu"
             >
               <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-50" aria-hidden="true" />
@@ -4710,19 +4727,33 @@ export function Dashboard({
         )}
       </AnimatePresence>
 
-      {/* Main column */}
-      <div className="lg:pl-[264px]">
+      {/* Main column — no gutter while the Approvals view holds the screen */}
+      <div className={cn("lg:pl-[264px]", focusGates && "lg:pl-0")}>
         {/* Sticky utility bar */}
         <div className="sticky top-0 z-30 border-b border-ink-100 bg-paper/85 backdrop-blur-xl">
           <div
             className="mx-auto flex h-14 w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-8"
           >
-            <p className="truncate font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
-              MISSION CONTROL <span className="text-ink-200">/</span>{" "}
-              <span className="text-ink-900">
-                {SECTION_LABEL[active] ?? "Overview"}
-              </span>
-            </p>
+            <div className="flex min-w-0 items-center gap-3">
+              {focusGates && (
+                <button
+                  type="button"
+                  onClick={() => setNavOpen(true)}
+                  aria-label="Open mission control menu"
+                  aria-expanded={navOpen}
+                  title="Open the menu"
+                  className="hidden h-9 w-9 shrink-0 place-items-center rounded-lg border border-ink-200 bg-white text-ink-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 lg:grid"
+                >
+                  <Menu className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+              <p className="truncate font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
+                MISSION CONTROL <span className="text-ink-200">/</span>{" "}
+                <span className="text-ink-900">
+                  {SECTION_LABEL[active] ?? "Overview"}
+                </span>
+              </p>
+            </div>
             <div className="flex items-center gap-3 sm:gap-4">
               <div className="relative hidden sm:block">
                 <Search
