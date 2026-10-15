@@ -205,3 +205,22 @@ Stage Summary:
 - Quorum is now a committed product: agentic tender review for public HEALTH procurement, with the three health checks (specs/clinical need, quantities/consumption, prices/other buyers) as the running motif across hero, ticker, theme section and terminal.
 - The other three themes survive as an explicit roadmap strip instead of diluting the story.
 - Pilot-request intake is functional again after the Task 6 regression fix (route + ContactMessage model restored and verified end-to-end).
+
+---
+Task ID: 9
+Agent: Z.ai Code (main)
+Task: New Run flow must reflect tender document upload and guide the entire flow (user screenshot of the "New run" modal).
+
+Work Log:
+- Rebuilt NewRunModal (dashboard.tsx) as a three-step guided wizard — 01 DETAILS · 02 DOCUMENTS · 03 SCOPE — with a clickable step rail (done states show checks, connectors fill as you advance), animated step transitions, Back/Continue footer nav and the standing footnote kept.
+- Step 02 — DOCUMENTS (the new capability): drag & drop zone ("Drop the tender pack here") + hidden multi-file input (accept: pdf/json/zip/xlsx/csv/docx/eml, cap 12 files) + "USE SAMPLE PACK" staging a realistic health-themed pack (tender notice, OCDS release, 3 sealed bids, batch-validity certificates). Every staged document walks a visible ingestion pipeline — RECEIVED → PARSING → INDEXED — with a mono status chip per file, an aria-live "INDEXED n OF N" counter, a red progress bar and per-file sizes via formatBytes(). Continue is disabled until ≥1 document is staged, with a red guidance line.
+- Step 03 — SCOPE: the three health checks as toggle rows (specs/clinical need, quantities/consumption, prices/other buyers), a locked "Page-level citations — always on" row, and a summary strip (N DOCUMENTS · N CHECKS · EST. 11 MIN).
+- launchRun(ref, title, format, docs, checks): run row now carries docs count (buyer line "Your workspace · ocds · 6 docs"); on launch the officer is auto-navigated to the Run Register so the run goes LIVE in front of them; staged phases in public (LIVE → CROSS-CHECK at 4.5s); at 12s the run lands at HUMAN GATE (not complete) — a gate card with the agent's proposed award (rotating Medline/Equity/Apex + value) enters the queue, findings + register notes attach, toast "FILE AT THE GATE — … THE COMMITTEE DECIDES". Completing the loop end-to-end: awarding the gate flips the run to COMPLETE and logs the ledger row.
+- FlowGuide added to the Overview (under the greeting, above stats): "THE FLOW — UPLOAD TO AWARD" — 01 BRIEF THE AGENT → 02 AGENT RUNS → 03 HUMAN GATE → 04 AWARD LOGGED, each step done/current/todo from live state (FlowState refs/decided/awarded), current step pulsing with a next-action subline ("START WITH THE PACK", "QUORUM-AGENT IS READING", "YOUR GAVEL — ACTION NEEDED", "SEE THE LEDGER"); every step is clickable and jumps to the right place (modal / register / gates / ledger); completes with "LOOP CLOSED · 04 OF 04 · RUN ANOTHER ANY TIME".
+- Upload follows the run everywhere: expanded register rows show "PACK AT LAUNCH · N DOCUMENTS INDEXED · INGESTED BY QUORUM-AGENT"; in-progress copy now narrates the next step ("stops at your gate before anything is awarded").
+- RunRegister/RunsView gained a notes prop (FINDING_NOTES merged with freshly launched run notes) so launched runs show real finding chips; fixed the Overview RunRegister call site that crashed on the missing prop (runtime TypeError caught in browser verification).
+- Lint fix: wizard-reset effect's setState wrapped in rAF (react-hooks/set-state-in-effect), matching the codebase precedent.
+
+Stage Summary:
+- The New Run flow now reflects document upload for a tender as a first-class step and guides the entire loop: brief the agent (upload the pack) → watch the agent run (auto-navigation + public phases) → sit the human gate (proposed award, named sign-off) → award logged (ledger + LOOP CLOSED). Every stage ends with a visible next move.
+- Verified end-to-end in the browser (desktop 1440×900 + mobile 390×844): wizard steps, sample-pack pipeline (INDEXED 6 OF 6), disabled-continue guard, Escape close + fresh-tender reset on reopen, launch → LIVE → gate → award → LOOP CLOSED, stats/badges re-counting, expanded run showing pack + findings; console clean after the fix, bun run lint clean, dev.log all 200s (film 404s are the known canvas-fallback requests).

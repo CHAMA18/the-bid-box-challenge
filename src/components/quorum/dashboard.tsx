@@ -12,6 +12,8 @@ import {
   Copy,
   Database,
   Download,
+  FileText,
+  FileUp,
   Files,
   Gavel,
   Gauge,
@@ -61,6 +63,9 @@ type McRun = {
   status: RunStatus;
   startedAt: string;
   duration: string;
+  /* Documents ingested at launch — set when the run was briefed
+     through the guided wizard (seeded runs have no pack attached). */
+  docs?: number;
 };
 
 type GateItem = {
@@ -408,13 +413,79 @@ function StatCard({
   );
 }
 
-/* ── New-run modal ───────────────────────────────────────────────────────── */
+/* ── New-run wizard: brief → documents → scope ───────────────────────────── */
 
 const SAMPLE_TITLES = [
   "Supply & installation of laboratory equipment",
   "Essential health commodities framework — lot 3",
   "Electronic medical records rollout — phase 2",
 ];
+
+const WIZARD_STEPS = ["DETAILS", "DOCUMENTS", "SCOPE"] as const;
+
+type StagedDoc = { id: string; name: string; size: string; status: "RECEIVED" | "PARSING" | "INDEXED" };
+
+/* A realistic pack for the sample tender — the notice, the OCDS release,
+   three sealed bids and their certificates (health theme throughout). */
+const SAMPLE_PACK: { name: string; size: string }[] = [
+  { name: "KE-NCB-104341-tender-notice.pdf", size: "2.4 MB" },
+  { name: "ke-ncb-104341-ocds.json", size: "861 KB" },
+  { name: "bid-01-medline-supplies.pdf", size: "8.2 MB" },
+  { name: "bid-02-equity-lab-systems.pdf", size: "6.7 MB" },
+  { name: "bid-03-apex-scientific.pdf", size: "7.9 MB" },
+  { name: "batch-validity-certificates.pdf", size: "1.1 MB" },
+];
+
+const SCOPE_CHECKS = [
+  { id: "specs", label: "Specs against clinical need", desc: "Every line item read against the clinical requirement." },
+  { id: "quantities", label: "Quantities against consumption", desc: "Volumes checked against real offtake, not optimism." },
+  { id: "prices", label: "Prices against other buyers", desc: "Unit rates benchmarked across the buyer network." },
+] as const;
+
+/* What the agent proposes when a user-launched run reaches its gate. */
+const PROPOSED_AWARDS = [
+  { supplier: "Medline Supplies Ltd", value: "KES 96.2M" },
+  { supplier: "Equity Lab Systems", value: "KES 88.7M" },
+  { supplier: "Apex Scientific Co.", value: "KES 91.4M" },
+];
+
+const LAUNCHED_NOTE_LINES = [
+  "Price variance above the framework median — BOQ p.18",
+  "Two mandatory certificates missing — checklist p.6",
+  "Award criteria weighting unstated — p.3",
+  "Bid validity shorter than the tender window — p.2",
+];
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function DocStatusChip({ status }: { status: StagedDoc["status"] }) {
+  if (status === "INDEXED")
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ink-950 px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-white">
+        <CircleCheck className="h-2.5 w-2.5" aria-hidden="true" />
+        INDEXED
+      </span>
+    );
+  if (status === "PARSING")
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand-50 px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-brand-700">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+        </span>
+        PARSING
+      </span>
+    );
+  return (
+    <span className="inline-flex shrink-0 items-center rounded-full border border-ink-200 px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-400">
+      RECEIVED
+    </span>
+  );
+}
 
 function NewRunModal({
   open,
@@ -423,25 +494,92 @@ function NewRunModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onLaunch: (ref: string, title: string, format: string) => void;
+  onLaunch: (ref: string, title: string, format: string, docs: number, checks: number) => void;
 }) {
+  const [step, setStep] = useState(0);
   const [ref, setRef] = useState("KE-NCB-104341");
   const [title, setTitle] = useState(SAMPLE_TITLES[0]);
   const [format, setFormat] = useState("OCDS");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [docs, setDocs] = useState<StagedDoc[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [checks, setChecks] = useState<Record<string, boolean>>({ specs: true, quantities: true, prices: true });
+  const refInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const docsRef = useRef<StagedDoc[]>([]);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  /* Every fresh open is a fresh tender: back to step one, no pack staged. */
   useEffect(() => {
     if (!open) return;
-    const id = requestAnimationFrame(() => inputRef.current?.focus());
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+    docsRef.current = [];
+    const id = requestAnimationFrame(() => {
+      setStep(0);
+      setDocs([]);
+      setDragging(false);
+      refInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [open]);
+
+  /* Escape closes; pending parse timers die with the modal. */
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
+    const timers = timersRef.current;
     return () => {
-      cancelAnimationFrame(id);
       window.removeEventListener("keydown", onKey);
+      timers.forEach(clearTimeout);
+      timersRef.current = [];
     };
   }, [open, onClose]);
+
+  /* The ingestion pipeline every staged document walks:
+     RECEIVED → PARSING → INDEXED — visible, never silent. */
+  const runPipeline = (fresh: StagedDoc[]) => {
+    fresh.forEach((d, idx) => {
+      timersRef.current.push(
+        setTimeout(() => {
+          setDocs((cur) => cur.map((x) => (x.id === d.id ? { ...x, status: "PARSING" } : x)));
+        }, 420 + idx * 340)
+      );
+      timersRef.current.push(
+        setTimeout(() => {
+          setDocs((cur) => cur.map((x) => (x.id === d.id ? { ...x, status: "INDEXED" } : x)));
+        }, 1450 + idx * 340)
+      );
+    });
+  };
+
+  const addDocs = (items: { name: string; size: string }[]) => {
+    const seen = new Set(docsRef.current.map((d) => d.name));
+    const fresh = items
+      .filter((i) => !seen.has(i.name))
+      .slice(0, 12)
+      .map((i, idx) => ({
+        id: `doc-${Date.now()}-${idx}-${i.name}`,
+        name: i.name,
+        size: i.size,
+        status: "RECEIVED" as const,
+      }));
+    if (fresh.length === 0) return;
+    docsRef.current = [...docsRef.current, ...fresh];
+    setDocs(docsRef.current);
+    runPipeline(fresh);
+  };
+
+  const stageLocalFiles = (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    addDocs(Array.from(list).map((f) => ({ name: f.name, size: formatBytes(f.size) })));
+  };
+
+  const indexed = docs.filter((d) => d.status === "INDEXED").length;
+  const checksOn = SCOPE_CHECKS.filter((c) => checks[c.id]).length;
+  const canLeaveDocs = docs.length > 0;
 
   return (
     <AnimatePresence>
@@ -462,7 +600,7 @@ function NewRunModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.98 }}
             transition={{ duration: 0.32, ease: EASE }}
-            className="w-full max-w-md rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_40px_100px_rgba(11,12,15,0.45)] sm:p-7"
+            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_40px_100px_rgba(11,12,15,0.45)] sm:p-7"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -485,72 +623,307 @@ function NewRunModal({
               </button>
             </div>
 
-            <form
-              className="mt-6 space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                onLaunch(ref.trim() || "KE-NCB-104341", title, format);
-              }}
-            >
-              <div>
-                <label htmlFor="nr-ref" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
-                  TENDER REFERENCE
-                </label>
-                <input
-                  id="nr-ref"
-                  ref={inputRef}
-                  type="text"
-                  value={ref}
-                  onChange={(e) => setRef(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-ink-200 bg-white px-4 font-code text-[13px] tracking-[0.04em] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
-                />
-              </div>
-              <div>
-                <label htmlFor="nr-title" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
-                  TENDER TITLE
-                </label>
-                <select
-                  id="nr-title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="h-11 w-full appearance-none rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
-                >
-                  {SAMPLE_TITLES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <p className="mb-1.5 font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">SOURCE FORMAT</p>
-                <div className="grid grid-cols-3 gap-2" role="group" aria-label="Source format">
-                  {["OCDS", "PDF PACK", "EMAIL BAG"].map((f) => (
+            {/* Step rail — 01 details · 02 documents · 03 scope */}
+            <ol className="mt-5 flex items-center gap-2" aria-label="Run setup, three steps">
+              {WIZARD_STEPS.map((label, i) => {
+                const state = i === step ? "current" : i < step ? "done" : "todo";
+                return (
+                  <li key={label} className="flex min-w-0 flex-1 items-center gap-2">
                     <button
-                      key={f}
                       type="button"
-                      onClick={() => setFormat(f)}
-                      aria-pressed={format === f}
+                      onClick={() => i <= step && setStep(i)}
+                      disabled={i > step}
+                      aria-current={state === "current" ? "step" : undefined}
                       className={cn(
-                        "h-10 rounded-xl border font-code text-[9.5px] font-bold tracking-[0.14em] transition-all",
-                        format === f
-                          ? "border-ink-950 bg-ink-950 text-white"
-                          : "border-ink-200 bg-white text-ink-500 hover:border-ink-400"
+                        "flex min-w-0 items-center gap-1.5 font-code text-[8.5px] font-bold tracking-[0.16em] transition-colors",
+                        state === "current" && "text-brand-700",
+                        state === "done" && "text-ink-900 hover:text-brand-700",
+                        state === "todo" && "cursor-default text-ink-300"
                       )}
                     >
-                      {f}
+                      {state === "done" ? (
+                        <CircleCheck className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      ) : (
+                        <span
+                          className={cn(
+                            "grid h-4 w-4 shrink-0 place-items-center rounded-full border text-[7.5px]",
+                            state === "current" && "border-brand-600 bg-brand-50 text-brand-700",
+                            state === "todo" && "border-ink-200 text-ink-300"
+                          )}
+                          aria-hidden="true"
+                        >
+                          {i + 1}
+                        </span>
+                      )}
+                      <span className="truncate">
+                        0{i + 1} {label}
+                      </span>
                     </button>
-                  ))}
-                </div>
+                    {i < WIZARD_STEPS.length - 1 && (
+                      <span className={cn("h-px flex-1", i < step ? "bg-ink-950" : "bg-ink-100")} aria-hidden="true" />
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+
+            <form
+              className="mt-6"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (step < 2) {
+                  setStep(step + 1);
+                  return;
+                }
+                onLaunch(ref.trim() || "KE-NCB-104341", title, format, docs.length, checksOn);
+              }}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={step}
+                  initial={{ opacity: 0, x: 18 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -14 }}
+                  transition={{ duration: 0.24, ease: EASE }}
+                  className="space-y-4"
+                >
+                  {step === 0 && (
+                    <>
+                      <div>
+                        <label htmlFor="nr-ref" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+                          TENDER REFERENCE
+                        </label>
+                        <input
+                          id="nr-ref"
+                          ref={refInputRef}
+                          type="text"
+                          value={ref}
+                          onChange={(e) => setRef(e.target.value)}
+                          className="h-11 w-full rounded-xl border border-ink-200 bg-white px-4 font-code text-[13px] tracking-[0.04em] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="nr-title" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+                          TENDER TITLE
+                        </label>
+                        <select
+                          id="nr-title"
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                          className="h-11 w-full appearance-none rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                        >
+                          {SAMPLE_TITLES.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="mb-1.5 font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">SOURCE FORMAT</p>
+                        <div className="grid grid-cols-3 gap-2" role="group" aria-label="Source format">
+                          {["OCDS", "PDF PACK", "EMAIL BAG"].map((f) => (
+                            <button
+                              key={f}
+                              type="button"
+                              onClick={() => setFormat(f)}
+                              aria-pressed={format === f}
+                              className={cn(
+                                "h-10 rounded-xl border font-code text-[9.5px] font-bold tracking-[0.14em] transition-all",
+                                format === f
+                                  ? "border-ink-950 bg-ink-950 text-white"
+                                  : "border-ink-200 bg-white text-ink-500 hover:border-ink-400"
+                              )}
+                            >
+                              {f}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {step === 1 && (
+                    <>
+                      <div>
+                        <div className="flex items-baseline justify-between gap-3">
+                          <p className="font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">TENDER PACK</p>
+                          <p className="font-code text-[8.5px] tracking-[0.14em] text-ink-400" aria-live="polite">
+                            {docs.length === 0 ? "NO DOCUMENTS STAGED" : `INDEXED ${indexed} OF ${docs.length}`}
+                          </p>
+                        </div>
+                        <div
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setDragging(true);
+                          }}
+                          onDragLeave={() => setDragging(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragging(false);
+                            stageLocalFiles(e.dataTransfer.files);
+                          }}
+                          className={cn(
+                            "relative mt-1.5 grid place-items-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors",
+                            dragging ? "border-brand-500 bg-brand-50" : "border-ink-200 bg-paper/60 hover:border-ink-400"
+                          )}
+                        >
+                          <input
+                            ref={fileInputRef}
+                            id="nr-files"
+                            type="file"
+                            multiple
+                            accept=".pdf,.json,.zip,.xlsx,.csv,.docx,.eml"
+                            className="sr-only"
+                            onChange={(e) => {
+                              stageLocalFiles(e.target.files);
+                              e.target.value = "";
+                            }}
+                          />
+                          <FileUp className={cn("h-6 w-6", dragging ? "text-brand-600" : "text-ink-300")} aria-hidden="true" />
+                          <p className="mt-2.5 text-[14px] font-semibold text-ink-900">Drop the tender pack here</p>
+                          <p className="mt-1 font-code text-[8px] tracking-[0.16em] text-ink-400">
+                            NOTICE · BIDS · OCDS JSON · PRICE SCHEDULES · EMAILS — UP TO 12 FILES
+                          </p>
+                          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink-950 px-4 font-code text-[9px] font-bold tracking-[0.14em] text-white transition-colors hover:bg-brand-600"
+                            >
+                              <FileUp className="h-3.5 w-3.5" aria-hidden="true" />
+                              BROWSE FILES
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => addDocs(SAMPLE_PACK)}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.14em] text-ink-600 transition-colors hover:border-ink-400 hover:text-ink-900"
+                            >
+                              USE SAMPLE PACK
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      {docs.length > 0 && (
+                        <div>
+                          <div
+                            className="h-1 w-full overflow-hidden rounded-full bg-ink-100"
+                            role="progressbar"
+                            aria-label="Documents indexed"
+                            aria-valuemin={0}
+                            aria-valuemax={docs.length}
+                            aria-valuenow={indexed}
+                          >
+                            <motion.div
+                              className="h-full rounded-full bg-brand-600"
+                              initial={false}
+                              animate={{ width: `${(indexed / docs.length) * 100}%` }}
+                              transition={{ duration: 0.5, ease: EASE }}
+                            />
+                          </div>
+                          <ul className="mt-2.5 max-h-40 space-y-1.5 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-ink-200 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1">
+                            {docs.map((d) => (
+                              <li key={d.id} className="flex items-center gap-2.5 rounded-lg border border-ink-100 bg-white px-3 py-2">
+                                <FileText className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
+                                <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-800">{d.name}</span>
+                                <span className="shrink-0 font-code text-[8px] tracking-[0.08em] text-ink-300">{d.size}</span>
+                                <DocStatusChip status={d.status} />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {step === 2 && (
+                    <>
+                      <div>
+                        <p className="font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">SCOPE OF REVIEW</p>
+                        <ul className="mt-1.5 space-y-1.5">
+                          {SCOPE_CHECKS.map((c) => {
+                            const on = checks[c.id];
+                            return (
+                              <li key={c.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => setChecks((prev) => ({ ...prev, [c.id]: !prev[c.id] }))}
+                                  aria-pressed={on}
+                                  className={cn(
+                                    "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                                    on ? "border-ink-950 bg-ink-950/[0.03]" : "border-ink-200 bg-white hover:border-ink-400"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "mt-0.5 grid h-4.5 w-4.5 shrink-0 place-items-center rounded-md border",
+                                      on ? "border-ink-950 bg-ink-950 text-white" : "border-ink-300 bg-white text-transparent"
+                                    )}
+                                    aria-hidden="true"
+                                  >
+                                    <CircleCheck className="h-3 w-3" />
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className={cn("block text-[13.5px] font-semibold", on ? "text-ink-950" : "text-ink-500")}>
+                                      {c.label}
+                                    </span>
+                                    <span className="mt-0.5 block text-[12px] leading-relaxed text-ink-500">{c.desc}</span>
+                                  </span>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                      <div className="flex items-center gap-3 rounded-xl border border-ink-100 bg-paper px-4 py-3">
+                        <Lock className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
+                        <div className="min-w-0">
+                          <p className="text-[12.5px] font-semibold text-ink-800">Page-level citations — always on</p>
+                          <p className="mt-0.5 font-code text-[8px] tracking-[0.14em] text-ink-400">
+                            EVERY CLAIM CARRIES A PAGE, CLAUSE OR REGISTRY ID. NO EXCEPTIONS.
+                          </p>
+                        </div>
+                      </div>
+                      <p className="rounded-xl bg-paper px-4 py-3 text-center font-code text-[9px] font-bold tracking-[0.16em] text-ink-700">
+                        {docs.length} DOCUMENT{docs.length === 1 ? "" : "S"} · {checksOn} CHECK{checksOn === 1 ? "" : "S"} · EST. 11 MIN
+                      </p>
+                    </>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+
+              {/* Footer nav — the wizard always shows the next step */}
+              <div className="mt-6 flex items-center gap-2.5">
+                {step > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setStep(step - 1)}
+                    className="inline-flex h-[50px] items-center gap-1.5 rounded-xl border border-ink-200 px-4 text-[13.5px] font-semibold text-ink-600 transition-colors hover:border-ink-400 hover:text-ink-900"
+                  >
+                    <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                    Back
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={step === 1 && !canLeaveDocs}
+                  className="group inline-flex h-[50px] flex-1 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.3)] transition-all hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+                >
+                  {step === 0 && "Continue to documents"}
+                  {step === 1 && "Continue to scope"}
+                  {step === 2 && "Launch run"}
+                  <ArrowRight
+                    className={cn("h-4.5 w-4.5 transition-transform group-hover:translate-x-1", step === 1 && !canLeaveDocs && "hidden")}
+                    aria-hidden="true"
+                  />
+                </button>
               </div>
-              <button
-                type="submit"
-                className="group inline-flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.3)] transition-all hover:bg-brand-700"
-              >
-                Launch run
-                <ArrowRight className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
-              </button>
-              <p className="text-center font-code text-[8px] tracking-[0.2em] text-ink-400">
+              {step === 1 && !canLeaveDocs && (
+                <p role="status" className="mt-2.5 text-center font-code text-[8px] tracking-[0.18em] text-brand-700">
+                  STAGE AT LEAST ONE DOCUMENT — DROP A FILE OR USE THE SAMPLE PACK
+                </p>
+              )}
+              <p className="mt-4 text-center font-code text-[8px] tracking-[0.2em] text-ink-400">
                 THE AGENT PREPARES THE FILE — THE COMMITTEE STILL AWARDS
               </p>
             </form>
@@ -722,6 +1095,7 @@ function RunRegister({
   filter,
   onFilter,
   onToast,
+  notes,
 }: {
   runs: McRun[];
   query: string;
@@ -729,6 +1103,7 @@ function RunRegister({
   filter: RunFilter;
   onFilter: (f: RunFilter) => void;
   onToast: (m: string) => void;
+  notes: Record<string, string[]>;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -808,7 +1183,7 @@ function RunRegister({
             <tbody>
               {filtered.map((run) => {
                 const isOpen = expanded === run.id;
-                const notes = FINDING_NOTES[run.id] ?? [];
+                const notesFor = notes[run.id] ?? [];
                 return (
                   <Fragment key={run.id}>
                     <tr
@@ -867,8 +1242,15 @@ function RunRegister({
                           <div className="rounded-xl border border-ink-100 bg-white p-4">
                             {run.status === "running" || run.status === "queued" ? (
                               <p className="text-[13px] leading-relaxed text-ink-600">
-                                <span className="font-semibold text-ink-900">Run in progress.</span> Findings stream in at
-                                completion — every claim will carry a page citation before it reaches this table.
+                                <span className="font-semibold text-ink-900">
+                                  Run in progress —{" "}
+                                  {run.duration === "CROSS-CHECK"
+                                    ? "cross-checking the bids against the scope you set"
+                                    : "reading the pack you staged"}
+                                  .
+                                </span>{" "}
+                                Findings stream in at completion — every claim will carry a page citation, and the file
+                                stops at your gate before anything is awarded.
                               </p>
                             ) : (
                               <>
@@ -876,7 +1258,7 @@ function RunRegister({
                                   TOP FINDINGS · {run.findings} FLAGGED · {run.citations} CITATIONS · {run.unsourced} UNSOURCED
                                 </p>
                                 <ul className="mt-2.5 flex flex-wrap gap-1.5">
-                                  {notes.map((note) => (
+                                  {notesFor.map((note) => (
                                     <li
                                       key={note}
                                       className="rounded-md bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-medium text-brand-800"
@@ -884,13 +1266,19 @@ function RunRegister({
                                       {note}
                                     </li>
                                   ))}
-                                  {run.findings > notes.length && (
+                                  {run.findings > notesFor.length && (
                                     <li className="rounded-md bg-ink-50 px-2.5 py-1.5 font-code text-[10px] font-semibold tracking-[0.1em] text-ink-500">
-                                      +{run.findings - notes.length} MORE IN THE SOURCED REPORT
+                                      +{run.findings - notesFor.length} MORE IN THE SOURCED REPORT
                                     </li>
                                   )}
                                 </ul>
                               </>
+                            )}
+                            {/* A pack ingested at launch follows the run everywhere */}
+                            {typeof run.docs === "number" && (
+                              <p className="mt-3 font-code text-[8px] tracking-[0.18em] text-ink-400">
+                                PACK AT LAUNCH · {run.docs} DOCUMENT{run.docs === 1 ? "" : "S"} INDEXED · INGESTED BY QUORUM-AGENT
+                              </p>
                             )}
                             <div className="mt-3.5 flex flex-wrap items-center gap-2">
                               <button
@@ -2194,6 +2582,7 @@ function RunsView({
   onFilter,
   onToast,
   onNewRun,
+  notes,
 }: {
   runs: McRun[];
   query: string;
@@ -2202,6 +2591,7 @@ function RunsView({
   onFilter: (f: RunFilter) => void;
   onToast: (m: string) => void;
   onNewRun: () => void;
+  notes: Record<string, string[]>;
 }) {
   return (
     <ViewShell
@@ -2211,7 +2601,7 @@ function RunsView({
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
-          <RunRegister runs={runs} query={query} onQuery={onQuery} filter={filter} onFilter={onFilter} onToast={onToast} />
+          <RunRegister runs={runs} query={query} onQuery={onQuery} filter={filter} onFilter={onFilter} onToast={onToast} notes={notes} />
         </div>
         <div className="grid content-start gap-4 sm:gap-6">
           <NewRunCard onNewRun={onNewRun} />
@@ -2308,6 +2698,109 @@ function FeedView({ onToast }: { onToast: (m: string) => void }) {
 
 /* ── The screen ──────────────────────────────────────────────────────────── */
 
+/* ── The flow guide: upload → agent runs → human gate → award ─────────── */
+
+const FLOW_STEPS = [
+  { num: "01", label: "BRIEF THE AGENT", sub: "Upload the tender pack" },
+  { num: "02", label: "AGENT RUNS", sub: "Every claim cited" },
+  { num: "03", label: "HUMAN GATE", sub: "The committee reads" },
+  { num: "04", label: "AWARD LOGGED", sub: "Decision on the ledger" },
+] as const;
+
+const FLOW_SUB_CURRENT = [
+  "START WITH THE PACK",
+  "QUORUM-AGENT IS READING",
+  "YOUR GAVEL — ACTION NEEDED",
+  "SEE THE LEDGER",
+];
+
+function FlowGuide({
+  current,
+  complete,
+  onStep,
+}: {
+  current: number;
+  complete: boolean;
+  onStep: (step: number) => void;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, delay: 0.02, ease: EASE }}
+      aria-label="The flow — from upload to award"
+      className="mt-8 overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+    >
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-5 py-3.5">
+        <p className="flex items-center gap-2.5 font-code text-[9px] font-semibold tracking-[0.24em] text-ink-500">
+          <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
+          THE FLOW — UPLOAD TO AWARD
+        </p>
+        <p className="font-code text-[8.5px] font-semibold tracking-[0.18em] text-ink-400" aria-live="polite">
+          {complete ? (
+            <span className="text-ink-950">LOOP CLOSED · 04 OF 04 · RUN ANOTHER ANY TIME</span>
+          ) : (
+            `STEP ${current + 1} OF 4`
+          )}
+        </p>
+      </header>
+      <div className="grid grid-cols-1 gap-px bg-ink-100 sm:grid-cols-2 xl:grid-cols-4">
+        {FLOW_STEPS.map((s, i) => {
+          const done = complete || i < current;
+          const isCurrent = !complete && i === current;
+          return (
+            <button
+              key={s.num}
+              type="button"
+              onClick={() => onStep(i)}
+              aria-current={isCurrent ? "step" : undefined}
+              className="flex items-start gap-3 bg-white px-5 py-4 text-left transition-colors hover:bg-paper"
+            >
+              <span
+                className={cn(
+                  "grid h-7 w-7 shrink-0 place-items-center rounded-full border font-code text-[9px] font-bold",
+                  done
+                    ? "border-ink-950 bg-ink-950 text-white"
+                    : isCurrent
+                      ? "border-brand-600 bg-brand-50 text-brand-700"
+                      : "border-ink-200 text-ink-300"
+                )}
+                aria-hidden="true"
+              >
+                {done ? <CircleCheck className="h-3.5 w-3.5" /> : s.num}
+              </span>
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "flex items-center gap-2 font-code text-[9px] font-bold tracking-[0.16em]",
+                    isCurrent ? "text-ink-950" : done ? "text-ink-700" : "text-ink-400"
+                  )}
+                >
+                  {s.label}
+                  {isCurrent && (
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+                    </span>
+                  )}
+                </span>
+                <span className={cn("mt-1 block truncate text-[12px]", isCurrent ? "font-medium text-ink-800" : "text-ink-500")}>
+                  {isCurrent ? FLOW_SUB_CURRENT[i] : done ? "DONE" : s.sub}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </motion.section>
+  );
+}
+
+/* Session flow tracker — how far this officer has walked the loop:
+   briefed a run with a real pack → watched the agent → sat the gate →
+   logged the award. Drives the FlowGuide on the overview. */
+type FlowState = { refs: string[]; decided: boolean; awarded: boolean };
+
 export function Dashboard({
   user,
   onSignOut,
@@ -2332,6 +2825,8 @@ export function Dashboard({
     Object.fromEntries(SEED_LEDGER.map((row) => [row.tender, row.action]))
   );
   const [extraFindings, setExtraFindings] = useState<SeedFinding[]>([]);
+  const [extraNotes, setExtraNotes] = useState<Record<string, string[]>>({});
+  const [flow, setFlow] = useState<FlowState>({ refs: [], decided: false, awarded: false });
   const completionTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   /* Clock + date */
@@ -2377,18 +2872,28 @@ export function Dashboard({
   );
   const openFindings = findingRows.filter((r) => r.status === "OPEN").length;
 
+  /* Notes for the expanded register rows — seeds plus anything the
+     freshly launched runs produced. */
+  const notesMap = useMemo(() => ({ ...FINDING_NOTES, ...extraNotes }), [extraNotes]);
+
+  /* Where the officer stands in the loop right now. */
+  const userLive = runs.some((r) => flow.refs.includes(r.id) && (r.status === "running" || r.status === "queued"));
+  const userGate = queue.some((g) => flow.refs.includes(g.tender));
+  const flowCurrent = userLive ? 1 : userGate ? 2 : flow.decided ? 3 : 0;
+  const flowComplete = flow.awarded && !userLive && !userGate;
+
   const switchTo = (id: SectionId) => {
     setNavOpen(false);
     setActive(id);
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   };
 
-  const launchRun = (ref: string, title: string, format: string) => {
+  const launchRun = (ref: string, title: string, format: string, docs: number, checks: number) => {
     setModalOpen(false);
     const run: McRun = {
       id: ref,
       title,
-      buyer: `Your workspace · ${format.toLowerCase()}`,
+      buyer: `Your workspace · ${format.toLowerCase()} · ${docs} ${docs === 1 ? "doc" : "docs"}`,
       bids: null,
       findings: 0,
       citations: 0,
@@ -2396,21 +2901,44 @@ export function Dashboard({
       status: "running",
       startedAt: "JUST NOW",
       duration: "LIVE",
+      docs,
     };
     setRuns((prev) => [run, ...prev]);
-    onToast(`RUN QUEUED — QUORUM-AGENT PICKING UP ${ref.toUpperCase()} · ${format}`);
-    const t = setTimeout(() => {
+    setFlow((f) => ({ ...f, refs: [...f.refs, ref] }));
+    /* Guide the officer to the register — the run goes live in front of them. */
+    setActive("mc-runs");
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+    onToast(`RUN QUEUED — ${docs} DOC${docs === 1 ? "" : "S"} · ${checks} CHECK${checks === 1 ? "" : "S"} · ${ref.toUpperCase()} IS LIVE`);
+
+    /* The run walks its phases in public: parse → cross-check → gate. */
+    const phase = setTimeout(() => {
+      setRuns((prev) => prev.map((r) => (r.id === ref ? { ...r, duration: "CROSS-CHECK" } : r)));
+    }, 4500);
+    const done = setTimeout(() => {
       setRuns((prev) =>
         prev.map((r) =>
           r.id === ref
-            ? { ...r, status: "complete", bids: 5, findings: 4, citations: 4, duration: "11 MIN" }
+            ? { ...r, status: "gate", bids: 5, findings: 4, citations: 4, duration: "11 MIN" }
             : r
         )
       );
       setExtraFindings((prev) => [...prev, ...LAUNCHED_FINDINGS.map((f) => ({ ...f, run: ref }))]);
-      onToast(`RUN COMPLETE — ${ref.toUpperCase()} · 4 FINDINGS · 4 CITATIONS · 0 UNSOURCED`);
+      setExtraNotes((prev) => ({ ...prev, [ref]: LAUNCHED_NOTE_LINES }));
+      setQueue((prev) => [
+        {
+          id: `g-user-${ref}`,
+          tender: ref,
+          title,
+          supplier: PROPOSED_AWARDS[prev.length % PROPOSED_AWARDS.length].supplier,
+          value: PROPOSED_AWARDS[prev.length % PROPOSED_AWARDS.length].value,
+          flags: 4,
+          ago: "JUST NOW",
+        },
+        ...prev,
+      ]);
+      onToast(`FILE AT THE GATE — ${ref.toUpperCase()} · 4 FINDINGS · 4 CITATIONS · THE COMMITTEE DECIDES`);
     }, 12_000);
-    completionTimers.current.push(t);
+    completionTimers.current.push(phase, done);
   };
 
   const signGate = (g: GateItem) => {
@@ -2425,6 +2953,8 @@ export function Dashboard({
       prev.map((r) => (r.id === g.tender ? { ...r, status: "complete", duration: `${r.duration.split(" ")[0]} MIN` } : r))
     );
     onToast(`GATE SIGNED — ${g.tender} AWARDED · DECISION LOGGED`);
+    /* The officer has sat a gate and closed the loop at least once. */
+    setFlow((f) => ({ ...f, decided: true, awarded: true }));
   };
 
   const returnGate = (g: GateItem) => {
@@ -2439,6 +2969,16 @@ export function Dashboard({
       prev.map((r) => (r.id === g.tender ? { ...r, status: "running", duration: "LIVE", startedAt: "RE-RUN" } : r))
     );
     onToast(`${g.tender} RETURNED — AGENT TASKED WITH CLARIFICATION`);
+    /* A return is still a committee decision — the loop just re-opens. */
+    setFlow((f) => ({ ...f, decided: true }));
+  };
+
+  /* The flow guide is clickable — each step jumps to where the work happens. */
+  const handleFlowStep = (step: number) => {
+    if (step === 0) setModalOpen(true);
+    else if (step === 1) switchTo("mc-runs");
+    else if (step === 2) switchTo("mc-gates");
+    else switchTo("mc-ledger");
   };
 
   const renderView = () => {
@@ -2453,6 +2993,7 @@ export function Dashboard({
             onFilter={setFilter}
             onToast={onToast}
             onNewRun={() => setModalOpen(true)}
+            notes={notesMap}
           />
         );
       case "mc-gates":
@@ -2671,8 +3212,11 @@ export function Dashboard({
               </div>
             </div>
 
+            {/* The guided flow — upload to award, always showing the next move */}
+            <FlowGuide current={flowCurrent} complete={flowComplete} onStep={handleFlowStep} />
+
             {/* Stats */}
-            <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
               <StatCard
                 label="ACTIVE RUNS"
                 value={activeRuns}
@@ -2717,6 +3261,7 @@ export function Dashboard({
                 filter={filter}
                 onFilter={setFilter}
                 onToast={onToast}
+                notes={notesMap}
               />
             </div>
             <GateQueue
