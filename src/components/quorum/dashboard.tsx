@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
+  BookOpen,
   ChevronDown,
   CircleAlert,
   CircleCheck,
@@ -41,6 +42,7 @@ import { StackConsole } from "@/components/quorum/stack-console";
 import type { AuthUser } from "@/lib/auth-types";
 import { uploadTenderDocument } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
+import { ThemeModeRow } from "@/components/quorum/theme-toggle";
 
 /**
  * Quorum — Mission Control.
@@ -265,7 +267,8 @@ type SectionId =
   | "mc-committee"
   | "mc-rules"
   | "mc-stack"
-  | "mc-settings";
+  | "mc-settings"
+  | "mc-walkthrough";
 
 type NavBadge = "runs" | "gates" | "findings";
 
@@ -303,6 +306,7 @@ const NAV_GROUPS: {
       { id: "mc-stack", label: "Tools & models", icon: ServerCog },
       { id: "mc-rules", label: "Rules & safeguards", icon: ShieldCheck },
       { id: "mc-settings", label: "Settings", icon: Settings },
+      { id: "mc-walkthrough", label: "Walkthrough", icon: BookOpen },
     ],
   },
 ];
@@ -737,6 +741,9 @@ function NewRunModal({
   const [docs, setDocs] = useState<StagedDoc[]>([]);
   const [dragging, setDragging] = useState(false);
   const [checks, setChecks] = useState<Record<string, boolean>>({ specs: true, quantities: true, prices: true });
+  const [detailsError, setDetailsError] = useState("");
+  const [launchError, setLaunchError] = useState("");
+  const [launching, setLaunching] = useState(false);
   const refInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docsRef = useRef<StagedDoc[]>([]);
@@ -752,8 +759,15 @@ function NewRunModal({
     filesRef.current.clear();
     const id = requestAnimationFrame(() => {
       setStep(0);
+      setRef("");
+      setTitle("");
+      setFormat("OCDS");
       setDocs([]);
       setDragging(false);
+      setChecks({ specs: true, quantities: true, prices: true });
+      setDetailsError("");
+      setLaunchError("");
+      setLaunching(false);
       refInputRef.current?.focus();
     });
     return () => cancelAnimationFrame(id);
@@ -763,7 +777,7 @@ function NewRunModal({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !launching) onClose();
     };
     window.addEventListener("keydown", onKey);
     const timers = timersRef.current;
@@ -772,7 +786,7 @@ function NewRunModal({
       timers.forEach(clearTimeout);
       timersRef.current = [];
     };
-  }, [open, onClose]);
+  }, [open, onClose, launching]);
 
   /* The ingestion pipeline every staged document walks:
      RECEIVED → PARSING → INDEXED — visible, never silent. */
@@ -836,7 +850,9 @@ function NewRunModal({
   const indexed = docs.filter((d) => d.status === "INDEXED").length;
   const cloudSynced = docs.filter((d) => d.storage === "CLOUD").length;
   const checksOn = SCOPE_CHECKS.filter((c) => checks[c.id]).length;
-  const canLeaveDocs = docs.length > 0;
+  const canLeaveDocs = docs.length > 0 && indexed === docs.length;
+  /* Review time scales with the checks chosen: 3 checks ≈ 11 min. */
+  const estMinutes = 2 + 3 * checksOn;
 
   return (
     <AnimatePresence>
@@ -847,7 +863,9 @@ function NewRunModal({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.22 }}
           className="fixed inset-0 z-[80] grid place-items-center bg-night/70 p-4 backdrop-blur-sm"
-          onClick={onClose}
+          onClick={() => {
+            if (!launching) onClose();
+          }}
         >
           <motion.div
             role="dialog"
@@ -857,7 +875,7 @@ function NewRunModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.98 }}
             transition={{ duration: 0.32, ease: EASE }}
-            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_40px_100px_rgba(11,12,15,0.45)] sm:p-7"
+            className="max-h-[min(92dvh,900px)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_40px_100px_rgba(11,12,15,0.45)] sm:rounded-[28px] sm:p-8 lg:p-10"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -866,33 +884,40 @@ function NewRunModal({
                   <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
                   LAUNCH A RUN
                 </p>
-                <h2 id="new-run-title" className="mt-3 font-display text-[26px] font-black tracking-[-0.02em] text-ink-950">
+                <h2 id="new-run-title" className="mt-3 font-display text-[28px] font-black tracking-[-0.035em] text-ink-950 sm:text-[36px]">
                   New run<span className="text-brand-600">.</span>
                 </h2>
+                <p className="mt-1.5 max-w-lg text-[12.5px] leading-relaxed text-ink-500 sm:text-[13px]">
+                  Set the tender, stage its source documents, and choose what the review should verify.
+                </p>
               </div>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => {
+                  if (!launching) onClose();
+                }}
+                disabled={launching}
                 aria-label="Close"
-                className="grid h-9 w-9 place-items-center rounded-lg border border-ink-200 text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-900"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-ink-200 text-ink-500 transition-colors hover:border-ink-400 hover:bg-ink-50 hover:text-ink-900 disabled:cursor-not-allowed disabled:opacity-50 sm:h-12 sm:w-12"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
 
             {/* Step rail — 01 details · 02 documents · 03 scope */}
-            <ol className="mt-5 flex items-center gap-2" aria-label="Run setup, three steps">
+            <div className="mt-6 rounded-2xl border border-ink-100 bg-paper/70 px-3 py-3 sm:mt-7 sm:px-5 sm:py-4">
+              <ol className="flex items-center gap-2 sm:gap-3" aria-label="Run setup, three steps">
               {WIZARD_STEPS.map((label, i) => {
                 const state = i === step ? "current" : i < step ? "done" : "todo";
                 return (
-                  <li key={label} className="flex min-w-0 flex-1 items-center gap-2">
+                  <li key={label} className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                     <button
                       type="button"
                       onClick={() => i <= step && setStep(i)}
                       disabled={i > step}
                       aria-current={state === "current" ? "step" : undefined}
                       className={cn(
-                        "flex min-w-0 items-center gap-1.5 font-code text-[8.5px] font-bold tracking-[0.16em] transition-colors",
+                        "flex min-w-0 items-center gap-1.5 font-code text-[8px] font-bold tracking-[0.12em] transition-colors sm:gap-2 sm:text-[9px] sm:tracking-[0.16em]",
                         state === "current" && "text-brand-700",
                         state === "done" && "text-ink-900 hover:text-brand-700",
                         state === "todo" && "cursor-default text-ink-300"
@@ -922,17 +947,42 @@ function NewRunModal({
                   </li>
                 );
               })}
-            </ol>
+              </ol>
+              <div className="mt-3 h-1 overflow-hidden rounded-full bg-ink-100" aria-hidden="true">
+                <motion.div
+                  className="h-full rounded-full bg-brand-600"
+                  initial={false}
+                  animate={{ width: `${((step + 1) / WIZARD_STEPS.length) * 100}%` }}
+                  transition={{ duration: 0.35, ease: EASE }}
+                />
+              </div>
+            </div>
 
             <form
-              className="mt-6"
-              onSubmit={(e) => {
+              className="mt-6 sm:mt-7"
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (step < 2) {
+                  if (step === 0 && (!ref.trim() || !title.trim())) {
+                    setDetailsError("Add both the tender reference and its published title to continue.");
+                    if (!ref.trim()) refInputRef.current?.focus();
+                    return;
+                  }
+                  if (step === 1 && !canLeaveDocs) return;
                   setStep(step + 1);
+                  setLaunchError("");
                   return;
                 }
-                onLaunch(ref.trim(), title, format, docs.length, checksOn);
+                if (checksOn === 0 || launching) return;
+                setLaunching(true);
+                setLaunchError("");
+                try {
+                  await onLaunch(ref.trim(), title.trim(), format, docs.length, checksOn);
+                } catch (error) {
+                  setLaunchError(error instanceof Error ? error.message : "The run could not be launched. Please try again.");
+                } finally {
+                  setLaunching(false);
+                }
               }}
             >
               <AnimatePresence mode="wait" initial={false}>
@@ -942,39 +992,61 @@ function NewRunModal({
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -14 }}
                   transition={{ duration: 0.24, ease: EASE }}
-                  className="space-y-4"
+                  className="space-y-5 sm:space-y-6"
                 >
                   {step === 0 && (
                     <>
+                      <div className="rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3">
+                        <p className="font-code text-[8px] font-bold tracking-[0.18em] text-brand-700">01 / TENDER DETAILS</p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-ink-600">Identify the procurement record the committee and audit trail will refer to.</p>
+                      </div>
                       <div>
                         <label htmlFor="nr-ref" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
-                          TENDER REFERENCE
+                          TENDER REFERENCE <span className="text-brand-600" aria-hidden="true">*</span>
                         </label>
                         <input
                           id="nr-ref"
                           ref={refInputRef}
                           type="text"
                           value={ref}
-                          onChange={(e) => setRef(e.target.value)}
-                          className="h-11 w-full rounded-xl border border-ink-200 bg-white px-4 font-code text-[13px] tracking-[0.04em] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                          onChange={(e) => {
+                            setRef(e.target.value);
+                            setDetailsError("");
+                          }}
+                          placeholder="e.g. KE-MOH-2026-014"
+                          autoComplete="off"
+                          aria-required="true"
+                          aria-invalid={Boolean(detailsError && !ref.trim())}
+                          className="h-12 w-full rounded-xl border border-ink-200 bg-white px-4 font-code text-[13px] tracking-[0.04em] text-ink-900 outline-none transition-all placeholder:font-sans placeholder:tracking-normal placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15 sm:h-[52px]"
                         />
                       </div>
                       <div>
                         <label htmlFor="nr-title" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
-                          TENDER TITLE
+                          PUBLISHED TENDER TITLE <span className="text-brand-600" aria-hidden="true">*</span>
                         </label>
                         <input
                           id="nr-title"
                           type="text"
                           value={title}
-                          onChange={(e) => setTitle(e.target.value)}
-                          placeholder="Tender title as published"
-                          className="h-11 w-full rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                          onChange={(e) => {
+                            setTitle(e.target.value);
+                            setDetailsError("");
+                          }}
+                          placeholder="Use the title exactly as published"
+                          aria-required="true"
+                          aria-invalid={Boolean(detailsError && !title.trim())}
+                          className="h-12 w-full rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15 sm:h-[52px]"
                         />
                       </div>
                       <div>
-                        <p className="mb-1.5 font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">SOURCE FORMAT</p>
-                        <div className="grid grid-cols-3 gap-2" role="group" aria-label="Source format">
+                        <div className="mb-2 flex items-end justify-between gap-3">
+                          <div>
+                            <p className="font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">SOURCE FORMAT</p>
+                            <p className="mt-1 text-[11.5px] text-ink-400">Choose the format of the original procurement record.</p>
+                          </div>
+                          <span className="font-code text-[8px] tracking-[0.12em] text-ink-300">REQUIRED</span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3" role="group" aria-label="Source format">
                           {["OCDS", "PDF PACK", "EMAIL BAG"].map((f) => (
                             <button
                               key={f}
@@ -982,22 +1054,28 @@ function NewRunModal({
                               onClick={() => setFormat(f)}
                               aria-pressed={format === f}
                               className={cn(
-                                "h-10 rounded-xl border font-code text-[9.5px] font-bold tracking-[0.14em] transition-all",
+                                "flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 font-code text-[9px] font-bold tracking-[0.12em] transition-all sm:min-h-[54px] sm:text-[9.5px] sm:tracking-[0.14em]",
                                 format === f
-                                  ? "border-ink-950 bg-ink-950 text-white"
-                                  : "border-ink-200 bg-white text-ink-500 hover:border-ink-400"
+                                  ? "border-ink-950 bg-ink-950 text-white shadow-[0_6px_16px_rgba(11,12,15,0.14)]"
+                                  : "border-ink-200 bg-white text-ink-500 hover:border-ink-400 hover:bg-paper"
                               )}
                             >
+                              {format === f && <CircleCheck className="h-3.5 w-3.5" aria-hidden="true" />}
                               {f}
                             </button>
                           ))}
                         </div>
                       </div>
+                      {detailsError && <p role="alert" className="rounded-lg bg-brand-50 px-3.5 py-2.5 text-[12px] font-medium text-brand-800">{detailsError}</p>}
                     </>
                   )}
 
                   {step === 1 && (
                     <>
+                      <div className="rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3">
+                        <p className="font-code text-[8px] font-bold tracking-[0.18em] text-brand-700">02 / SOURCE DOCUMENTS</p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-ink-600">Add the tender notice and bid pack. We’ll index each file before the review begins.</p>
+                      </div>
                       <div>
                         <div className="flex items-baseline justify-between gap-3">
                           <p className="font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">TENDER PACK</p>
@@ -1018,9 +1096,10 @@ function NewRunModal({
                             setDragging(false);
                             stageLocalFiles(e.dataTransfer.files);
                           }}
+                          aria-label="Tender document upload area"
                           className={cn(
-                            "relative mt-1.5 grid place-items-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors",
-                            dragging ? "border-brand-500 bg-brand-50" : "border-ink-200 bg-paper/60 hover:border-ink-400"
+                            "relative mt-2 grid min-h-40 place-items-center rounded-2xl border-2 border-dashed px-4 py-7 text-center transition-all sm:min-h-48 sm:py-9",
+                            dragging ? "scale-[1.005] border-brand-500 bg-brand-50 shadow-[0_0_0_4px_rgba(217,38,22,0.06)]" : "border-ink-200 bg-paper/60 hover:border-ink-400 hover:bg-paper"
                           )}
                         >
                           <input
@@ -1035,24 +1114,25 @@ function NewRunModal({
                               e.target.value = "";
                             }}
                           />
-                          <FileUp className={cn("h-6 w-6", dragging ? "text-brand-600" : "text-ink-300")} aria-hidden="true" />
-                          <p className="mt-2.5 text-[14px] font-semibold text-ink-900">Drop the tender pack here</p>
-                          <p className="mt-1 font-code text-[8px] tracking-[0.16em] text-ink-400">
+                          <span className={cn("grid h-11 w-11 place-items-center rounded-xl transition-colors", dragging ? "bg-brand-100" : "bg-white shadow-sm")}>
+                            <FileUp className={cn("h-5 w-5", dragging ? "text-brand-600" : "text-ink-400")} aria-hidden="true" />
+                          </span>
+                          <p className="mt-3 text-[14px] font-semibold text-ink-900">Drop the tender pack here</p>
+                          <p className="mt-1 text-[12px] text-ink-500">or browse files from your device</p>
+                          <p className="mt-2 font-code text-[8px] tracking-[0.14em] text-ink-400">
                             NOTICE · BIDS · OCDS JSON · PRICE SCHEDULES · EMAILS — UP TO 12 FILES
                           </p>
-                          <p className="mt-1.5 font-code text-[7.5px] tracking-[0.16em] text-ink-300">
+                          <p className="mt-1.5 font-code text-[7.5px] tracking-[0.12em] text-ink-300">
                             REAL FILES MIRROR TO FIREBASE STORAGE · PROJECT “PUBLIC-TENDER”
                           </p>
-                          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => fileInputRef.current?.click()}
-                              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink-950 px-4 font-code text-[9px] font-bold tracking-[0.14em] text-white transition-colors hover:bg-brand-600"
-                            >
-                              <FileUp className="h-3.5 w-3.5" aria-hidden="true" />
-                              BROWSE FILES
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg bg-ink-950 px-4 font-code text-[9px] font-bold tracking-[0.14em] text-white transition-colors hover:bg-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                          >
+                            <FileUp className="h-3.5 w-3.5" aria-hidden="true" />
+                            BROWSE FILES
+                          </button>
                         </div>
                       </div>
                       {docs.length > 0 && (
@@ -1074,12 +1154,24 @@ function NewRunModal({
                           </div>
                           <ul className="mt-2.5 max-h-40 space-y-1.5 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-ink-200 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1">
                             {docs.map((d) => (
-                              <li key={d.id} className="flex items-center gap-2.5 rounded-lg border border-ink-100 bg-white px-3 py-2">
+                              <li key={d.id} className="flex items-center gap-2.5 rounded-xl border border-ink-100 bg-white px-3 py-2.5">
                                 <FileText className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
                                 <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-800">{d.name}</span>
                                 <span className="shrink-0 font-code text-[8px] tracking-[0.08em] text-ink-300">{d.size}</span>
                                 <DocStatusChip status={d.status} />
                                 {d.storage && <StorageChip storage={d.storage} />}
+                                <button
+                                  type="button"
+                                  aria-label={`Remove ${d.name}`}
+                                  onClick={() => {
+                                    filesRef.current.delete(d.id);
+                                    docsRef.current = docsRef.current.filter((item) => item.id !== d.id);
+                                    setDocs(docsRef.current);
+                                  }}
+                                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-300 transition-colors hover:bg-brand-50 hover:text-brand-700"
+                                >
+                                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                                </button>
                               </li>
                             ))}
                           </ul>
@@ -1090,9 +1182,13 @@ function NewRunModal({
 
                   {step === 2 && (
                     <>
+                      <div className="rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3">
+                        <p className="font-code text-[8px] font-bold tracking-[0.18em] text-brand-700">03 / REVIEW SCOPE</p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-ink-600">Choose the checks for this run. Page-level citations remain on for every finding.</p>
+                      </div>
                       <div>
                         <p className="font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">SCOPE OF REVIEW</p>
-                        <ul className="mt-1.5 space-y-1.5">
+                        <ul className="mt-2.5 space-y-2">
                           {SCOPE_CHECKS.map((c) => {
                             const on = checks[c.id];
                             return (
@@ -1102,24 +1198,26 @@ function NewRunModal({
                                   onClick={() => setChecks((prev) => ({ ...prev, [c.id]: !prev[c.id] }))}
                                   aria-pressed={on}
                                   className={cn(
-                                    "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all",
-                                    on ? "border-ink-950 bg-ink-950/[0.03]" : "border-ink-200 bg-white hover:border-ink-400"
+                                    "flex w-full items-start gap-3.5 rounded-2xl border px-4 py-3.5 text-left transition-all sm:px-5 sm:py-4",
+                                    on ? "border-ink-950 bg-paper shadow-[0_2px_8px_rgba(11,12,15,0.04)]" : "border-ink-200 bg-white hover:border-ink-400 hover:bg-paper/60"
                                   )}
                                 >
-                                  <span
+                                  <motion.span
+                                    animate={{ scale: on ? 1 : 0.9 }}
+                                    transition={{ duration: 0.2, ease: EASE }}
                                     className={cn(
-                                      "mt-0.5 grid h-4.5 w-4.5 shrink-0 place-items-center rounded-md border",
+                                      "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border transition-colors",
                                       on ? "border-ink-950 bg-ink-950 text-white" : "border-ink-300 bg-white text-transparent"
                                     )}
                                     aria-hidden="true"
                                   >
-                                    <CircleCheck className="h-3 w-3" />
-                                  </span>
+                                    <CircleCheck className="h-4 w-4" />
+                                  </motion.span>
                                   <span className="min-w-0">
-                                    <span className={cn("block text-[13.5px] font-semibold", on ? "text-ink-950" : "text-ink-500")}>
+                                    <span className={cn("block text-[14px] font-semibold", on ? "text-ink-950" : "text-ink-600")}>
                                       {c.label}
                                     </span>
-                                    <span className="mt-0.5 block text-[12px] leading-relaxed text-ink-500">{c.desc}</span>
+                                    <span className="mt-1 block text-[12.5px] leading-relaxed text-ink-500">{c.desc}</span>
                                   </span>
                                 </button>
                               </li>
@@ -1138,20 +1236,30 @@ function NewRunModal({
                       </div>
                       <p className="rounded-xl bg-paper px-4 py-3 text-center font-code text-[9px] font-bold tracking-[0.16em] text-ink-700">
                         {docs.length} DOCUMENT{docs.length === 1 ? "" : "S"}
-                        {cloudSynced > 0 ? ` · ${cloudSynced} CLOUD` : ""} · {checksOn} CHECK{checksOn === 1 ? "" : "S"} · EST. 11 MIN
+                        {cloudSynced > 0 ? ` · ${cloudSynced} CLOUD` : ""} · {checksOn} CHECK{checksOn === 1 ? "" : "S"} · EST. {estMinutes} MIN
                       </p>
+                      {checksOn === 0 && (
+                        <p role="status" className="text-center text-[11.5px] text-brand-700">Select at least one review check to launch this run.</p>
+                      )}
                     </>
                   )}
                 </motion.div>
               </AnimatePresence>
 
               {/* Footer nav — the wizard always shows the next step */}
-              <div className="mt-6 flex items-center gap-2.5">
+              {launchError && (
+                <div role="alert" className="mt-5 flex items-start gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[12px] leading-relaxed text-brand-800">
+                  <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{launchError}</span>
+                </div>
+              )}
+              <div className="mt-6 flex items-center gap-2.5 border-t border-ink-100 pt-5 sm:mt-7 sm:pt-6">
                 {step > 0 && (
                   <button
                     type="button"
                     onClick={() => setStep(step - 1)}
-                    className="inline-flex h-[50px] items-center gap-1.5 rounded-xl border border-ink-200 px-4 text-[13.5px] font-semibold text-ink-600 transition-colors hover:border-ink-400 hover:text-ink-900"
+                    disabled={launching}
+                    className="inline-flex h-12 items-center gap-1.5 rounded-xl border border-ink-200 px-4 text-[13.5px] font-semibold text-ink-600 transition-colors hover:border-ink-400 hover:text-ink-900 disabled:opacity-50 sm:h-[54px]"
                   >
                     <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                     Back
@@ -1159,24 +1267,42 @@ function NewRunModal({
                 )}
                 <button
                   type="submit"
-                  disabled={step === 1 && !canLeaveDocs}
-                  className="group inline-flex h-[50px] flex-1 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.3)] transition-all hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+                  disabled={(step === 1 && !canLeaveDocs) || (step === 2 && (checksOn === 0 || launching))}
+                  className="group inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[14px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.3)] transition-all hover:-translate-y-0.5 hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0 sm:h-[54px] sm:text-[15px]"
                 >
                   {step === 0 && "Continue to documents"}
                   {step === 1 && "Continue to scope"}
-                  {step === 2 && "Launch run"}
-                  <ArrowRight
-                    className={cn("h-4.5 w-4.5 transition-transform group-hover:translate-x-1", step === 1 && !canLeaveDocs && "hidden")}
-                    aria-hidden="true"
-                  />
+                  {step === 2 && (launching ? "Launching your run…" : "Launch run")}
+                  {step === 2 && launching ? (
+                    <Radio className="h-4.5 w-4.5 animate-pulse" aria-hidden="true" />
+                  ) : (
+                    <ArrowRight
+                      className={cn("h-4.5 w-4.5 transition-transform group-hover:translate-x-1", step === 1 && !canLeaveDocs && "hidden")}
+                      aria-hidden="true"
+                    />
+                  )}
                 </button>
               </div>
-              {step === 1 && !canLeaveDocs && (
+              {step === 2 && launching && (
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-ink-100" role="progressbar" aria-label="Launching run">
+                  <motion.div
+                    className="h-full w-1/3 rounded-full bg-brand-600"
+                    animate={{ x: ["-100%", "300%"] }}
+                    transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
+                  />
+                </div>
+              )}
+              {step === 1 && docs.length === 0 && (
                 <p role="status" className="mt-2.5 text-center font-code text-[8px] tracking-[0.18em] text-brand-700">
                   STAGE AT LEAST ONE DOCUMENT — DROP A FILE TO CONTINUE
                 </p>
               )}
-              <p className="mt-4 text-center font-code text-[8px] tracking-[0.2em] text-ink-400">
+              {step === 1 && docs.length > 0 && !canLeaveDocs && (
+                <p role="status" className="mt-2.5 text-center font-code text-[8px] tracking-[0.18em] text-brand-700">
+                  WAIT FOR EVERY DOCUMENT TO FINISH INDEXING BEFORE CONTINUING
+                </p>
+              )}
+              <p className="mt-4 text-center font-code text-[7.5px] tracking-[0.16em] text-ink-400 sm:text-[8px] sm:tracking-[0.2em]">
                 THE AGENT PREPARES THE FILE — THE COMMITTEE STILL AWARDS
               </p>
             </form>
@@ -1212,9 +1338,6 @@ function SidebarContent({
     <div className="flex h-full flex-col">
       <div className="px-6 pb-6 pt-7">
         <QuorumLogo variant="light" />
-        <p className="mt-3 font-code text-[8.5px] font-semibold tracking-[0.3em] text-ink-400">
-          MISSION CONTROL · v0.9
-        </p>
       </div>
 
       <nav
@@ -1222,7 +1345,7 @@ function SidebarContent({
         className="min-h-0 flex-1 overflow-y-auto px-3 pb-1 [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1"
       >
         {NAV_GROUPS.map((group, gi) => (
-          <div key={group.group} className={cn(gi > 0 && "mt-6", gi === 0 && "pt-1")}>
+          <div key={group.group} className={cn(gi > 0 && "mt-4", gi === 0 && "pt-1")}>
             <p className="px-3 pb-2 font-code text-[8px] font-semibold tracking-[0.3em] text-ink-600">{group.group}</p>
             <ul className="space-y-1">
               {group.items.map((item) => {
@@ -1236,7 +1359,7 @@ function SidebarContent({
                       onClick={() => onNavigate(item.id)}
                       aria-current={isActive ? "true" : undefined}
                       className={cn(
-                        "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+                        "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
                         isActive ? "bg-white/10 text-white" : "text-ink-400 hover:bg-white/5 hover:text-ink-100"
                       )}
                     >
@@ -1313,6 +1436,10 @@ function SidebarContent({
                 } PENDING`
               : "AWAITING SIDECAR TELEMETRY"}
           </p>
+        </div>
+
+        <div className="mt-3">
+          <ThemeModeRow />
         </div>
 
         <div className="mt-3 flex items-center gap-3 rounded-xl px-2 py-2">
@@ -2924,6 +3051,44 @@ function SettingsView({
           </button>
         </div>
 
+        <section className={`${cardClass} lg:col-span-2`} aria-labelledby="settings-team-heading">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className={labelClass}>WORKSPACE ACCESS</p>
+              <h3 id="settings-team-heading" className={titleClass}>Team Members</h3>
+              <p className="mt-1 text-[12.5px] text-ink-500">
+                People with access to this workspace. Committee decision-makers are managed separately in Committee.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-paper px-3 py-1.5 font-code text-[8px] font-bold tracking-[0.14em] text-ink-500">
+              <Users className="h-3 w-3" aria-hidden="true" />
+              INVITATIONS NOT ENABLED
+            </span>
+          </div>
+          <ul className="mt-5">
+            <li className="flex flex-wrap items-center gap-3 rounded-xl border border-ink-100 bg-paper/60 px-4 py-3.5">
+              <span
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 font-code text-[10px] font-bold text-white"
+                aria-hidden="true"
+              >
+                {initialsOf(user?.name ?? "Quorum")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-semibold text-ink-950">{user?.name ?? "Guest officer"}</p>
+                <p className="truncate font-code text-[8px] tracking-[0.12em] text-ink-500">
+                  {(user?.email ?? "NOT SIGNED IN").toUpperCase()}
+                </p>
+              </div>
+              <span className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-500">
+                CURRENT ACCOUNT
+              </span>
+            </li>
+          </ul>
+          <p className="mt-3 text-[11.5px] leading-relaxed text-ink-400">
+            Shared workspace access and member invitations are not configured yet.
+          </p>
+        </section>
+
         <div className={`${cardClass} lg:col-span-2`}>
           <p className={labelClass}>AGENT CONNECTION</p>
           <h3 className={titleClass}>Quorum sidecar</h3>
@@ -2937,6 +3102,267 @@ function SettingsView({
             ))}
           </dl>
         </div>
+      </div>
+    </ViewShell>
+  );
+}
+
+/* ── Walkthrough: a guided tour of every section, in the order a tender moves ── */
+
+type WalkthroughChapter = {
+  section: SectionId;
+  title: string;
+  summary: string;
+  steps: string[];
+  tip: string;
+  /* Chapter two opens the New run wizard instead of a section. */
+  launch?: boolean;
+};
+
+const WALKTHROUGH: WalkthroughChapter[] = [
+  {
+    section: "mc-overview",
+    title: "Start with the overview",
+    summary: "Your command deck. Every live run, every open approval and the agent's latest moves on one screen.",
+    steps: [
+      "Read the flow guide: Launch, Review, Approve, Record. Each step is clickable and jumps to where the work happens.",
+      "Check the counters for runs in progress and approvals waiting on a named officer.",
+      "Begin each session here to see what needs your signature first.",
+    ],
+    tip: "If nothing is waiting, the committee has nothing to decide, and the agent has nothing to hand over.",
+  },
+  {
+    section: "mc-runs",
+    title: "Launch a run",
+    summary: "A run is one tender reviewed end to end. The wizard takes three steps and never starts until you confirm the scope.",
+    steps: [
+      "Details: enter the tender reference and the published title exactly as it appears, then pick the source format (OCDS, PDF pack or email bag).",
+      "Documents: drop up to 12 files. Each one moves from RECEIVED to PARSING to INDEXED before you can continue. Real uploads also mirror to cloud storage, or stay in the local vault.",
+      "Scope: choose which checks the review runs. Page-level citations stay on for every finding.",
+      "Launch: the run is queued and you land on Agent runs, where it goes live.",
+    ],
+    tip: "Use the step rail to go back and correct details at any point before launch.",
+    launch: true,
+  },
+  {
+    section: "mc-runs",
+    title: "Follow agent runs",
+    summary: "The register of every tender the agent is working on, with its status and what it has found so far.",
+    steps: [
+      "RUNNING: the agent is still working through the checks.",
+      "GATE: the run has finished and is waiting for a committee decision.",
+      "COMPLETE: the run has been filed, returned or has failed.",
+      "Search and filter the register, or open a run's notes.",
+    ],
+    tip: "A run in GATE is waiting on people, not on the agent.",
+  },
+  {
+    section: "mc-gates",
+    title: "Sign or return approvals",
+    summary: "The human gate. Each pending decision shows the supplier, the value and how many findings were flagged.",
+    steps: [
+      "Review the flagged findings for the bid in question.",
+      "Sign to award the tender, or return it for clarification.",
+      "Only committee members on the roster can sign. The sidecar refuses any other signature.",
+    ],
+    tip: "The agent prepares the file and never awards. Every decision is recorded under the name of the officer who signed.",
+  },
+  {
+    section: "mc-activity",
+    title: "Watch live activity",
+    summary: "A running feed of what the agent is doing, in order, as it does it.",
+    steps: [
+      "Each event shows the step, the tool it called and the time.",
+      "Use the feed to trace how a finding was reached before you rely on it.",
+    ],
+    tip: "Leave this open while a run is in progress to see it move in real time.",
+  },
+  {
+    section: "mc-findings",
+    title: "Review findings",
+    summary: "Every issue raised across all runs, grouped by class and tied to its source.",
+    steps: [
+      "Classes: DOCUMENT, COMPLIANCE, REGISTRY, PRICING, ARITHMETIC, DISCLOSURE and LOGISTICS.",
+      "Each finding carries a page, clause or registry citation.",
+      "A finding with no citation is marked unsourced and should not be relied on.",
+      "Open a finding's run to see it in context.",
+    ],
+    tip: "Unsourced findings are the first thing to check before a gate is signed.",
+  },
+  {
+    section: "mc-reports",
+    title: "Read report packs",
+    summary: "A pack per run, ready to hand to the committee: the findings, their sources and the verdict.",
+    steps: [
+      "Open a run's pack to read the full set of findings.",
+      "The verdict shows whether the run was awarded or returned.",
+    ],
+    tip: "Packs are the document the committee reads at the sitting.",
+  },
+  {
+    section: "mc-sources",
+    title: "Check data sources",
+    summary: "The registries and documents the agent reads from, and what each one contributes.",
+    steps: [
+      "See which sources are connected and what they cover.",
+      "Confirm a source is available before launching a run that depends on it.",
+    ],
+    tip: "A missing source shows up as a gap in the findings, not as a silent pass.",
+  },
+  {
+    section: "mc-ledger",
+    title: "Consult the award history",
+    summary: "The ledger of every AWARDED and RETURNED decision, with who signed and when.",
+    steps: [
+      "Each row names the tender, the decision, the signer and the time.",
+      "Entries are appended, never edited.",
+    ],
+    tip: "Use this for audit questions: it is the record of who decided what.",
+  },
+  {
+    section: "mc-committee",
+    title: "Sit on the committee",
+    summary: "The roster in roll-call order: the chair, the members present and any excused.",
+    steps: [
+      "Summon a sitting to call the roll.",
+      "When quorum is present, the sitting can proceed to decisions.",
+    ],
+    tip: "Quorum is checked before any gate can be signed in a sitting.",
+  },
+  {
+    section: "mc-stack",
+    title: "Inspect tools and models",
+    summary: "The sidecar's tools, the agent graphs and the open-weights models behind them.",
+    steps: [
+      "Each graph runs its checks and stops at the human gate.",
+      "The tool log records every call the agent makes.",
+    ],
+    tip: "If something looks wrong, the tool log shows exactly what the agent did and in what order.",
+  },
+  {
+    section: "mc-rules",
+    title: "Set rules and safeguards",
+    summary: "The thresholds the agent applies: price variance and the document checklist.",
+    steps: [
+      "Price variance: flag any bid priced above the framework median by 15%, 25% or 40%.",
+      "Document checklist: standard or strict, before a run may complete.",
+      "Every change is written to the audit trail.",
+    ],
+    tip: "The standing rule holds regardless of settings: the committee signs, and the agent never does.",
+  },
+  {
+    section: "mc-settings",
+    title: "Manage your account",
+    summary: "Your signed-in identity, the agent connection and this session.",
+    steps: [
+      "Account shows the officer signed in. Identity comes from sign-in.",
+      "Agent connection shows whether the sidecar is online and how many runs it has recorded.",
+      "Sign out ends this browser session. Runs and the audit trail stay on the sidecar.",
+    ],
+    tip: "If the sidecar shows offline, decisions cannot be recorded until it is back.",
+  },
+];
+
+const SECTION_ICON = Object.fromEntries(
+  NAV_GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.icon] as const))
+) as Record<SectionId, LucideIcon>;
+
+function WalkthroughView({
+  onOpen,
+  onNewRun,
+}: {
+  onOpen: (id: SectionId) => void;
+  onNewRun: () => void;
+}) {
+  const jumpTo = (no: number) => {
+    document.getElementById(`wt-${no}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+    <ViewShell
+      fig="15"
+      title="Walkthrough"
+      sub="A tour of every part of Quorum, in the order a tender moves through it. Each chapter says what the screen does, what you decide there, and where to go next."
+      action={
+        <button
+          type="button"
+          onClick={onNewRun}
+          className="group inline-flex h-11 items-center gap-2 rounded-xl bg-brand-600 px-5 text-[13.5px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.3)] transition-all hover:-translate-y-0.5 hover:bg-brand-700"
+        >
+          Launch a run
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+        </button>
+      }
+    >
+      <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label="Chapters">
+        {WALKTHROUGH.map((ch, i) => {
+          const Icon = SECTION_ICON[ch.section];
+          return (
+            <li key={`${ch.section}-${i}`}>
+              <button
+                type="button"
+                onClick={() => jumpTo(i + 1)}
+                className="group flex w-full items-center gap-3 rounded-xl border border-ink-100 bg-white px-4 py-3 text-left transition-colors hover:border-ink-400"
+              >
+                <span className="font-code text-[9px] font-bold tracking-[0.14em] text-brand-700">{String(i + 1).padStart(2, "0")}</span>
+                <Icon className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-900">{ch.title}</span>
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-ink-300 transition-colors group-hover:text-ink-700" aria-hidden="true" />
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="mt-8 space-y-4 sm:space-y-5">
+        {WALKTHROUGH.map((ch, i) => {
+          const Icon = SECTION_ICON[ch.section];
+          const no = String(i + 1).padStart(2, "0");
+          return (
+            <article
+              key={`${ch.section}-${i}`}
+              id={`wt-${i + 1}`}
+              className="scroll-mt-24 rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)] sm:p-7"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-4">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ink-950 text-white" aria-hidden="true">
+                    <Icon className="h-4.5 w-4.5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-code text-[8.5px] font-bold tracking-[0.22em] text-brand-700">CHAPTER {no}</p>
+                    <h3 className="mt-1 font-display text-[18px] font-black tracking-[-0.01em] text-ink-950 sm:text-[20px]">{ch.title}</h3>
+                    <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-ink-600">{ch.summary}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => (ch.launch ? onNewRun() : onOpen(ch.section))}
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3.5 font-code text-[9px] font-bold tracking-[0.12em] text-ink-700 transition-colors hover:border-ink-950 hover:text-ink-950"
+                >
+                  {ch.launch ? "LAUNCH A RUN" : `OPEN ${SECTION_LABEL[ch.section].toUpperCase()}`}
+                  <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </div>
+
+              <ol className="mt-5 space-y-2.5 border-t border-ink-100 pt-5">
+                {ch.steps.map((step, s) => (
+                  <li key={s} className="flex gap-3 text-[13px] leading-relaxed text-ink-700">
+                    <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-ink-200 font-code text-[8px] font-bold text-ink-500">
+                      {s + 1}
+                    </span>
+                    <span className="min-w-0">{step}</span>
+                  </li>
+                ))}
+              </ol>
+
+              <p className="mt-5 rounded-xl bg-paper px-4 py-3 text-[12.5px] leading-relaxed text-ink-600">
+                <span className="mr-2 font-code text-[8.5px] font-bold tracking-[0.16em] text-brand-700">TIP</span>
+                {ch.tip}
+              </p>
+            </article>
+          );
+        })}
       </div>
     </ViewShell>
   );
@@ -3083,11 +3509,11 @@ function RunsView({
       title="Run register"
       sub="Every file the agent has opened — live, queued, at a gate or decided. Expand a run for its top findings and its audit trail."
     >
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-span-2">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6">
+        <div className="min-w-0">
           <RunRegister runs={runs} query={query} onQuery={onQuery} filter={filter} onFilter={onFilter} onToast={onToast} notes={notes} />
         </div>
-        <div className="grid content-start gap-4 sm:gap-6">
+        <div className="grid content-start gap-4 sm:grid-cols-2 sm:gap-6">
           <NewRunCard onNewRun={onNewRun} />
           <StandingRuleCard onToast={onToast} />
         </div>
@@ -3357,18 +3783,18 @@ export function Dashboard({
   };
 
   const launchRun = async (ref: string, title: string, format: string, docs: number, checks: number) => {
-    setModalOpen(false);
+    let res: Response;
     try {
-      const res = await fetch("/api/runs?XTransformPort=3031", {
+      res = await fetch("/api/runs?XTransformPort=3031", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ tenderId: ref }),
       });
-      if (!res.ok) throw new Error(String(res.status));
     } catch {
-      onToast("STACK UNREACHABLE — quorum-mcp NOT RESPONDING");
-      return;
+      throw new Error("The run service is unavailable. Check your connection and try again.");
     }
+    if (!res.ok) throw new Error(`The run service could not start this review (HTTP ${res.status}). Check the tender reference and try again.`);
+    setModalOpen(false);
     setFlow((f) => ({ ...f, refs: [...f.refs, ref] }));
     /* Guide the officer to the register — the run goes live in front of them. */
     setActive("mc-runs");
@@ -3472,6 +3898,8 @@ export function Dashboard({
         return <StackConsole onToast={onToast} />;
       case "mc-settings":
         return <SettingsView user={user} agent={agent} onSignOut={onSignOut} />;
+      case "mc-walkthrough":
+        return <WalkthroughView onOpen={switchTo} onNewRun={() => setModalOpen(true)} />;
       default:
         return null;
     }
@@ -3701,18 +4129,16 @@ export function Dashboard({
           </section>
 
           {/* Runs + gates */}
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-            <div className="min-w-0 lg:col-span-2">
-              <RunRegister
-                runs={runs}
-                query={query}
-                onQuery={setQuery}
-                filter={filter}
-                onFilter={setFilter}
-                onToast={onToast}
-                notes={notesMap}
-              />
-            </div>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6">
+            <RunRegister
+              runs={runs}
+              query={query}
+              onQuery={setQuery}
+              filter={filter}
+              onFilter={setFilter}
+              onToast={onToast}
+              notes={notesMap}
+            />
             <GateQueue
               queue={queue}
               ledger={ledger}

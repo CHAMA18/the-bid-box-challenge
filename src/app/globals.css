@@ -173,6 +173,73 @@
   --ring: #e8382a;
 }
 
+/*
+ * Dark theme. Same token names as light, remapped so every existing
+ * `bg-paper`, `text-ink-900`, `border-ink-200` etc. re-tones without edits.
+ */
+.dark {
+  color-scheme: dark;
+  --background: #0c0d10;
+  --foreground: #f1f2f4;
+  --card: #14161b;
+  --card-foreground: #f1f2f4;
+  --popover: #14161b;
+  --popover-foreground: #f1f2f4;
+  --primary: #e8382a;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1d24;
+  --secondary-foreground: #f1f2f4;
+  --muted: #1a1d24;
+  --muted-foreground: #9aa0ab;
+  --accent: #2a0d09;
+  --accent-foreground: #f7a097;
+  --destructive: #f06b5c;
+  --border: #262a33;
+  --input: #262a33;
+  --ring: #e8382a;
+
+  --color-paper: #0c0d10;
+  --color-sand: #14161b;
+
+  --color-brand-50: #2a0d09;
+  --color-brand-100: #3a120d;
+  --color-brand-200: #5c1c14;
+  --color-brand-700: #f06b5c;
+  --color-brand-800: #f7a097;
+  --color-brand-900: #fbc9c2;
+
+  --color-ink-50: #14161b;
+  --color-ink-100: #1a1d24;
+  --color-ink-200: #262a33;
+  --color-ink-300: #343a45;
+  --color-ink-400: #7d8491;
+  --color-ink-500: #9aa0ab;
+  --color-ink-600: #b3b8c1;
+  --color-ink-700: #c9ccd3;
+  --color-ink-800: #dfe1e6;
+  --color-ink-900: #f1f2f4;
+  --color-ink-950: #fafafb;
+}
+
+/*
+ * Dark fills keep the light-theme ink scale. Solid ink or night surfaces are
+ * dark in both themes, so their text must keep reading as light-on-dark.
+ * Scoping the ink variables to these elements leaves their children unchanged.
+ */
+:is(.bg-ink-700, .bg-ink-800, .bg-ink-900, .bg-ink-950, .bg-night, .bg-night-2) {
+  --color-ink-50: #f5f5f6;
+  --color-ink-100: #e9eaec;
+  --color-ink-200: #d3d5da;
+  --color-ink-300: #b0b4bc;
+  --color-ink-400: #878d98;
+  --color-ink-500: #6a707c;
+  --color-ink-600: #545a65;
+  --color-ink-700: #454a53;
+  --color-ink-800: #2b2f36;
+  --color-ink-900: #16181d;
+  --color-ink-950: #0b0c0f;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -238,5 +305,21 @@
   }
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+  /* Light surfaces become cards in dark mode. Logo tiles opt out with keep-light. */
+  .dark .bg-white:not(.keep-light) {
+    background-color: #14161b;
+  }
+  /* Translucent white chips (bg-white/70, bg-white/95) need their own rules. */
+  .dark .bg-white\/70 {
+    background-color: rgb(20 22 27 / 0.7);
+  }
+  .dark .bg-white\/95 {
+    background-color: rgb(20 22 27 / 0.95);
+  }
+  .dark .bg-grid-light {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
   }
 }
