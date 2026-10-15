@@ -41,3 +41,25 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
+
+// ── Committee (the humans who hold the gavel) ───────────────────────────────
+// The standing committee is stored data, not hardcoded copy: members are
+// rows, seat capacity and the quorum threshold are settings, and the gavel
+// seat belongs to whoever is actually signed in (resolved from the session).
+
+model CommitteeMember {
+  id        String   @id @default(cuid())
+  name      String
+  role      String
+  isChair   Boolean  @default(false)
+  status    String   @default("PRESENT") // PRESENT | EXCUSED — a member; vacancy is the absence of a row
+  seatOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
