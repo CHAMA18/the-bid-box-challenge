@@ -1,6 +1,6 @@
 {
   "labeller": "one human reviewer, one pass over the source documents, written before the engine was run on them. Not independently double-labelled.",
-  "covered_means": "a rule in the engine is designed to raise this finding type. covered:false items measure what the rule set does not claim to catch.",
+  "covered_means": "a rule in the engine is designed to raise this finding type. covered:false items measure what the rule set does not claim to catch. Coverage flags track the CURRENT rule set: when a rule lands (e.g. plan_review deep-value parsing of markdown bid values, 2026-10-16), the flags it covers flip to true — the labels themselves are never edited after their original single pass.",
   "tenders": {
     "KE-NCB-104293": [
       { "rule": "R-PRICE-OUTLIER", "file": "02-bid-mediqueast.md", "match": "MRI 1.5T", "covered": true, "note": "KES 118.4M vs peer 52.9M (2.2x)" },
@@ -16,8 +16,8 @@
       { "rule": "R-DOC-MISSING", "file": "03-bid-equatorial-medicines.md", "match": "WHO prequalification", "covered": true, "note": "REQUIRED WHO/PPB registration certificates absent" },
       { "rule": "R-DOC-MISSING", "file": "02-bid-savanna-pharma.md", "match": "Cold-chain capability", "covered": true, "note": "REQUIRED document absent" },
       { "rule": "R-LICENCE-EXPIRED", "file": "03-bid-equatorial-medicines.md", "match": "PPB", "covered": false, "note": "wholesaler licence expired; no rule covers licences" },
-      { "rule": "R-VALUE-OUTLIER", "file": "03-bid-equatorial-medicines.md", "match": "Equatorial", "covered": false, "note": "KES 1,362.9M vs peer 588.4M (2.3x). The rule exists but only reads OCDS values; markdown bid values are not parsed." },
-      { "rule": "R-OVER-BUDGET", "file": "03-bid-equatorial-medicines.md", "match": "Equatorial", "covered": false, "note": "bid exceeds the KES 624.8M ceiling; no rule reads markdown bid values" }
+      { "rule": "R-VALUE-OUTLIER", "file": "03-bid-equatorial-medicines.md", "match": "Equatorial", "covered": true, "note": "KES 1,362.9M vs peer 588.4M (2.3x). Covered by the plan_review deep-value parser (markdown bid values), added 2026-10-16." },
+      { "rule": "R-OVER-BUDGET", "file": "03-bid-equatorial-medicines.md", "match": "Equatorial", "covered": true, "note": "bid exceeds the KES 624.8M ceiling. Covered by R-OVER-BUDGET over parsed markdown bid values vs the published ceiling, added 2026-10-16." }
     ],
     "KE-KCS-2026-042": [
       { "rule": "R-PRICE-OUTLIER", "file": "03-bid-coastline-screening.md", "match": "Drive-through", "covered": true, "note": "KES 1,140M vs peer 466M (2.4x)" },
@@ -26,16 +26,16 @@
       { "rule": "R-SPEC-DEVIATION", "file": "03-bid-coastline-screening.md", "match": "radiation certification", "covered": true, "note": "in-house certification pathway requested" },
       { "rule": "R-DOC-MISSING", "file": "03-bid-coastline-screening.md", "match": "Reference installation", "covered": true, "note": "second administration letter pending" },
       { "rule": "R-DOC-MISSING", "file": "03-bid-coastline-screening.md", "match": "Radiation Protection Board", "covered": true, "note": "type-approval pending at bid close" },
-      { "rule": "R-VALUE-OUTLIER", "file": "03-bid-coastline-screening.md", "match": "Coastline", "covered": false, "note": "KES 3.94B vs peer 1.77B (2.2x). Markdown bid values are not parsed." },
-      { "rule": "R-OVER-BUDGET", "file": "03-bid-coastline-screening.md", "match": "Coastline", "covered": false, "note": "exceeds the KES 1.86B ceiling; no rule reads markdown bid values" },
+      { "rule": "R-VALUE-OUTLIER", "file": "03-bid-coastline-screening.md", "match": "Coastline", "covered": true, "note": "KES 3.94B vs peer 1.77B (2.2x). Covered by the plan_review deep-value parser, added 2026-10-16." },
+      { "rule": "R-OVER-BUDGET", "file": "03-bid-coastline-screening.md", "match": "Coastline", "covered": true, "note": "exceeds the KES 1.86B ceiling. Covered by R-OVER-BUDGET (markdown values vs published ceiling), added 2026-10-16." },
       { "rule": "R-RPB-PENDING", "file": "02-bid-portscan-systems.md", "match": "Radiation Protection Board", "covered": false, "note": "the notice makes units without RPB approval ineligible; PortScan approval is still in review. No rule covers this." }
     ],
     "RW-UMUCYO-2027-006": [
       { "rule": "R-PRICE-OUTLIER", "file": "03-bid-ubumwe-mobile.md", "match": "Solar tablet", "covered": true, "note": "92,400 vs peer 24,600 (3.8x)" },
       { "rule": "R-PRICE-OUTLIER", "file": "03-bid-ubumwe-mobile.md", "match": "Connectivity", "covered": true, "note": "182,000 vs peer 58,900 (3.1x)" },
       { "rule": "R-SPEC-DEVIATION", "file": "03-bid-ubumwe-mobile.md", "match": "firmware", "covered": true, "note": "third-party MDM proposed in place of buyer-signed firmware" },
-      { "rule": "R-VALUE-OUTLIER", "file": "03-bid-ubumwe-mobile.md", "match": "Ubumwe", "covered": false, "note": "RWF 20.15B vs peer 8.93B (2.3x). Markdown bid values are not parsed." },
-      { "rule": "R-OVER-BUDGET", "file": "03-bid-ubumwe-mobile.md", "match": "Ubumwe", "covered": false, "note": "exceeds the RWF 9.8B ceiling; no rule reads markdown bid values" }
+      { "rule": "R-VALUE-OUTLIER", "file": "03-bid-ubumwe-mobile.md", "match": "Ubumwe", "covered": true, "note": "RWF 20.15B vs peer 8.93B (2.3x). Covered by the plan_review deep-value parser, added 2026-10-16." },
+      { "rule": "R-OVER-BUDGET", "file": "03-bid-ubumwe-mobile.md", "match": "Ubumwe", "covered": true, "note": "exceeds the RWF 9.8B ceiling. Covered by R-OVER-BUDGET (markdown values vs published ceiling), added 2026-10-16." }
     ],
     "KE-PHC-2026-311": [
       { "rule": "R-PRICE-OUTLIER", "file": "04-bid-highland-refrigeration.md", "match": "Solar vaccine refrigerator", "covered": true, "note": "KES 1,190,000 vs peer median 408,500 (2.9x)" },
@@ -45,14 +45,14 @@
       { "rule": "R-DOC-MISSING", "file": "03-bid-mwangaza-cold-chain.md", "match": "Solar product performance", "covered": true, "note": "listed as pending; pending counts as not provided" },
       { "rule": "R-SPEC-DEVIATION", "file": "04-bid-highland-refrigeration.md", "match": "lithium", "covered": true, "note": "alternative battery chemistry declared" },
       { "rule": "R-LICENCE-EXPIRED", "file": "02-bid-nyota-energy.md", "match": "EPRA", "covered": false, "note": "installer licence expired; no rule covers licences" },
-      { "rule": "R-OVER-BUDGET", "file": "04-bid-highland-refrigeration.md", "match": "Highland", "covered": false, "note": "KES 18.7M vs KES 15M ceiling; no rule reads markdown bid values" }
+      { "rule": "R-OVER-BUDGET", "file": "04-bid-highland-refrigeration.md", "match": "Highland", "covered": true, "note": "KES 18.7M vs KES 15M ceiling. Covered by R-OVER-BUDGET (markdown values vs published ceiling), added 2026-10-16." }
     ],
     "KE-WRA-2026-058": [
       { "rule": "R-PRICE-OUTLIER", "file": "04-bid-sahel-water-works.md", "match": "Solar submersible pump", "covered": true, "note": "KES 540,000 vs peer median 188,500 (2.9x)" },
       { "rule": "R-DOC-MISSING", "file": "03-bid-rift-pumps.md", "match": "Water Resources Authority registration", "covered": true, "note": "listed as to follow; pending counts as not provided" },
       { "rule": "R-DOC-MISSING", "file": "04-bid-sahel-water-works.md", "match": "Water Resources Authority registration", "covered": true, "note": "not referenced" },
       { "rule": "R-SPEC-DEVIATION", "file": "03-bid-rift-pumps.md", "match": "stainless", "covered": true, "note": "alternative impeller material declared" },
-      { "rule": "R-OVER-BUDGET", "file": "04-bid-sahel-water-works.md", "match": "Sahel", "covered": false, "note": "KES 12.6M vs KES 8M ceiling; no rule reads markdown bid values" }
+      { "rule": "R-OVER-BUDGET", "file": "04-bid-sahel-water-works.md", "match": "Sahel", "covered": true, "note": "KES 12.6M vs KES 8M ceiling. Covered by R-OVER-BUDGET (markdown values vs published ceiling), added 2026-10-16." }
     ]
   },
   "heldOut": ["KE-PHC-2026-311", "KE-WRA-2026-058"],

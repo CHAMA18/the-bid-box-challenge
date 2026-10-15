@@ -1,17 +1,26 @@
 import { describe, expect, test } from "bun:test";
 import {
   approverAllowed,
+  buildPack,
   callLlama,
   citesKnownDocument,
   fetchRoster,
+  flagPack,
   llmConfigFromEnv,
+  llmPlanFromPack,
   type FetchLike,
+  parseMarkdownBidValue,
+  parseMarkdownCeiling,
   parseOcdsBids,
   parseOcdsRecords,
+  planFromPack,
+  repairFinding,
   runAwardRules,
   runRules,
   verifyFinding,
+  verifyFindingReason,
   type BidDoc,
+  type Finding,
   type RosterMember,
 } from "./engine";
 
@@ -240,5 +249,140 @@ describe("rules cite real sources only", () => {
     for (const f of findings) {
       expect(f.citation.trim().length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("markdown bid values and budget ceilings", () => {
+  const BID = "# BID — Coastline\n\n**Bidder:** Coastline Screening Solutions\n**Bid value:** KES 3,940,000,000\n";
+
+  test("parses the bid's own stated value line, cited to that line", () => {
+    const v = parseMarkdownBidValue(BID);
+    expect(v?.amount).toBe(3_940_000_000);
+    expect(v?.currency).toBe("KES");
+    expect(v?.ref).toBe("bid value line");
+    expect(parseMarkdownBidValue("no value line here")).toBeUndefined();
+  });
+
+  test("parses the notice's published ceiling", () => {
+    const c = parseMarkdownCeiling("**Budget ceiling:** KES 1,860,000,000 (VAT inclusive)");
+    expect(c?.amount).toBe(1_860_000_000);
+    expect(c?.currency).toBe("KES");
+    expect(parseMarkdownCeiling("no ceiling")).toBeUndefined();
+  });
+});
+
+describe("plan_review — the depth decision for one pack", () => {
+  const notice = "# NOTICE\n**Budget ceiling:** KES 1,860,000,000\n- [REQUIRED] Tax compliance certificate\n";
+  const pack = {
+    bids: [
+      { bidder: "PORTSCAN SYSTEMS", text: "**Bid value:** KES 1,772,000,000", source: "02-bid-portscan-systems.md" },
+      { bidder: "COASTLINE SCREENING", text: "**Bid value:** KES 3,940,000,000", source: "03-bid-coastline-screening.md" },
+    ],
+    records: [],
+    notices: [{ file: "01-tender-notice.md", text: notice }],
+  };
+
+  test("the heuristic plan enables deep value parsing for a markdown pack and ranks the families", () => {
+    const plan = planFromPack(["01-tender-notice.md", "02-bid-portscan-systems.md", "03-bid-coastline-screening.md"], pack);
+    expect(plan.source).toBe("heuristic");
+    expect(plan.parseMarkdownValues).toBe(true);
+    expect(plan.focusRules[0]).toBe("OVER-BUDGET");
+    expect(plan.focusRules).toContain("DOC-MISSING");
+    expect(plan.maxDrafts).toBe(2);
+  });
+
+  test("a pack with no markdown values keeps deep parsing off", () => {
+    const plan = planFromPack(["x.md"], { bids: [{ bidder: "A", text: "nothing structured", source: "x.md" }], records: [], notices: [] });
+    expect(plan.parseMarkdownValues).toBe(false);
+    expect(plan.focusRules).not.toContain("OVER-BUDGET");
+  });
+
+  test("an LLM plan is validated and clamped; garbage falls back to the heuristic", async () => {
+    const cfg = { baseUrl: "http://llama.internal:8000/v1", model: "llama-3.1-70b-instruct" };
+    let calls = 0;
+    const good: FetchLike = async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({
+          model: "llama-3.1-70b-instruct",
+          choices: [{ message: { content: '{"parseMarkdownValues":true,"focusRules":["OVER-BUDGET","MADE-UP"],"maxDrafts":99,"note":"budget first"}' } }],
+        }),
+      );
+    };
+    const plan = await llmPlanFromPack(["01-tender-notice.md"], pack, "run-plan-test", cfg, good);
+    expect(plan.source).toBe("llm");
+    expect(plan.focusRules).toEqual(["OVER-BUDGET"]);
+    expect(plan.maxDrafts).toBe(4);
+    expect(plan.parseMarkdownValues).toBe(true);
+    expect(plan.note).toBe("budget first");
+
+    const bad: FetchLike = async () => new Response("nope", { status: 500 });
+    const fallback = await llmPlanFromPack(["01-tender-notice.md"], pack, "run-plan-test", cfg, bad);
+    expect(fallback.source).toBe("heuristic");
+    expect(fallback.note).toContain("llm plan failed");
+    expect(calls).toBe(1);
+  });
+});
+
+describe("flagPack under the plan: over-budget and markdown value outliers", () => {
+  const files = ["01-tender-notice.md", "02-bid-portscan-systems.md", "03-bid-coastline-screening.md"];
+  const sources: Record<string, string> = {
+    "01-tender-notice.md": "# NOTICE\n**Budget ceiling:** KES 1,860,000,000 (VAT inclusive)\n",
+    "02-bid-portscan-systems.md": "**Bidder:** Portscan Systems\n**Bid value:** KES 1,772,000,000\n",
+    "03-bid-coastline-screening.md": "**Bidder:** Coastline Screening Solutions\n**Bid value:** KES 3,940,000,000\n",
+  };
+  const pack = buildPack(files, sources);
+  const { kept } = flagPack(pack, files);
+
+  test("a bid over the published ceiling is flagged, cited to its own value line, and survives the self-check", () => {
+    const f = kept.find((x) => x.rule === "R-OVER-BUDGET");
+    expect(f?.item).toBe("COASTLINE SCREENING");
+    expect(f?.citation).toBe("03-bid-coastline-screening.md, bid value line");
+    expect(f && verifyFinding(f, sources)).toBe(true);
+  });
+
+  test("a markdown bid value outlier is flagged against its peer median and survives the self-check", () => {
+    const f = kept.find((x) => x.rule === "R-VALUE-OUTLIER");
+    expect(f?.item).toBe("COASTLINE SCREENING");
+    expect(f?.evidence).toContain("3,940,000,000");
+    expect(f && verifyFinding(f, sources)).toBe(true);
+  });
+
+  test("an under-ceiling, mid-pack bid is not flagged", () => {
+    expect(kept.filter((x) => x.rule === "R-OVER-BUDGET")).toHaveLength(1);
+    expect(kept.some((x) => x.item === "PORTSCAN SYSTEMS" && (x.rule === "R-OVER-BUDGET" || x.rule === "R-VALUE-OUTLIER"))).toBe(false);
+  });
+});
+
+describe("bounded reason-and-retry", () => {
+  const sources = {
+    "03-bid-coastline.md": "**Bidder:** Coastline Screening Solutions\n**Bid value:** KES 3,940,000,000\nAlternative offered for the radiation segment.\n",
+  };
+
+  test("a tampered evidence line is re-anchored to a real line and passes the self-check", () => {
+    const f: Finding = { id: "F-01", rule: "R-SPEC-DEVIATION", severity: "HIGH", item: "COASTLINE SCREENING", evidence: "garbled evidence that is in no document", citation: "03-bid-coastline.md, specifications matrix" };
+    const out = repairFinding({ finding: f, reason: "deviation text not found in cited bid" }, sources);
+    expect(out.repaired).toBeDefined();
+    expect(out.repaired?.repaired).toBe(true);
+    expect(out.repaired && verifyFinding(out.repaired, sources)).toBe(true);
+  });
+
+  test("a value finding with garbled evidence is re-anchored via its stated amount", () => {
+    const f: Finding = { id: "F-02", rule: "R-VALUE-OUTLIER", severity: "HIGH", item: "COASTLINE SCREENING", evidence: "numbers misplaced", citation: "03-bid-coastline.md, bid value line" };
+    const out = repairFinding({ finding: f, reason: "bid value or bidder not found in cited bid" }, sources);
+    expect(out.repaired?.evidence).toContain("3,940,000,000");
+  });
+
+  test("a finding citing a document that does not exist is dropped with a reason, never repaired", () => {
+    const f: Finding = { id: "F-03", rule: "R-SPEC-DEVIATION", severity: "HIGH", item: "COASTLINE SCREENING", evidence: "x", citation: "99-bid-ghost.md, specifications matrix" };
+    const out = repairFinding({ finding: f, reason: "cited document missing" }, sources);
+    expect(out.repaired).toBeUndefined();
+    expect(out.dropReason).toContain("does not exist");
+  });
+
+  test("verifyFinding reports the reason a finding was refused", () => {
+    const f: Finding = { id: "", rule: "R-SPEC-DEVIATION", severity: "HIGH", item: "X", evidence: "absent line", citation: "03-bid-coastline.md, specifications matrix" };
+    expect(verifyFindingReason(f, sources)).toContain("not found");
+    expect(verifyFindingReason(f, { "99.md": "x" })).toContain("not in this tender");
   });
 });

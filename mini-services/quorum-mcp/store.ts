@@ -43,6 +43,8 @@ export interface Finding {
   item: string;
   evidence: string;
   citation: string;
+  /* Set when the bounded repair loop re-anchored this finding to a verified line of its cited document. */
+  repaired?: boolean;
 }
 
 export interface Draft {
@@ -73,6 +75,20 @@ export interface Gate {
   receipt?: { submissionId: string; hash: string; portal: string };
 }
 
+/* The review plan: decided before any rule runs, by the configured LLM when one is set
+   and by a deterministic pack inspection otherwise. Every field changes downstream
+   behaviour (which parsers run, which rule families are drafted first, how many drafts). */
+export interface ReviewPlan {
+  pack: { files: number; bids: number; ocdsRecords: number; markdownValueBids: number; ocdsValueBids: number };
+  /* Deep value parsing: markdown "**Bid value:**" lines join OCDS values for outlier/budget rules. */
+  parseMarkdownValues: boolean;
+  focusRules: string[];
+  maxDrafts: number;
+  note: string;
+  source: "heuristic" | "llm";
+  model?: string;
+}
+
 export interface Run {
   id: string;
   tenderId: string;
@@ -85,6 +101,8 @@ export interface Run {
   drafts: Draft[];
   gateId?: string;
   error?: string;
+  /* The plan this run was reviewed under (plan_review node output). */
+  plan?: ReviewPlan;
   /* Drafting cost for this run: how many drafts came from the model and the tokens it used. */
   usage?: { drafts: number; llmDrafts: number; promptTokens: number; completionTokens: number };
 }

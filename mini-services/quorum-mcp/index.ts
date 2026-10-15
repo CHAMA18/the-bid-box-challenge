@@ -268,7 +268,7 @@ Bun.serve({
         version: "1.0.0",
         uptimeSec: Math.round(performance.now() / 1000),
         fsMcp: { status: fsMcp.status, tools: fsMcp.tools },
-        graphs: ["review_graph (5 nodes)", "filing_graph (2 nodes)"],
+        graphs: ["review_graph (8 nodes)", "filing_graph (2 nodes)"],
         counts: { toolCalls: toolLog.length, runs: state.runs.length, gates: state.gates.length, pendingGates: state.gates.filter((g) => g.status === "PENDING").length },
       });
     }
@@ -291,7 +291,7 @@ Bun.serve({
           {
             layer: "ORCHESTRATION",
             name: "LangGraph.js (StateGraph)",
-            detail: "Open-source graph runtime. review_graph halts at the gate by construction — the edge to filing does not exist.",
+            detail: "Open-source graph runtime. review_graph: plan → load → extract → flag → verify ⇄ bounded repair → draft → gate. Halts at the gate by construction — the edge to filing does not exist.",
           },
           {
             layer: "MODEL",

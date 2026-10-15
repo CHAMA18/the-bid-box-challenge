@@ -7,7 +7,9 @@ import { join } from "node:path";
 import { readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
-import { appendLog, shaOf, type Draft, type Finding, type Gate, type Requirement, type Run } from "./store";
+import { appendLog, shaOf, type Draft, type Finding, type Gate, type Requirement, type ReviewPlan, type Run } from "./store";
+
+export type { ReviewPlan };
 
 export const TENDERS_DIR = fileURLToPath(new URL("./data/tenders/", import.meta.url));
 
@@ -154,6 +156,110 @@ export async function callLlama(
       completionTokens: data.usage?.completion_tokens ?? 0,
     },
   };
+}
+
+/* ── 3.5 Review planning — how deep should THIS pack be reviewed? ────────────
+   Before any rule runs, a plan is drawn: which parsers to enable, which rule
+   families to focus, how many redlines to draft. The configured LLM decides
+   when one is set; a deterministic pack inspection decides otherwise. Either
+   way the plan is stored on the run and audit-logged, so the depth decision
+   is visible instead of hard-coded. */
+
+export const RULE_FAMILIES = [
+  "PRICE-OUTLIER",
+  "VALUE-OUTLIER",
+  "OVER-BUDGET",
+  "AWARD-OVER-BUDGET",
+  "DOC-MISSING",
+  "SPEC-DEVIATION",
+] as const;
+export type RuleFamily = (typeof RULE_FAMILIES)[number];
+
+const MARKDOWN_BID_VALUE = /\*\*Bid value:\*\*\s*([A-Z]{3})\s*([\d][\d,]*(?:\.\d+)?)/;
+const MARKDOWN_CEILING = /\*\*Budget ceiling:\*\*\s*([A-Z]{3})\s*([\d][\d,]*(?:\.\d+)?)/;
+
+/* A markdown bid's own stated value ("**Bid value:** KES 3,940,000,000"), cited to its line. */
+export function parseMarkdownBidValue(text: string): { amount: number; currency: string; ref: string } | undefined {
+  const m = text.match(MARKDOWN_BID_VALUE);
+  if (!m) return undefined;
+  const amount = Number(m[2].replace(/,/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? { amount, currency: m[1], ref: "bid value line" } : undefined;
+}
+
+/* A notice's published budget ceiling ("**Budget ceiling:** KES 1,860,000,000 …"). */
+export function parseMarkdownCeiling(notice: string): { amount: number; currency: string } | undefined {
+  const m = notice.match(MARKDOWN_CEILING);
+  if (!m) return undefined;
+  const amount = Number(m[2].replace(/,/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? { amount, currency: m[1] } : undefined;
+}
+
+/* Deterministic plan: inspect the pack, enable the parsers the pack actually needs,
+   and rank the rule families that have anything to bite on. */
+export function planFromPack(
+  files: string[],
+  pack: { bids: BidDoc[]; records: OcdsRecord[]; notices: { file: string; text: string }[] },
+): ReviewPlan {
+  const markdownValueBids = pack.bids.filter((b) => parseMarkdownBidValue(b.text)).length;
+  const ocdsValueBids = pack.bids.filter((b) => b.value !== undefined).length;
+  const hasCeiling = pack.notices.some((n) => parseMarkdownCeiling(n.text) !== undefined);
+  const hasAwards = pack.records.some((r) => r.awards.length > 0 && r.tenderValue);
+  const requiredDocs = pack.notices.some((n) => /^- \[REQUIRED\]/m.test(n.text));
+  const hasPriceTable = pack.bids.some((b) => parseBid(b.text, b.bidder, b.source).length > 0);
+  const focus: RuleFamily[] = [];
+  if (markdownValueBids > 0 && hasCeiling) focus.push("OVER-BUDGET");
+  if (pack.bids.length >= 2 && markdownValueBids + ocdsValueBids >= 2) focus.push("VALUE-OUTLIER");
+  if (hasPriceTable && pack.bids.length >= 2) focus.push("PRICE-OUTLIER");
+  if (hasAwards) focus.push("AWARD-OVER-BUDGET");
+  if (requiredDocs) focus.push("DOC-MISSING");
+  focus.push("SPEC-DEVIATION");
+  return {
+    pack: { files: files.length, bids: pack.bids.length, ocdsRecords: pack.records.length, markdownValueBids, ocdsValueBids },
+    parseMarkdownValues: markdownValueBids > 0,
+    focusRules: focus,
+    maxDrafts: 2,
+    note: `heuristic: ${markdownValueBids} markdown bid value(s)${hasCeiling ? " + published ceiling" : ""} — deep-value parsing ${markdownValueBids > 0 ? "on" : "off (nothing to parse)"}`,
+    source: "heuristic",
+  };
+}
+
+/* Model-led plan: same shape, decided from the pack inventory by the configured LLM.
+   Every field is validated and clamped; any failure falls back to the heuristic plan. */
+export async function llmPlanFromPack(
+  files: string[],
+  pack: { bids: BidDoc[]; records: OcdsRecord[]; notices: { file: string; text: string }[] },
+  runId: string,
+  cfg: LlmConfig | null = llmConfigFromEnv(),
+  fetchImpl: FetchLike = fetch,
+): Promise<ReviewPlan> {
+  const base = planFromPack(files, pack);
+  if (!cfg) return base;
+  try {
+    const completion = await callLlama(cfg, [
+      {
+        role: "system",
+        content:
+          'You are a public-procurement review planner. Given a tender pack inventory, output STRICT JSON only: {"parseMarkdownValues":boolean,"focusRules":string[],"maxDrafts":number,"note":"one sentence"}. focusRules entries must come from: PRICE-OUTLIER, VALUE-OUTLIER, OVER-BUDGET, AWARD-OVER-BUDGET, DOC-MISSING, SPEC-DEVIATION. maxDrafts is 1-4.',
+      },
+      { role: "user", content: `PACK INVENTORY:\n${JSON.stringify(base.pack)}\n\nDraft the review plan now.` },
+    ], fetchImpl);
+    const m = completion.content.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error("model reply contained no JSON object");
+    const raw = JSON.parse(m[0]) as { parseMarkdownValues?: boolean; focusRules?: string[]; maxDrafts?: number; note?: string };
+    const focus = [...new Set((raw.focusRules ?? []).filter((r): r is RuleFamily => (RULE_FAMILIES as readonly string[]).includes(r)))];
+    const maxDrafts = Math.max(1, Math.min(4, Math.round(Number(raw.maxDrafts ?? base.maxDrafts) || base.maxDrafts)));
+    return {
+      ...base,
+      parseMarkdownValues: !!raw.parseMarkdownValues && base.pack.markdownValueBids > 0,
+      focusRules: focus.length ? focus : base.focusRules,
+      maxDrafts,
+      note: (raw.note ?? "model-led plan").slice(0, 200),
+      source: "llm",
+      model: completion.model,
+    };
+  } catch (err) {
+    return { ...base, note: `${base.note} · llm plan failed (${(err as Error).message}) — heuristic applied` };
+  }
 }
 
 async function llmDraft(original: string, anomaly: string, runId: string): Promise<Draft> {
@@ -451,28 +557,40 @@ export function citesKnownDocument(citation: string, files: string[]): boolean {
 
 /* Self-check: a finding is kept only if its anchor text can be found in the document it cites. */
 export function verifyFinding(f: Finding, sources: Record<string, string>): boolean {
+  return verifyFindingReason(f, sources) === null;
+}
+
+/* The same check, reporting WHY a finding was refused — the reason a repair pass can act on. */
+export function verifyFindingReason(f: Finding, sources: Record<string, string>): string | null {
   const file = f.citation.split(",")[0].trim();
   const text = sources[file];
-  if (text === undefined) return false;
+  if (text === undefined) return `cited document "${file}" is not in this tender`;
   const lower = text.toLowerCase();
   switch (f.rule) {
     case "R-PRICE-OUTLIER": {
       const itemName = f.item.split(" × ")[0].trim().toLowerCase();
-      return itemName.length > 0 && lower.includes(itemName);
+      return itemName.length > 0 && lower.includes(itemName) ? null : "line item not found in cited bid";
     }
     case "R-VALUE-OUTLIER":
     case "R-AWARD-OVER-BUDGET": {
       const ocid = f.citation.match(/ocid ([^,]+)/)?.[1]?.trim();
-      return !!ocid && text.includes(ocid) && text.includes(f.item);
+      if (ocid) return text.includes(ocid) && text.includes(f.item) ? null : "record path or bidder not found in cited release";
+      /* Markdown citation ("03-bid-x.md, bid value line"): the stated value and the bidder must be in the bid. */
+      const amount = f.evidence.match(/([\d][\d,]*(?:\.\d+)?)/)?.[1];
+      return !!amount && text.includes(amount) && lower.includes(f.item.toLowerCase()) ? null : "bid value or bidder not found in cited bid";
+    }
+    case "R-OVER-BUDGET": {
+      const amount = f.evidence.match(/Bid value [A-Z]{3} ([\d,]+)/)?.[1];
+      return !!amount && text.includes(amount) && lower.includes(f.item.toLowerCase()) ? null : "bid value or bidder not found in cited bid";
     }
     case "R-SPEC-DEVIATION":
-      return f.evidence.length > 0 && text.includes(f.evidence);
+      return f.evidence.length > 0 && text.includes(f.evidence) ? null : "deviation text not found in cited bid";
     case "R-DOC-MISSING": {
       const req = f.evidence.match(/"(.+?)" as REQUIRED/)?.[1]?.toLowerCase();
-      return !!req && lower.includes(req);
+      return !!req && lower.includes(req) ? null : "required document not named in cited notice";
     }
     default:
-      return false;
+      return `rule "${f.rule}" has no self-check`;
   }
 }
 
@@ -633,6 +751,11 @@ const ReviewState = Annotation.Root({
   findings: Annotation<Finding[]>({ reducer: (_, b) => b, default: () => [] }),
   drafts: Annotation<Draft[]>({ reducer: (_, b) => b, default: () => [] }),
   gateId: Annotation<string | null>({ reducer: (_, b) => b, default: () => null }),
+  /* The plan this run is reviewed under, and the bounded reason-and-retry state. */
+  plan: Annotation<ReviewPlan | null>({ reducer: (_, b) => b, default: () => null }),
+  rejections: Annotation<{ finding: Finding; reason: string }[]>({ reducer: (_, b) => b, default: () => [] }),
+  repairAttempts: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
+  retriedKeys: Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
 });
 
 export interface EngineRefs {
@@ -688,17 +811,51 @@ export function buildPack(files: string[], sources: Record<string, string>) {
 }
 
 /**
- * Pure: run every deterministic rule over a built pack. Findings whose citation
- * does not name a document in the tender are returned as `rejected`, never kept.
+ * Pure: run every deterministic rule over a built pack, under a review plan.
+ * When the plan enables deep value parsing, markdown "**Bid value:**" lines join
+ * OCDS values, and published ceilings turn into over-budget findings — each cited
+ * to the bid's own value line. Findings whose citation does not name a document
+ * in the tender are returned as `rejected`, never kept.
  */
 export function flagPack(
   pack: ReturnType<typeof buildPack>,
   files: string[],
+  plan?: ReviewPlan,
 ): { kept: Finding[]; rejected: Finding[] } {
+  const p = plan ?? planFromPack(files, pack);
+  const bids: BidDoc[] = p.parseMarkdownValues
+    ? pack.bids.map((b) => {
+        if (b.value !== undefined) return b;
+        const v = parseMarkdownBidValue(b.text);
+        return v ? { ...b, value: v.amount, currency: v.currency, ref: v.ref } : b;
+      })
+    : pack.bids;
+  /* Published ceiling vs each bid's own stated value — the markdown twin of R-AWARD-OVER-BUDGET. */
+  const overBudget: Finding[] = [];
+  if (p.parseMarkdownValues) {
+    for (const n of pack.notices) {
+      const ceiling = parseMarkdownCeiling(n.text);
+      if (!ceiling) continue;
+      for (const b of bids) {
+        if (b.value === undefined || b.value <= ceiling.amount) continue;
+        const cur = b.currency ?? "";
+        const mismatch = cur && cur !== ceiling.currency ? ` — currency mismatch: bid ${cur} vs ceiling ${ceiling.currency}` : "";
+        overBudget.push({
+          id: "",
+          rule: "R-OVER-BUDGET",
+          severity: "HIGH",
+          item: b.bidder,
+          evidence: `Bid value ${cur} ${(b.value as number).toLocaleString()} exceeds the budget ceiling ${ceiling.currency} ${ceiling.amount.toLocaleString()} (notice: ${n.file}).${mismatch}`.replace(/\s+/g, " "),
+          citation: `${b.source}, bid value line`,
+        });
+      }
+    }
+  }
   const all = [
-    ...runRules(pack.bids, "", ""),
-    ...pack.notices.flatMap((n) => docMissingFindings(pack.bids, n.text, n.file)),
+    ...runRules(bids, "", ""),
+    ...pack.notices.flatMap((n) => docMissingFindings(bids, n.text, n.file)),
     ...runAwardRules(pack.records),
+    ...overBudget,
   ];
   const kept: Finding[] = [];
   const rejected: Finding[] = [];
@@ -871,7 +1028,7 @@ async function nodeExtract(s: typeof ReviewState.State) {
 }
 
 async function nodeFlag(s: typeof ReviewState.State) {
-  const { kept, rejected } = flagPack({ bids: s.bids, records: s.records, notices: s.notices }, Object.keys(s.sources));
+  const { kept, rejected } = flagPack({ bids: s.bids, records: s.records, notices: s.notices }, Object.keys(s.sources), s.plan ?? undefined);
   /* Uncited flags never reach the ledger — logged as rejected instead. */
   for (const f of rejected) {
     appendLog({
@@ -904,33 +1061,201 @@ async function nodeFlag(s: typeof ReviewState.State) {
   return { findings: merged };
 }
 
-/* Self-check: findings whose anchor text is not in their cited document are dropped and logged, then IDs are renumbered. */
+/* ── Bounded reason-and-retry: verify → repair → verify, at most REPAIR_PASSES times ── */
+
+const REPAIR_PASSES = 2;
+const findingKey = (f: Finding) => `${f.rule}|${f.item.toLowerCase()}`;
+
+/* plan_review: the depth decision for THIS pack — model-led when configured, deterministic otherwise. */
+async function nodePlan(s: typeof ReviewState.State) {
+  const t0 = performance.now();
+  const plan = await llmPlanFromPack(Object.keys(s.sources), { bids: s.bids, records: s.records, notices: s.notices }, s.runId);
+  appendLog({
+    actor: "quorum-agent",
+    server: plan.source === "llm" ? "llm endpoint" : "quorum-mcp",
+    tool: "plan_review",
+    kind: "READ",
+    runId: s.runId,
+    inputs: { tenderId: s.tenderId, files: plan.pack.files, bids: plan.pack.bids, ocdsRecords: plan.pack.ocdsRecords },
+    outputs: { source: plan.source, parseMarkdownValues: plan.parseMarkdownValues, focusRules: plan.focusRules, maxDrafts: plan.maxDrafts, note: plan.note },
+    status: "OK",
+    durationMs: Math.round(performance.now() - t0),
+  });
+  progress(
+    s.runId,
+    `▸ plan_review — ${plan.source} · value parsing ${plan.parseMarkdownValues ? "DEEP (markdown + OCDS)" : "OCDS only"} · focus ${plan.focusRules.join(" > ")} · maxDrafts ${plan.maxDrafts}`,
+  );
+  return { plan };
+}
+
+/* Self-check with a memory: findings whose anchor text is not in their cited document
+   become rejections (each with a reason) and get a bounded number of repair passes. */
 async function nodeVerify(s: typeof ReviewState.State) {
   const kept: Finding[] = [];
+  const rejections: { finding: Finding; reason: string }[] = [];
   for (const f of s.findings) {
-    if (verifyFinding(f, s.sources)) {
-      kept.push(f);
-    } else {
+    const reason = verifyFindingReason(f, s.sources);
+    if (reason === null) kept.push(f);
+    else rejections.push({ finding: f, reason });
+  }
+  for (const r of rejections) {
+    appendLog({
+      actor: "quorum-agent",
+      server: "quorum-mcp",
+      tool: "verify_finding",
+      kind: "READ",
+      runId: s.runId,
+      inputs: { rule: r.finding.rule, item: r.finding.item },
+      outputs: { rejected: r.reason, citation: r.finding.citation },
+      status: "ERROR",
+      durationMs: 0,
+    });
+  }
+  const findings = kept.map((f, i) => ({ ...f, id: `F-${String(i + 1).padStart(2, "0")}` }));
+  progress(
+    s.runId,
+    `▸ verify_findings — ${findings.length}/${s.findings.length} confirmed in their cited document${rejections.length ? ` · ${rejections.length} sent to repair (pass ${s.repairAttempts + 1}/${REPAIR_PASSES})` : ""}`,
+  );
+  return { findings, rejections };
+}
+
+/* One bounded repair attempt: re-anchor the finding to a line that actually exists in its
+   cited document (matching the item, the stated value, or both), then re-run the same
+   self-check. Pure — exported for tests. */
+export function repairFinding(
+  r: { finding: Finding; reason: string },
+  sources: Record<string, string>,
+): { repaired?: Finding; dropReason: string } {
+  const file = r.finding.citation.split(",")[0].trim();
+  const text = sources[file];
+  if (text === undefined) return { dropReason: `cannot repair — cited document "${file}" does not exist in this tender` };
+  const head = r.finding.item.split("—")[0].trim().toLowerCase();
+  const amount = r.finding.evidence.match(/([\d][\d,]*(?:\.\d+)?)/)?.[1];
+  /* Rule-aware fallback: value/budget findings can always try the bid's own value line. */
+  const anchor = r.finding.rule === "R-VALUE-OUTLIER" || r.finding.rule === "R-OVER-BUDGET" ? /\*\*Bid value:\*\*/ : undefined;
+  const candidates = text
+    .split("\n")
+    .filter((l) => (head.length >= 4 && l.toLowerCase().includes(head)) || (amount !== undefined && l.includes(amount)) || (!!anchor && anchor.test(l)));
+  for (const line of candidates) {
+    const candidate: Finding = { ...r.finding, evidence: line.trim().slice(0, 220), repaired: true };
+    if (verifyFinding(candidate, sources)) return { repaired: candidate, dropReason: "" };
+  }
+  return {
+    dropReason: candidates.length
+      ? `re-anchored to ${candidates.length} real line(s) of ${file} but the self-check still refuses the finding`
+      : `cannot repair — nothing referencing "${r.finding.item}"${amount ? ` or value ${amount}` : ""} exists in ${file}`,
+  };
+}
+
+/* Model-assisted repair: given the rejection reason and the cited document, the model may
+   propose replacement evidence. Deterministically verified before acceptance — the model
+   never writes a finding the self-check would refuse. */
+async function llmRepairEvidence(
+  r: { finding: Finding; reason: string },
+  sources: Record<string, string>,
+  runId: string,
+): Promise<Finding | null> {
+  const cfg = llmConfigFromEnv();
+  if (!cfg) return null;
+  const file = r.finding.citation.split(",")[0].trim();
+  const doc = (sources[file] ?? "").slice(0, 1200);
+  try {
+    const completion = await callLlama(cfg, [
+      {
+        role: "system",
+        content:
+          'You repair procurement review findings. Return STRICT JSON only: {"evidence":"a VERBATIM line from the cited document that supports the finding"}. Never invent text that is not in the document.',
+      },
+      {
+        role: "user",
+        content: `FINDING: ${JSON.stringify({ rule: r.finding.rule, item: r.finding.item })}\nREJECTION REASON: ${r.reason}\nCITED DOCUMENT (${file}):\n${doc}\n\nPropose the repaired evidence now.`,
+      },
+    ]);
+    const m = completion.content.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const parsed = JSON.parse(m[0]) as { evidence?: string };
+    if (!parsed.evidence) return null;
+    const candidate: Finding = { ...r.finding, evidence: parsed.evidence.trim().slice(0, 220), repaired: true };
+    if (!verifyFinding(candidate, sources)) return null;
+    appendLog({
+      actor: "quorum-agent",
+      server: "llm endpoint",
+      tool: "revise_findings",
+      kind: "WRITES",
+      runId,
+      inputs: { rule: r.finding.rule, reason: r.reason },
+      outputs: { repaired: true, via: "llm", model: completion.model, usage: completion.usage },
+      status: "OK",
+      durationMs: 0,
+    });
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
+/* The repair node: every fresh rejection is re-anchored deterministically first, then by the
+   model when one is configured. Repairs re-enter verify_findings; drops carry their reason. */
+async function nodeRevise(s: typeof ReviewState.State) {
+  const fresh = s.rejections.filter((r) => !s.retriedKeys.includes(findingKey(r.finding)));
+  const repaired: Finding[] = [];
+  const dropReasons: string[] = [];
+  for (const r of fresh) {
+    const det = repairFinding(r, s.sources);
+    const fixed = det.repaired ?? (await llmRepairEvidence(r, s.sources, s.runId));
+    if (fixed) {
+      repaired.push(fixed);
       appendLog({
         actor: "quorum-agent",
         server: "quorum-mcp",
-        tool: "verify_finding",
-        kind: "READ",
+        tool: "revise_findings",
+        kind: "WRITES",
         runId: s.runId,
-        inputs: { rule: f.rule, item: f.item },
-        outputs: { rejected: "anchor text not found in cited document", citation: f.citation },
+        inputs: { rule: r.finding.rule, item: r.finding.item, reason: r.reason },
+        outputs: { repaired: true, via: fixed === det.repaired ? "deterministic re-anchor" : "llm", evidence: fixed.evidence.slice(0, 120) },
+        status: "OK",
+        durationMs: 0,
+      });
+    } else {
+      dropReasons.push(`${r.finding.rule} ${r.finding.item}: ${det.dropReason}`);
+      appendLog({
+        actor: "quorum-agent",
+        server: "quorum-mcp",
+        tool: "revise_findings",
+        kind: "WRITES",
+        runId: s.runId,
+        inputs: { rule: r.finding.rule, item: r.finding.item, reason: r.reason },
+        outputs: { repaired: false, dropReason: det.dropReason },
         status: "ERROR",
         durationMs: 0,
       });
     }
   }
-  const findings = kept.map((f, i) => ({ ...f, id: `F-${String(i + 1).padStart(2, "0")}` }));
-  progress(s.runId, `▸ verify_findings — ${findings.length}/${s.findings.length} confirmed in their cited document`);
-  return { findings };
+  progress(s.runId, `▸ revise_findings — repair pass ${s.repairAttempts + 1}/${REPAIR_PASSES}: ${repaired.length} re-anchored, ${fresh.length - repaired.length} dropped with reasons`);
+  if (dropReasons.length) progress(s.runId, `▸ revise_findings — dropped: ${dropReasons.join(" · ").slice(0, 300)}`);
+  return {
+    findings: [...s.findings, ...repaired],
+    retriedKeys: [...s.retriedKeys, ...fresh.map((r) => findingKey(r.finding))],
+    repairAttempts: s.repairAttempts + 1,
+    rejections: [],
+  };
 }
 
 async function nodeDraft(s: typeof ReviewState.State) {
-  const top = s.findings.filter((f) => f.severity === "HIGH").slice(0, 2);
+  /* The plan decides how many drafts and which rule families go first; severity breaks ties. */
+  const maxDrafts = s.plan?.maxDrafts ?? 2;
+  const focus = s.plan?.focusRules ?? [];
+  const sevRank = { HIGH: 0, MEDIUM: 1, LOW: 2 } as const;
+  const top = [...s.findings]
+    .sort((a, b) => {
+      const fa = focus.indexOf(a.rule.slice(2));
+      const fb = focus.indexOf(b.rule.slice(2));
+      const pa = fa === -1 ? 99 : fa;
+      const pb = fb === -1 ? 99 : fb;
+      if (pa !== pb) return pa - pb;
+      return sevRank[a.severity] - sevRank[b.severity];
+    })
+    .slice(0, maxDrafts);
   const drafts: Draft[] = [];
   for (const f of top) {
     const cfg = llmConfigFromEnv();
@@ -946,7 +1271,7 @@ async function nodeDraft(s: typeof ReviewState.State) {
   if (run) run.usage = { drafts: drafts.length, llmDrafts: llm.length, promptTokens, completionTokens };
   progress(
     s.runId,
-    `▸ ${drafts.length} redline drafts ready for committee · ${llm.length} from the model, ${drafts.length - llm.length} template · ${promptTokens + completionTokens} tokens`,
+    `▸ ${drafts.length} redline draft(s) ready for committee (plan: maxDrafts ${maxDrafts}, focus ${focus.slice(0, 3).join(", ") || "severity"}) · ${llm.length} from the model, ${drafts.length - llm.length} template · ${promptTokens + completionTokens} tokens`,
   );
   return { drafts };
 }
@@ -995,16 +1320,28 @@ async function nodeGate(s: typeof ReviewState.State) {
 function buildReviewGraph() {
   const g = new StateGraph(ReviewState)
     .addNode("load_documents", nodeLoadDocuments)
+    .addNode("plan_review", nodePlan)
     .addNode("extract_requirements", nodeExtract)
     .addNode("flag_findings", nodeFlag)
     .addNode("verify_findings", nodeVerify)
+    .addNode("revise_findings", nodeRevise)
     .addNode("draft_redlines", nodeDraft)
     .addNode("propose_gate", nodeGate)
     .addEdge(START, "load_documents")
-    .addEdge("load_documents", "extract_requirements")
+    .addEdge("load_documents", "plan_review")
+    .addEdge("plan_review", "extract_requirements")
     .addEdge("extract_requirements", "flag_findings")
     .addEdge("flag_findings", "verify_findings")
-    .addEdge("verify_findings", "draft_redlines")
+    /* Bounded reason-and-retry: a refused finding goes to repair with its rejection
+       reason, comes back, and is verified again — at most REPAIR_PASSES times. */
+    .addConditionalEdges("verify_findings", (s: typeof ReviewState.State) =>
+      s.rejections.length > 0 &&
+      s.repairAttempts < REPAIR_PASSES &&
+      s.rejections.some((r) => !s.retriedKeys.includes(findingKey(r.finding)))
+        ? "revise_findings"
+        : "draft_redlines",
+    )
+    .addEdge("revise_findings", "verify_findings")
     .addEdge("draft_redlines", "propose_gate")
     .addEdge("propose_gate", END);
   return g.compile();
@@ -1022,6 +1359,7 @@ export async function runReview(run: Run) {
     run.requirements = out.requirements ?? [];
     run.findings = out.findings ?? [];
     run.drafts = out.drafts ?? [];
+    run.plan = out.plan ?? undefined;
     run.gateId = out.gateId ?? undefined;
     run.status = "AWAITING_GATE";
     run.updatedAt = new Date().toISOString();
