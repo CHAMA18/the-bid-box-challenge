@@ -832,10 +832,13 @@ function NewRunModal({
   const [detailsError, setDetailsError] = useState("");
   const [launchError, setLaunchError] = useState("");
   const [launching, setLaunching] = useState(false);
+  /* Sample tenders — comprehensive packs shipped with the agent stack. */
+  const [samples, setSamples] = useState<SampleTenderRow[]>([]);
+  const [samplesOpen, setSamplesOpen] = useState(false);
   /* Where the current ref/title draft came from — shown inline, cleared the
      moment the officer edits (then it's theirs, not a suggestion). */
-  const [refSource, setRefSource] = useState<"" | "sequence" | "fresh" | "document">("");
-  const [titleSource, setTitleSource] = useState<"" | "document">("");
+  const [refSource, setRefSource] = useState<"" | "sequence" | "fresh" | "document" | "sample">("");
+  const [titleSource, setTitleSource] = useState<"" | "document" | "sample">("");
   const titleTouchedRef = useRef(false);
   const refInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -867,6 +870,7 @@ function NewRunModal({
       setDetailsError("");
       setLaunchError("");
       setLaunching(false);
+      setSamplesOpen(false);
       titleTouchedRef.current = false;
       /* Autofill the reference the instant the modal opens — the register's
          sequence continues itself; a fresh registry shape when there is none. */
@@ -878,6 +882,15 @@ function NewRunModal({
     });
     return () => cancelAnimationFrame(id);
   }, [open]);
+
+  /* The sample registry loads with the modal — real packs the stack can run. */
+  useEffect(() => {
+    if (!open || samples.length > 0) return;
+    fetch("/api/sample-tenders?XTransformPort=3031")
+      .then((x) => x.json())
+      .then((d) => setSamples(d.samples ?? []))
+      .catch(() => setSamples([]));
+  }, [open, samples.length]);
 
   /* Escape closes; pending parse timers die with the modal. */
   useEffect(() => {
@@ -927,6 +940,27 @@ function NewRunModal({
         setTitleSource("document");
       }
     }
+  };
+
+  /* A sample tender stages itself: reference, title, format and the pack —
+     the files behind it are real documents the review graph will read. */
+  const stageSample = (s: SampleTenderRow) => {
+    setRef(s.ref);
+    setRefSource("sample");
+    setTitle(s.title);
+    setTitleSource("sample");
+    setFormat(s.format);
+    setDetailsError("");
+    const staged: StagedDoc[] = s.files.map((name, i) => ({
+      id: `sample-${s.ref}-${i}-${name}`,
+      name,
+      size: "PACK",
+      status: "INDEXED" as const,
+    }));
+    docsRef.current = staged;
+    filesRef.current.clear();
+    setDocs(staged);
+    setSamplesOpen(false);
   };
 
   const addDocs = (items: { name: string; size: string; file?: File }[]) => {
@@ -996,7 +1030,7 @@ function NewRunModal({
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="new-run-title"
+            aria-labelledby="new-evaluation-title"
             initial={{ opacity: 0, y: 26, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.98 }}
@@ -1008,10 +1042,10 @@ function NewRunModal({
               <div>
                 <p className="flex items-center gap-2.5 font-code text-[9px] font-semibold uppercase tracking-[0.28em] text-ink-500">
                   <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
-                  LAUNCH A RUN
+                  LAUNCH AN EVALUATION
                 </p>
-                <h2 id="new-run-title" className="mt-3 font-display text-[28px] font-black tracking-[-0.035em] text-ink-950 sm:text-[36px]">
-                  New run<span className="text-brand-600">.</span>
+                <h2 id="new-evaluation-title" className="mt-3 font-display text-[28px] font-black tracking-[-0.035em] text-ink-950 sm:text-[36px]">
+                  New evaluation<span className="text-brand-600">.</span>
                 </h2>
                 <p className="mt-1.5 max-w-lg text-[12.5px] leading-relaxed text-ink-500 sm:text-[13px]">
                   Set the tender, stage its source documents, and choose what the review should verify.
@@ -1149,6 +1183,7 @@ function NewRunModal({
                             {refSource === "sequence" && "ASSIGNED BY QUORUM — CONTINUES THE REGISTER'S SEQUENCE · LOCKED"}
                             {refSource === "fresh" && "ASSIGNED BY QUORUM — NEW REGISTRY SEQUENCE · LOCKED"}
                             {refSource === "document" && "READ FROM THE STAGED PACK · LOCKED"}
+                            {refSource === "sample" && "SAMPLE PACK — LOADED FROM THE SAMPLE REGISTRY · LOCKED"}
                           </p>
                         )}
                       </div>
@@ -1171,6 +1206,12 @@ function NewRunModal({
                           aria-invalid={Boolean(detailsError && !title.trim())}
                           className="h-12 w-full rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15 sm:h-[52px]"
                         />
+                        {titleSource === "sample" && (
+                          <p className="mt-1.5 flex items-center gap-1.5 font-code text-[8px] tracking-[0.14em] text-ink-400" aria-live="polite">
+                            <CircleCheck className="h-2.5 w-2.5 text-brand-600" aria-hidden="true" />
+                            SAMPLE PACK TITLE — LOADED · EDIT FREELY
+                          </p>
+                        )}
                         {titleSource === "document" && (
                           <p className="mt-1.5 flex items-center gap-1.5 font-code text-[8px] tracking-[0.14em] text-ink-400" aria-live="polite">
                             <CircleCheck className="h-2.5 w-2.5 text-brand-600" aria-hidden="true" />
@@ -1205,6 +1246,57 @@ function NewRunModal({
                             </button>
                           ))}
                         </div>
+                      </div>
+                      {/* SAMPLE TENDER — one click stages a real evaluation pack */}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setSamplesOpen(!samplesOpen)}
+                          aria-expanded={samplesOpen}
+                          className="flex w-full items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 transition-colors hover:border-ink-400"
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <BookOpen className="h-3.5 w-3.5 text-brand-600" aria-hidden="true" />
+                            <span className="font-code text-[9px] font-bold tracking-[0.18em] text-ink-900">SAMPLE TENDER</span>
+                          </span>
+                          <span className="flex items-center gap-2 font-code text-[8px] tracking-[0.14em] text-ink-400">
+                            {samples.length > 0 && `${samples.length} PACKS`}
+                            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-300", samplesOpen && "rotate-180")} aria-hidden="true" />
+                          </span>
+                        </button>
+                        <p className="mt-1.5 text-[11.5px] text-ink-400">
+                          Real, comprehensive packs shipped with the stack — pick one and the review runs the agent’s own documents.
+                        </p>
+                        {samplesOpen && (
+                          <div className="mt-2.5 space-y-2 rounded-xl border border-ink-100 bg-paper/60 p-2.5" role="list" aria-label="Sample tenders">
+                            {samples.length === 0 && (
+                              <p className="px-2 py-3 text-center font-code text-[9px] tracking-[0.14em] text-ink-400">
+                                SAMPLE REGISTRY UNREACHABLE — CHECK THE AGENT STACK
+                              </p>
+                            )}
+                            {samples.map((s) => (
+                              <button
+                                key={s.ref}
+                                type="button"
+                                role="listitem"
+                                onClick={() => stageSample(s)}
+                                className="block w-full rounded-lg border border-ink-100 bg-white px-3.5 py-3 text-left transition-all hover:border-brand-400 hover:shadow-[0_2px_10px_rgba(217,38,22,0.07)]"
+                              >
+                                <span className="flex flex-wrap items-center gap-2">
+                                  <span className="font-code text-[10px] font-bold tracking-[0.08em] text-ink-950">{s.ref}</span>
+                                  <span className="rounded-full bg-ink-950 px-2 py-0.5 font-code text-[7px] font-bold tracking-[0.14em] text-white">{s.sector}</span>
+                                  <span className="ml-auto font-code text-[7.5px] tracking-[0.12em] text-ink-400">{s.budget} · {s.bids} BIDS</span>
+                                </span>
+                                <span className="mt-1 block truncate text-[12.5px] font-medium text-ink-800">{s.title}</span>
+                                <span className="mt-1 block text-[11.5px] leading-relaxed text-ink-500">{s.challenges}</span>
+                                <span className="mt-1.5 flex items-center gap-1.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-brand-700">
+                                  <Plus className="h-2.5 w-2.5" aria-hidden="true" />
+                                  STAGE THIS PACK
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {detailsError && <p role="alert" className="rounded-lg bg-brand-50 px-3.5 py-2.5 text-[12px] font-medium text-brand-800">{detailsError}</p>}
                     </>
@@ -1538,7 +1630,7 @@ function SidebarContent({
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-3 text-[13px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
-          New run
+          New evaluation
         </button>
       </div>
 
@@ -1827,9 +1919,31 @@ function RunRegister({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  /* Real download: GET /api/runs/:uid/report on the sidecar
+                                     returns the sourced report as an attached .md file. */
+                                  if (!run.uid) {
+                                    onToast("REPORT UNAVAILABLE — NO BACKEND ID FOR THIS RUN");
+                                    return;
+                                  }
                                   onToast(
-                                    `SOURCED REPORT — ${run.id} · ${run.findings} FINDINGS · ${run.citations} CITATIONS · EXPORT QUEUED`
+                                    `SOURCED REPORT — ${run.id} · ${run.findings} FINDINGS · ${run.citations} CITATIONS · DOWNLOADING`
                                   );
+                                  fetch(`/api/runs/${encodeURIComponent(run.uid)}/report?XTransformPort=3031`)
+                                    .then(async (res) => {
+                                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                                      const blob = await res.blob();
+                                      const m = (res.headers.get("content-disposition") ?? "").match(/filename="?([^";]+)"?/);
+                                      const url = URL.createObjectURL(blob);
+                                      const a = document.createElement("a");
+                                      a.href = url;
+                                      a.download = m?.[1] ?? `quorum-report-${run.id}-${run.uid}.md`;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      a.remove();
+                                      URL.revokeObjectURL(url);
+                                      onToast(`REPORT DOWNLOADED — ${run.id}`);
+                                    })
+                                    .catch(() => onToast("REPORT FAILED — SIDECAR UNREACHABLE"));
                                 }}
                                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-950 px-3 font-code text-[9px] font-bold tracking-[0.14em] text-white transition-colors hover:bg-brand-600"
                               >
@@ -2566,6 +2680,19 @@ const PORTAL_KINDS: Record<string, string> = {
   "PPA · KENYA": "NATIONAL PORTAL",
   "PRAZ · ZIMBABWE": "NATIONAL PORTAL",
   "GGPPBD · GHANA": "NATIONAL PORTAL",
+};
+
+type SampleTenderRow = {
+  ref: string;
+  title: string;
+  buyer: string;
+  sector: string;
+  currency: string;
+  budget: string;
+  bids: number;
+  format: string;
+  challenges: string;
+  files: string[];
 };
 
 type SourceRequestRow = {
@@ -3321,6 +3448,242 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
   );
 }
 
+/* ── Team members — real workspace access: invite codes, claims, revocation ── */
+
+type TeamInvite = {
+  id: string;
+  code: string | null;
+  email: string | null;
+  role: string;
+  status: "PENDING" | "CLAIMED" | "REVOKED";
+  inviterName: string;
+  claimedByEmail: string | null;
+  createdAt: string;
+  expiresInDays: number;
+};
+
+type TeamData = {
+  members: { id: string; name: string; email: string; organization: string | null; joined: string; currentAccount: boolean }[];
+  invites: TeamInvite[];
+};
+
+function TeamMembersSection({ user, onToast }: { user: AuthUser | null; onToast: (m: string) => void }) {
+  const [data, setData] = useState<TeamData | null>(null);
+  const [loadErr, setLoadErr] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"OFFICER" | "COMMITTEE">("OFFICER");
+  const [busy, setBusy] = useState(false);
+  const [freshCode, setFreshCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const load = useCallback(() => {
+    let alive = true;
+    fetch("/api/team")
+      .then((r) => r.json())
+      .then((d: TeamData | { error: string }) => {
+        if (!alive) return;
+        if ("error" in d) setLoadErr(true);
+        else {
+          setData(d);
+          setLoadErr(false);
+        }
+      })
+      .catch(() => {
+        if (alive) setLoadErr(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => load(), [load]);
+
+  const invite = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail.trim() || undefined, role: inviteRole }),
+      });
+      const d = (await res.json()) as { invite?: { code: string }; error?: string };
+      if (!res.ok || !d.invite) throw new Error(d.error ?? "failed");
+      setFreshCode(d.invite.code);
+      setCopied(false);
+      setInviteEmail("");
+      onToast(`INVITE CREATED — ${d.invite.code}`);
+      load();
+    } catch (err) {
+      onToast(`INVITE FAILED — ${(err as Error).message.toUpperCase()}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async (inviteId: string) => {
+    try {
+      const res = await fetch(`/api/team?inviteId=${encodeURIComponent(inviteId)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("failed");
+      onToast("INVITE REVOKED");
+      load();
+    } catch {
+      onToast("REVOKE FAILED");
+    }
+  };
+
+  const copyCode = async () => {
+    if (!freshCode) return;
+    try {
+      await navigator.clipboard.writeText(freshCode);
+      setCopied(true);
+      onToast("CODE COPIED — PASTE IT INTO REGISTRATION");
+    } catch {
+      onToast("COPY FAILED — SELECT THE CODE MANUALLY");
+    }
+  };
+
+  const cardClass = "rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]";
+  const labelClass = "font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400";
+  const titleClass = "mt-1.5 font-display text-[15px] font-black tracking-[-0.01em] text-ink-950";
+
+  return (
+    <section className={`${cardClass} lg:col-span-2`} aria-labelledby="settings-team-heading">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className={labelClass}>WORKSPACE ACCESS</p>
+          <h3 id="settings-team-heading" className={titleClass}>Team Members</h3>
+          <p className="mt-1 text-[12.5px] text-ink-500">
+            People with access to this workspace. Committee decision-makers are managed separately in Committee.
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-paper px-3 py-1.5 font-code text-[8px] font-bold tracking-[0.14em] text-ink-500">
+          <Users className="h-3 w-3" aria-hidden="true" />
+          {data ? `${data.members.length} MEMBER${data.members.length === 1 ? "" : "S"}` : "INVITATIONS"}
+        </span>
+      </div>
+
+      {/* Members */}
+      <ul className="mt-5">
+        {loadErr && (
+          <li className="rounded-xl border border-ink-100 bg-paper/60 px-4 py-3.5 text-[12.5px] text-ink-500">
+            Team data is unavailable right now — check that you are signed in.
+          </li>
+        )}
+        {data?.members.map((m) => (
+          <li key={m.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-ink-100 bg-paper/60 px-4 py-3.5">
+            <span
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 font-code text-[10px] font-bold text-white"
+              aria-hidden="true"
+            >
+              {initialsOf(m.name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold text-ink-950">{m.name}</p>
+              <p className="truncate font-code text-[8px] tracking-[0.12em] text-ink-500">{m.email.toUpperCase()}</p>
+            </div>
+            {m.currentAccount ? (
+              <span className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-500">
+                CURRENT ACCOUNT
+              </span>
+            ) : (
+              <span className="rounded-full border border-ink-100 bg-paper px-2.5 py-1 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-400">
+                MEMBER
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {/* Invite composer */}
+      {user && (
+        <div className="mt-5 rounded-xl border border-ink-100 bg-paper/60 p-4">
+          <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">INVITE A TEAMMATE</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="colleague@authority.go.ke (optional note)"
+              aria-label="Colleague email (optional)"
+              className="h-10 min-w-0 flex-1 rounded-lg border border-ink-200 bg-white px-3 text-[13px] text-ink-950 outline-none transition-colors placeholder:text-ink-300 focus:border-ink-400"
+            />
+            <select
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value as "OFFICER" | "COMMITTEE")}
+              aria-label="Workspace role"
+              className="h-10 rounded-lg border border-ink-200 bg-white px-3 font-code text-[9px] font-bold tracking-[0.14em] text-ink-700 outline-none"
+            >
+              <option value="OFFICER">OFFICER</option>
+              <option value="COMMITTEE">COMMITTEE</option>
+            </select>
+            <button
+              type="button"
+              onClick={invite}
+              disabled={busy}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-ink-950 px-4 font-code text-[9px] font-bold tracking-[0.16em] text-white transition-colors hover:bg-ink-800 disabled:opacity-60"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              {busy ? "CREATING…" : "CREATE INVITE"}
+            </button>
+          </div>
+          <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">
+            No email provider is configured — Quorum gives you a code instead. Share it with your teammate; they
+            paste it during registration (it expires in 14 days).
+          </p>
+          {freshCode && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2.5">
+              <span className="font-code text-[13px] font-bold tracking-[0.18em] text-brand-800" aria-live="polite">{freshCode}</span>
+              <button
+                type="button"
+                onClick={copyCode}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-white px-3 py-1 font-code text-[8px] font-bold tracking-[0.14em] text-brand-800 transition-colors hover:bg-brand-100"
+              >
+                <Copy className="h-3 w-3" aria-hidden="true" />
+                {copied ? "COPIED" : "COPY CODE"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pending invites — shared codes, whoever from accounts */}
+      {data && data.invites.length > 0 && (
+        <div className="mt-4">
+          <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">PENDING INVITATIONS</p>
+          <ul className="mt-2">
+            {data.invites.map((inv) => (
+              <li key={inv.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-ink-100 bg-paper/60 px-4 py-3">
+                <span className="font-code text-[11px] font-bold tracking-[0.16em] text-ink-950">{inv.code ?? "———"}</span>
+                <span className="rounded-full border border-ink-100 bg-white px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.12em] text-ink-500">
+                  {inv.role}
+                </span>
+                {inv.email && <span className="truncate text-[11.5px] text-ink-400">for {inv.email}</span>}
+                <span className="truncate text-[10px] text-ink-300">
+                  {inv.status === "CLAIMED"
+                    ? `claimed by ${inv.claimedByEmail ?? "a member"}`
+                    : inv.status === "REVOKED"
+                      ? "revoked"
+                      : `expires in ${inv.expiresInDays} day${inv.expiresInDays === 1 ? "" : "s"}`}
+                </span>
+                {inv.status === "PENDING" && (
+                  <button
+                    type="button"
+                    onClick={() => revoke(inv.id)}
+                    className="ml-auto rounded-full border border-ink-200 px-2.5 py-1 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-500 transition-colors hover:border-brand-200 hover:text-brand-800"
+                  >
+                    REVOKE
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ── Rules & guards ──────────────────────────────────────────────────────── */
 
 function GuardPills<T extends string>({
@@ -3360,10 +3723,12 @@ function SettingsView({
   user,
   agent,
   onSignOut,
+  onToast,
 }: {
   user: AuthUser | null;
   agent: AgentStatus;
   onSignOut: () => void;
+  onToast: (m: string) => void;
 }) {
   const mode = agentModeOf(agent);
   const health = agent.health;
@@ -3425,43 +3790,7 @@ function SettingsView({
           </button>
         </div>
 
-        <section className={`${cardClass} lg:col-span-2`} aria-labelledby="settings-team-heading">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className={labelClass}>WORKSPACE ACCESS</p>
-              <h3 id="settings-team-heading" className={titleClass}>Team Members</h3>
-              <p className="mt-1 text-[12.5px] text-ink-500">
-                People with access to this workspace. Committee decision-makers are managed separately in Committee.
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-paper px-3 py-1.5 font-code text-[8px] font-bold tracking-[0.14em] text-ink-500">
-              <Users className="h-3 w-3" aria-hidden="true" />
-              INVITATIONS NOT ENABLED
-            </span>
-          </div>
-          <ul className="mt-5">
-            <li className="flex flex-wrap items-center gap-3 rounded-xl border border-ink-100 bg-paper/60 px-4 py-3.5">
-              <span
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 font-code text-[10px] font-bold text-white"
-                aria-hidden="true"
-              >
-                {initialsOf(user?.name ?? "Quorum")}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-ink-950">{user?.name ?? "Guest officer"}</p>
-                <p className="truncate font-code text-[8px] tracking-[0.12em] text-ink-500">
-                  {(user?.email ?? "NOT SIGNED IN").toUpperCase()}
-                </p>
-              </div>
-              <span className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-500">
-                CURRENT ACCOUNT
-              </span>
-            </li>
-          </ul>
-          <p className="mt-3 text-[11.5px] leading-relaxed text-ink-400">
-            Shared workspace access and member invitations are not configured yet.
-          </p>
-        </section>
+        <TeamMembersSection user={user} onToast={onToast} />
 
         <div className={`${cardClass} lg:col-span-2`}>
           <p className={labelClass}>AGENT CONNECTION</p>
@@ -3489,7 +3818,7 @@ type WalkthroughChapter = {
   summary: string;
   steps: string[];
   tip: string;
-  /* Chapter two opens the New run wizard instead of a section. */
+  /* Chapter two opens the New evaluation wizard instead of a section. */
   launch?: boolean;
 };
 
@@ -3507,7 +3836,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
   },
   {
     section: "mc-runs",
-    title: "Launch a run",
+    title: "Launch an evaluation",
     summary: "A run is one tender reviewed end to end. The wizard takes three steps and never starts until you confirm the scope.",
     steps: [
       "Details: enter the tender reference and the published title exactly as it appears, then pick the source format (OCDS, PDF pack or email bag).",
@@ -3714,7 +4043,7 @@ function WalkthroughView({
                   onClick={() => (ch.launch ? onNewRun() : onOpen(ch.section))}
                   className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3.5 font-code text-[9px] font-bold tracking-[0.12em] text-ink-700 transition-colors hover:border-ink-950 hover:text-ink-950"
                 >
-                  {ch.launch ? "LAUNCH A RUN" : `OPEN ${SECTION_LABEL[ch.section].toUpperCase()}`}
+                  {ch.launch ? "LAUNCH AN EVALUATION" : `OPEN ${SECTION_LABEL[ch.section].toUpperCase()}`}
                   <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                 </button>
               </div>
@@ -4271,7 +4600,7 @@ export function Dashboard({
       case "mc-stack":
         return <StackConsole onToast={onToast} />;
       case "mc-settings":
-        return <SettingsView user={user} agent={agent} onSignOut={onSignOut} />;
+        return <SettingsView user={user} agent={agent} onSignOut={onSignOut} onToast={onToast} />;
       case "mc-walkthrough":
         return <WalkthroughView onOpen={switchTo} onNewRun={() => setModalOpen(true)} />;
       default:
@@ -4458,7 +4787,7 @@ export function Dashboard({
                   className="group inline-flex h-11 items-center gap-2 rounded-xl bg-brand-600 px-5 text-[14px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700"
                 >
                   <Plus className="h-4 w-4" aria-hidden="true" />
-                  New run
+                  New evaluation
                 </button>
               </div>
             </div>
