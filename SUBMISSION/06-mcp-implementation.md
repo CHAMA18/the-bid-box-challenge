@@ -36,6 +36,8 @@ Five tools on our registry (each with a typed JSON-schema of inputs, plus a `_x_
 | `draft_redline` | WRITES | LLM-drafted committee redline for a flagged clause |
 | `file_gate_submission` | IRREVERSIBLE | Requests the award filing — returns `gate_pending` and never executes until a named human signs |
 
+Honest scope: over `/mcp`, only `tender_documents_list` and `file_gate_submission` execute directly. `extract_requirements`, `flag_finding` and `draft_redline` return `delegated` and run only inside the review graph, started with `POST /api/runs`.
+
 Two tools correspond directly to the capabilities of the file-system MCP server we delegate to: `read_text_file`, `read_file` — used by our agent for document reads. The SDK client loops through whichever of these two the server offers and falls back, so the exact tool name does not become a hardcoded dependency.
 
 ## MCP resources — what documents appear as
@@ -46,7 +48,7 @@ The tender pack (`data/tenders/<tender-ref>/`) — notices, bids, OCDS records �
 
 Three distinct MCP wiring paths, one per consumer:
 
-1. **Agent ↔ tool registry (in-process).** The LangGraph review graph's nodes call the same underlying dispatch logic used by the MCP surface (a single shared tool registry), so the graph is simply another MCP consumer. Every call lands in `tool-log.jsonl` — same format as remote calls, same audit.
+1. **Agent ↔ review graph (in-process).** The LangGraph review graph's nodes run the review logic directly; they do not go through the `/mcp` JSON-RPC dispatch. The shared pieces are the tool names, schemas and kinds that `tools/list` publishes, and the audit log. Calls that the graph makes are written to `tool-log.jsonl` in the same format as remote calls.
 2. **Agent ↔ filesystem MCP (in-process via SDK over stdio).** Our sidecar holds a long-lived SDK MCP client session to the spawned filesystem server; document reads go through it, logging the read as done by *that* server.
 3. **External MCP clients ↔ us (public JSON-RPC).** Any conforming MCP client can `initialize`, list tools and call them against our port (delegated internal calls return an explicit hint to use `POST /api/runs` for graph-driven paths; but `file_gate_submission`, the interesting one, works fully remote: even an outside caller cannot bypass the gate — it just creates `gate_pending` for a human).
 

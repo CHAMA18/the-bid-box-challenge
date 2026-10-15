@@ -35,6 +35,9 @@ import {
   fsMcp,
   initFsMcp,
   listTenderDocs,
+  mcpDraftRedline,
+  mcpExtractRequirements,
+  mcpFlagFinding,
   TOOLS,
 } from "./engine";
 
@@ -99,12 +102,12 @@ async function callOwnTool(name: string, args: Record<string, unknown>, runId?: 
       });
       return { files };
     }
-    case "draft_redline":
-    case "flag_finding":
     case "extract_requirements":
-      /* In the orchestrated path these run inside the LangGraph review graph
-         (see engine.ts). Direct MCP calls route there too — kept minimal here. */
-      return { status: "delegated", note: `Use POST /api/runs — ${name} executes inside the review graph.` };
+      return mcpExtractRequirements(args, runId);
+    case "flag_finding":
+      return mcpFlagFinding({ ...args, runId: args.runId ?? runId });
+    case "draft_redline":
+      return mcpDraftRedline({ ...args, runId: args.runId ?? runId });
     case "file_gate_submission":
       return raiseGateTool(
         args as { tenderId: string; bundle: Record<string, unknown> },
@@ -292,8 +295,8 @@ Bun.serve({
           },
           {
             layer: "MODEL",
-            name: "Open-weights · Llama (in-region)",
-            detail: "Procurement data cannot leave the country — drafting runs on open weights behind our own walls.",
+            name: "OpenAI-compatible endpoint (LLM_BASE_URL)",
+            detail: "Designed for open weights served in-region, so procurement data stays in-country. The current build uses a hosted endpoint or the template fallback."
           },
           {
             layer: "AUDIT",

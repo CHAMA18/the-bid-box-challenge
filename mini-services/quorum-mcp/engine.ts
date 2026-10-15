@@ -97,10 +97,12 @@ async function readTenderFile(rel: string, runId: string): Promise<string> {
   return text;
 }
 
-/* ── 2. Open-weights model call (Llama, served in-region) ──────────────────
-   Procurement data cannot leave the jurisdiction. Llama runs on infrastructure
-   we host, behind an OpenAI-compatible /chat/completions endpoint (vLLM, TGI,
-   Ollama, …). Nothing is sent to a closed frontier API. */
+/* ── 2. Drafting model call (any OpenAI-compatible endpoint) ───────────────
+   The endpoint is whatever LLM_BASE_URL / LLM_MODEL point at. The intended
+   setup is an open-weights model served in-region (vLLM, TGI, Ollama, …) so
+   procurement data stays in the jurisdiction. Nothing in code enforces that:
+   the endpoint in .env.local is a hosted, out-of-region model, and each draft
+   records the model that actually answered. */
 
 export interface LlmConfig {
   baseUrl: string;
@@ -123,12 +125,12 @@ export function llmConfigFromEnv(env: Record<string, string | undefined> = proce
   return { baseUrl, model, apiKey: env.LLM_API_KEY?.trim() || undefined };
 }
 
-/* One chat completion from the in-region Llama endpoint. Throws on any failure; the caller falls back. */
+/* One chat completion from the configured LLM endpoint. Throws on any failure; the caller falls back. */
 export async function callLlama(
   cfg: LlmConfig,
   messages: ChatMessage[],
   fetchImpl: FetchLike = fetch,
-): Promise<{ model: string; content: string }> {
+): Promise<{ model: string; content: string; usage: { promptTokens: number; completionTokens: number } }> {
   const res = await fetchImpl(`${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
@@ -139,14 +141,27 @@ export async function callLlama(
     signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) throw new Error(`llm endpoint answered ${res.status}`);
-  const data = (await res.json()) as { model?: string; choices?: { message?: { content?: string } }[] };
-  return { model: data.model ?? cfg.model, content: data.choices?.[0]?.message?.content ?? "" };
+  const data = (await res.json()) as {
+    model?: string;
+    choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+  return {
+    model: data.model ?? cfg.model,
+    content: data.choices?.[0]?.message?.content ?? "",
+    usage: {
+      promptTokens: data.usage?.prompt_tokens ?? 0,
+      completionTokens: data.usage?.completion_tokens ?? 0,
+    },
+  };
 }
 
 async function llmDraft(original: string, anomaly: string, runId: string): Promise<Draft> {
   const t0 = performance.now();
   const cfg = llmConfigFromEnv();
-  let model = cfg ? `llama (${cfg.model})` : "llama (not configured)";
+  let model = cfg ? `${cfg.model} (llm)` : "template (no model configured)";
+  let source: "llm" | "template" = "template";
+  let usage = { promptTokens: 0, completionTokens: 0 };
   let proposed = `Insert: "The Buyer reserves the right to seek written clarification of ${anomaly} prior to award, and to disqualify bids left unclarified after five (5) working days."`;
   let rationale = `Template guard added in-region: ${anomaly}.`;
   try {
@@ -162,26 +177,27 @@ async function llmDraft(original: string, anomaly: string, runId: string): Promi
           content: `EVIDENCE (do not echo):\n${original}\n\nANOMALY RULE:\n${anomaly}\n\nExample of the expected shape: {"proposed":"The Buyer reserves the right to seek written clarification of any line-item price exceeding the peer median by more than 100% prior to award; bids left unclarified after five (5) working days shall be disqualified.","rationale":"..."}\n\nDraft the redline now.`,
         },
     ]);
-    model = completion.model;
-    const raw = completion.content;
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (m) {
-      const parsed = JSON.parse(m[0]) as { proposed?: string; rationale?: string };
-      if (parsed.proposed) proposed = parsed.proposed;
-      if (parsed.rationale) rationale = parsed.rationale;
-    }
+    model = `${completion.model} (llm)`;
+    usage = completion.usage;
+    const m = completion.content.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error("model reply contained no JSON object");
+    const parsed = JSON.parse(m[0]) as { proposed?: string; rationale?: string };
+    if (!parsed.proposed) throw new Error("model reply had no proposed clause");
+    proposed = parsed.proposed;
+    if (parsed.rationale) rationale = parsed.rationale;
+    source = "llm";
   } catch (err) {
-    model = cfg ? `llama (${cfg.model}) · unreachable — template fallback` : "llama (not configured) — template fallback";
+    model = cfg ? `${cfg.model} (llm) · failed — template used` : "template (no model configured)";
     rationale = `LLM call failed (${(err as Error).message}); template guard applied so the run never stalls.`;
   }
   appendLog({
     actor: "quorum-agent",
-    server: "open-weights · llama",
+    server: source === "llm" ? "llm endpoint" : "template",
     tool: "draft_redline",
     kind: "WRITES",
     runId,
     inputs: { clause: original.slice(0, 200), anomaly },
-    outputs: { proposed: proposed.slice(0, 260), rationale: rationale.slice(0, 200), model },
+    outputs: { proposed: proposed.slice(0, 260), rationale: rationale.slice(0, 200), model, source, usage },
     status: "OK",
     durationMs: Math.round(performance.now() - t0),
   });
@@ -192,6 +208,9 @@ async function llmDraft(original: string, anomaly: string, runId: string): Promi
     proposed,
     rationale,
     model,
+    source,
+    usage,
+    latencyMs: Math.round(performance.now() - t0),
   };
 }
 
@@ -207,33 +226,37 @@ export const TOOLS = [
   {
     name: "extract_requirements",
     kind: "READ" as const,
-    description: "Parse SHALL/must clauses, budget and deadline from tender documents into structured requirements.",
+    description: "Pin the SHALL/must clauses in a tender's notices. Read-only; returns the clauses, it stores nothing.",
     inputSchema: { type: "object", properties: { tenderId: { type: "string" } }, required: ["tenderId"] },
   },
   {
     name: "draft_redline",
     kind: "WRITES" as const,
-    description: "DRAFTS a committee-ready redline for a flagged clause using an open-weights model. Writes a draft record.",
+    description:
+      "DRAFTS a redline for a finding in a review run, using the configured LLM or the template fallback. Appends a draft to that run.",
     inputSchema: {
       type: "object",
-      properties: { clause: { type: "string" }, anomaly: { type: "string" } },
-      required: ["clause", "anomaly"],
+      properties: { runId: { type: "string" }, findingId: { type: "string" } },
+      required: ["runId", "findingId"],
     },
   },
   {
     name: "flag_finding",
     kind: "WRITES" as const,
-    description: "FLAGS a finding against a deterministic rule (price outlier, missing doc, spec deviation). Writes to the findings ledger.",
+    description:
+      "FLAGS a finding in a review run. Accepted only if its citation names a document in the tender and its anchor text appears there.",
     inputSchema: {
       type: "object",
       properties: {
+        tenderId: { type: "string" },
+        runId: { type: "string" },
         rule: { type: "string" },
         severity: { type: "string", enum: ["HIGH", "MEDIUM", "LOW"] },
         item: { type: "string" },
         evidence: { type: "string" },
         citation: { type: "string" },
       },
-      required: ["rule", "severity", "item", "evidence", "citation"],
+      required: ["tenderId", "runId", "rule", "severity", "item", "evidence", "citation"],
     },
   },
   {
@@ -254,6 +277,7 @@ export const TOOLS = [
 ] as const;
 
 export async function listTenderDocs(tenderId: string, runId?: string): Promise<string[]> {
+  if (!/^[A-Za-z0-9._-]+$/.test(tenderId)) return [];
   try {
     return (await readdir(join(TENDERS_DIR, tenderId))).sort();
   } catch {
@@ -452,13 +476,48 @@ export function verifyFinding(f: Finding, sources: Record<string, string>): bool
   }
 }
 
+/* A requirement's document names: parenthetical qualifiers are dropped, "X or Y" gives two alternatives. */
+export function requirementOptions(req: string): string[] {
+  return req
+    .replace(/\([^)]*\)/g, "")
+    .split(/\s+or\s+/i)
+    .map((o) => o.trim().toLowerCase())
+    .filter((o) => o.length > 0);
+}
+
+const DOC_STOPWORDS = new Set(["a", "an", "the", "of", "for", "all", "and", "to", "in", "on", "with", "from", "by"]);
+
+/* Significant words of a document name. A trailing plural "s" is dropped so "RDTs" matches "RDT". */
+export function docTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 0 && !DOC_STOPWORDS.has(t))
+    .map((t) => (t.length > 3 && t.endsWith("s") ? t.slice(0, -1) : t));
+}
+
+const PENDING_MARKER = /\b(pending|outstanding|awaiting|to follow|not yet)\b/i;
+
+/* A document is provided when one bid line names every significant word of an option and does not say the document is pending. */
+export function bidNamesDocument(bidText: string, option: string): boolean {
+  const need = docTokens(option);
+  if (need.length === 0) return false;
+  return bidText.split("\n").some((line) => {
+    if (PENDING_MARKER.test(line)) return false;
+    const have = new Set(docTokens(line));
+    return need.every((t) => have.has(t));
+  });
+}
+
 /* Required documents named in a notice ("- [REQUIRED] …") that a bid does not reference. */
 export function docMissingFindings(bids: BidDoc[], notice: string, noticeFile: string): Finding[] {
   const findings: Finding[] = [];
-  const requiredDocs = [...notice.matchAll(/^- \[REQUIRED\]\s*(.+)$/gm)].map((m) => m[1].trim().toLowerCase());
+  const requiredDocs = [...notice.matchAll(/^- \[REQUIRED\]\s*(.+)$/gm)].map((m) => m[1].trim());
   for (const bid of bids) {
-    for (const req of requiredDocs) {
-      if (!bid.text.toLowerCase().includes(req.split(" ")[0])) {
+    for (const reqRaw of requiredDocs) {
+      const req = reqRaw.toLowerCase();
+      /* Every significant word of an option must appear. A single shared word ("reference" in a bid header) is not evidence. */
+      if (!requirementOptions(req).some((o) => bidNamesDocument(bid.text, o))) {
         findings.push({
           id: "",
           rule: "R-DOC-MISSING",
@@ -597,15 +656,16 @@ function progress(runId: string, line: string) {
   }
 }
 
-async function nodeLoadDocuments(s: typeof ReviewState.State) {
-  progress(s.runId, "▸ tender_documents_list — via server-filesystem MCP");
-  const files = await listTenderDocs(s.tenderId, s.runId);
+/**
+ * Pure: turn a tender pack's raw files into bids, OCDS records and notices.
+ * Shared by the review graph and the offline evaluation harness (eval.ts),
+ * so both exercise exactly the same parsing path.
+ */
+export function buildPack(files: string[], sources: Record<string, string>) {
   const bids: BidDoc[] = [];
-  const sources: Record<string, string> = {};
   const records: OcdsRecord[] = [];
   for (const f of files) {
-    const text = await readTenderFile(`${s.tenderId}/${f}`, s.runId);
-    sources[f] = text;
+    const text = sources[f] ?? "";
     if (f.endsWith(".json")) {
       /* OCDS release — the notice, bids, documents and awards all come from the record itself. */
       for (const rec of parseOcdsRecords(text, f)) {
@@ -621,15 +681,175 @@ async function nodeLoadDocuments(s: typeof ReviewState.State) {
   }
   const mdNotice = files.find((f) => f.startsWith("01-") && f.endsWith(".md"));
   const notices = [
-    ...(mdNotice ? [{ file: mdNotice, text: sources[mdNotice] }] : []),
+    ...(mdNotice ? [{ file: mdNotice, text: sources[mdNotice] ?? "" }] : []),
     ...records.map((r) => ({ file: r.source, text: r.notice })),
   ];
-  const awardCount = records.reduce((n, r) => n + r.awards.length, 0);
+  return { bids, records, notices };
+}
+
+/**
+ * Pure: run every deterministic rule over a built pack. Findings whose citation
+ * does not name a document in the tender are returned as `rejected`, never kept.
+ */
+export function flagPack(
+  pack: ReturnType<typeof buildPack>,
+  files: string[],
+): { kept: Finding[]; rejected: Finding[] } {
+  const all = [
+    ...runRules(pack.bids, "", ""),
+    ...pack.notices.flatMap((n) => docMissingFindings(pack.bids, n.text, n.file)),
+    ...runAwardRules(pack.records),
+  ];
+  const kept: Finding[] = [];
+  const rejected: Finding[] = [];
+  for (const f of all) (citesKnownDocument(f.citation, files) ? kept : rejected).push(f);
+  return { kept, rejected };
+}
+
+/* ── 5. Direct MCP calls — the same checks as the review graph ───────────── */
+
+const SAFE_REF = /^[A-Za-z0-9._-]+$/;
+const SEVERITIES = ["HIGH", "MEDIUM", "LOW"];
+
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+
+/* A direct call may add to a run only while its gate is still PENDING; once a human has decided, the bundle is closed. */
+function directRun(runId: string): Run {
+  const run = refs.runs.find((r) => r.id === runId);
+  if (!run) throw new Error(`run not found: "${runId}" — start a review with POST /api/runs first`);
+  const gate = refs.gates.find((g) => g.runId === run.id);
+  if (gate && gate.status !== "PENDING") {
+    throw new Error(`run ${run.id} gate is ${gate.status} — its filing bundle is closed`);
+  }
+  return run;
+}
+
+/* Keep the pending gate's bundle in step with the run, so the approver sees every added finding and draft. */
+function syncGate(run: Run) {
+  const gate = refs.gates.find((g) => g.runId === run.id && g.status === "PENDING");
+  if (!gate) return;
+  gate.inputs = {
+    ...((gate.inputs ?? {}) as Record<string, unknown>),
+    attachments: run.drafts.length + run.findings.length + 1,
+    findings: run.findings.map((f) => f.id),
+    drafts: run.drafts.map((d) => d.id),
+  };
+}
+
+async function tenderSources(tenderId: string, runId?: string) {
+  const files = await listTenderDocs(tenderId, runId);
+  const sources: Record<string, string> = {};
+  for (const f of files) sources[f] = await readTenderFile(`${tenderId}/${f}`, runId ?? "mcp-direct");
+  return { files, sources };
+}
+
+/* extract_requirements (READ): the same clause pinning the review graph runs, over the tender's notices. */
+export async function mcpExtractRequirements(args: Record<string, unknown>, runId?: string) {
+  const t0 = performance.now();
+  const tenderId = str(args.tenderId);
+  if (!SAFE_REF.test(tenderId)) throw new Error(`invalid tenderId: "${tenderId}"`);
+  const { files, sources } = await tenderSources(tenderId, runId);
+  const pack = buildPack(files, sources);
+  const requirements = extractRequirements(pack.notices.map((n) => n.text).join("\n"));
+  appendLog({
+    actor: "external-mcp-client",
+    server: "quorum-mcp",
+    tool: "extract_requirements",
+    kind: "READ",
+    runId,
+    inputs: { tenderId },
+    outputs: { count: requirements.length },
+    status: "OK",
+    durationMs: Math.round(performance.now() - t0),
+  });
+  return { tenderId, requirements };
+}
+
+/* flag_finding (WRITES): a finding is kept only if its citation names a document in the tender AND its anchor text is in that document. */
+export async function mcpFlagFinding(args: Record<string, unknown>) {
+  const t0 = performance.now();
+  const tenderId = str(args.tenderId);
+  if (!SAFE_REF.test(tenderId)) throw new Error(`invalid tenderId: "${tenderId}"`);
+  const run = directRun(str(args.runId));
+  if (run.tenderId !== tenderId) throw new Error(`run ${run.id} reviews ${run.tenderId}, not ${tenderId}`);
+  const candidate: Finding = {
+    id: "",
+    rule: str(args.rule),
+    severity: str(args.severity) as Finding["severity"],
+    item: str(args.item),
+    evidence: str(args.evidence),
+    citation: str(args.citation),
+  };
+  const { files, sources } = await tenderSources(tenderId, run.id);
+  let reason: string | null = null;
+  if (!SEVERITIES.includes(candidate.severity)) reason = "severity must be HIGH, MEDIUM or LOW";
+  else if (!citesKnownDocument(candidate.citation, files)) reason = "citation does not name a document in this tender";
+  else if (!verifyFinding(candidate, sources)) reason = "anchor text not found in cited document";
+  if (reason) {
+    appendLog({
+      actor: "external-mcp-client",
+      server: "quorum-mcp",
+      tool: "flag_finding",
+      kind: "WRITES",
+      runId: run.id,
+      inputs: { rule: candidate.rule, item: candidate.item },
+      outputs: { rejected: reason, citation: candidate.citation },
+      status: "ERROR",
+      durationMs: Math.round(performance.now() - t0),
+    });
+    return { status: "rejected", reason };
+  }
+  const finding: Finding = { ...candidate, id: `F-${String(run.findings.length + 1).padStart(2, "0")}` };
+  run.findings.push(finding);
+  syncGate(run);
+  refs.save();
+  appendLog({
+    actor: "external-mcp-client",
+    server: "quorum-mcp",
+    tool: "flag_finding",
+    kind: "WRITES",
+    runId: run.id,
+    inputs: { rule: finding.rule, item: finding.item },
+    outputs: { id: finding.id, severity: finding.severity, citation: finding.citation },
+    status: "OK",
+    durationMs: Math.round(performance.now() - t0),
+  });
+  return { status: "accepted", finding };
+}
+
+/* draft_redline (WRITES): drafts for an existing finding in a run, via the configured model or the template. */
+export async function mcpDraftRedline(args: Record<string, unknown>) {
+  const run = directRun(str(args.runId));
+  const findingId = str(args.findingId);
+  const finding = run.findings.find((f) => f.id === findingId);
+  if (!finding) throw new Error(`finding not found in run ${run.id}: "${findingId}"`);
+  const d = await llmDraft(finding.evidence, `${finding.rule} on ${finding.item}`, run.id);
+  const draft: Draft = { ...d, findingId };
+  run.drafts.push(draft);
+  syncGate(run);
+  const prev = run.usage ?? { drafts: 0, llmDrafts: 0, promptTokens: 0, completionTokens: 0 };
+  run.usage = {
+    drafts: prev.drafts + 1,
+    llmDrafts: prev.llmDrafts + (draft.source === "llm" ? 1 : 0),
+    promptTokens: prev.promptTokens + (draft.usage?.promptTokens ?? 0),
+    completionTokens: prev.completionTokens + (draft.usage?.completionTokens ?? 0),
+  };
+  refs.save();
+  return { draft };
+}
+
+async function nodeLoadDocuments(s: typeof ReviewState.State) {
+  progress(s.runId, "▸ tender_documents_list — via server-filesystem MCP");
+  const files = await listTenderDocs(s.tenderId, s.runId);
+  const sources: Record<string, string> = {};
+  for (const f of files) sources[f] = await readTenderFile(`${s.tenderId}/${f}`, s.runId);
+  const pack = buildPack(files, sources);
+  const awardCount = pack.records.reduce((n, r) => n + r.awards.length, 0);
   progress(
     s.runId,
-    `▸ ${files.length} documents read · ${bids.length} bids · ${awardCount} awards · ${records.length} OCDS records`,
+    `▸ ${files.length} documents read · ${pack.bids.length} bids · ${awardCount} awards · ${pack.records.length} OCDS records`,
   );
-  return { bids, tenderId: s.tenderId, sources, notices, records };
+  return { bids: pack.bids, tenderId: s.tenderId, sources, notices: pack.notices, records: pack.records };
 }
 
 async function nodeExtract(s: typeof ReviewState.State) {
@@ -651,31 +871,22 @@ async function nodeExtract(s: typeof ReviewState.State) {
 }
 
 async function nodeFlag(s: typeof ReviewState.State) {
-  const files = Object.keys(s.sources);
-  const merged = [
-    ...runRules(s.bids, "", ""),
-    ...s.notices.flatMap((n) => docMissingFindings(s.bids, n.text, n.file)),
-    ...runAwardRules(s.records),
-  ]
-    .filter((f) => {
-      const ok = citesKnownDocument(f.citation, files);
-      if (!ok) {
-        /* Uncited flags never reach the ledger — logged as rejected instead. */
-        appendLog({
-          actor: "quorum-agent",
-          server: "quorum-mcp",
-          tool: "flag_finding",
-          kind: "WRITES",
-          runId: s.runId,
-          inputs: { rule: f.rule, item: f.item },
-          outputs: { rejected: "no source document in this tender", citation: f.citation },
-          status: "ERROR",
-          durationMs: 0,
-        });
-      }
-      return ok;
-    })
-    .map((f, i) => ({ ...f, id: `F-${String(i + 1).padStart(2, "0")}` }));
+  const { kept, rejected } = flagPack({ bids: s.bids, records: s.records, notices: s.notices }, Object.keys(s.sources));
+  /* Uncited flags never reach the ledger — logged as rejected instead. */
+  for (const f of rejected) {
+    appendLog({
+      actor: "quorum-agent",
+      server: "quorum-mcp",
+      tool: "flag_finding",
+      kind: "WRITES",
+      runId: s.runId,
+      inputs: { rule: f.rule, item: f.item },
+      outputs: { rejected: "no source document in this tender", citation: f.citation },
+      status: "ERROR",
+      durationMs: 0,
+    });
+  }
+  const merged = kept.map((f, i) => ({ ...f, id: `F-${String(i + 1).padStart(2, "0")}` }));
   for (const f of merged) {
     appendLog({
       actor: "quorum-agent",
@@ -722,11 +933,21 @@ async function nodeDraft(s: typeof ReviewState.State) {
   const top = s.findings.filter((f) => f.severity === "HIGH").slice(0, 2);
   const drafts: Draft[] = [];
   for (const f of top) {
-    progress(s.runId, `▸ draft_redline — open-weights model drafting for ${f.rule}`);
+    const cfg = llmConfigFromEnv();
+    const mode = cfg ? `LLM drafting (${cfg.model})` : "template (no model configured)";
+    progress(s.runId, `▸ draft_redline — ${mode} for ${f.rule}`);
     const d = await llmDraft(f.evidence, `${f.rule} on ${f.item}`, s.runId);
     drafts.push({ ...d, findingId: f.id });
   }
-  progress(s.runId, `▸ ${drafts.length} redline drafts ready for committee`);
+  const llm = drafts.filter((d) => d.source === "llm");
+  const promptTokens = drafts.reduce((n, d) => n + (d.usage?.promptTokens ?? 0), 0);
+  const completionTokens = drafts.reduce((n, d) => n + (d.usage?.completionTokens ?? 0), 0);
+  const run = refs.runs.find((r) => r.id === s.runId);
+  if (run) run.usage = { drafts: drafts.length, llmDrafts: llm.length, promptTokens, completionTokens };
+  progress(
+    s.runId,
+    `▸ ${drafts.length} redline drafts ready for committee · ${llm.length} from the model, ${drafts.length - llm.length} template · ${promptTokens + completionTokens} tokens`,
+  );
   return { drafts };
 }
 

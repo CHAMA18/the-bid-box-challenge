@@ -52,6 +52,10 @@ export interface Draft {
   proposed: string;
   rationale: string;
   model: string;
+  /* "llm" only when the model's reply was used; "template" when the fallback text is the proposal. */
+  source?: "llm" | "template";
+  usage?: { promptTokens: number; completionTokens: number };
+  latencyMs?: number;
 }
 
 export interface Gate {
@@ -81,6 +85,8 @@ export interface Run {
   drafts: Draft[];
   gateId?: string;
   error?: string;
+  /* Drafting cost for this run: how many drafts came from the model and the tokens it used. */
+  usage?: { drafts: number; llmDrafts: number; promptTokens: number; completionTokens: number };
 }
 
 /* fileURLToPath decodes %20 etc. — .pathname breaks on paths with spaces. */

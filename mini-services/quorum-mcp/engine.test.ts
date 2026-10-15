@@ -97,7 +97,7 @@ describe("self-check against the cited document", () => {
   });
 });
 
-describe("drafting model: open-weights Llama, in-region endpoint", () => {
+describe("drafting model: OpenAI-compatible LLM endpoint", () => {
   const cfg = { baseUrl: "http://llama.internal:8000/v1/", model: "llama-3.1-70b-instruct", apiKey: "k" };
 
   test("reads the endpoint from LLM_* env and needs both URL and model", () => {

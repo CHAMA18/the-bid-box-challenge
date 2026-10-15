@@ -1,10 +1,10 @@
-import { db } from "@/lib/db";
+import { getSetting, listCommitteeMembers, setSetting } from "@/lib/db";
 import type { AuthUser } from "@/lib/auth-types";
 
 /**
  * Committee state — the humans behind the gavel, as stored data.
  *
- * The standing committee lives in SQLite (CommitteeMember rows); seat
+ * The standing committee lives in the JSON store (committee member rows); seat
  * capacity and the quorum threshold are SystemSetting rows. The gavel seat
  * is never a stored row: it belongs to whoever is actually signed in, and
  * the API resolves that from the session cookie. No member is invented: the
@@ -38,11 +38,7 @@ let seedPromise: Promise<void> | null = null;
 
 async function seedOnce(): Promise<void> {
   for (const [key, value] of Object.entries(DEFAULTS)) {
-    await db.systemSetting.upsert({
-      where: { key },
-      update: {},
-      create: { key, value },
-    });
+    if (getSetting(key) === undefined) setSetting(key, value);
   }
 }
 
@@ -57,15 +53,14 @@ export async function ensureCommittee(): Promise<void> {
 }
 
 async function setting(key: string): Promise<string> {
-  const row = await db.systemSetting.findUnique({ where: { key } });
-  return row?.value ?? DEFAULTS[key] ?? "";
+  return getSetting(key) ?? DEFAULTS[key] ?? "";
 }
 
 export async function getCommitteeState(user: AuthUser | null): Promise<CommitteeState> {
   await ensureCommittee();
 
   const [rows, seatsRaw, requiredRaw, summonsRaw] = await Promise.all([
-    db.committeeMember.findMany({ orderBy: [{ seatOrder: "asc" }, { createdAt: "asc" }] }),
+    Promise.resolve(listCommitteeMembers()),
     setting("committee_seats"),
     setting("quorum_required"),
     setting("committee_last_summons_at"),
@@ -100,10 +95,6 @@ export async function getCommitteeState(user: AuthUser | null): Promise<Committe
 
 export async function recordSummons(user: AuthUser | null): Promise<CommitteeState> {
   await ensureCommittee();
-  await db.systemSetting.upsert({
-    where: { key: "committee_last_summons_at" },
-    update: { value: new Date().toISOString() },
-    create: { key: "committee_last_summons_at", value: new Date().toISOString() },
-  });
+  setSetting("committee_last_summons_at", new Date().toISOString());
   return getCommitteeState(user);
 }

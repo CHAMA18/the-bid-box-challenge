@@ -4,7 +4,7 @@ import { getCommitteeState } from "@/lib/committee";
 
 /**
  * GET /api/committee — the standing committee as stored data: members from
- * SQLite, seat capacity and quorum threshold from settings, the gavel seat
+ * JSON store, seat capacity and quorum threshold from settings, the gavel seat
  * resolved from the signed-in user, and the present/open counts computed.
  */
 export async function GET(req: NextRequest) {

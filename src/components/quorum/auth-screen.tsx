@@ -6,7 +6,12 @@ import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff, Lock } from "lucide-re
 import { QuorumLogo } from "@/components/quorum/logo";
 import { Eyebrow } from "@/components/quorum/reveal";
 import type { AuthMode, AuthUser } from "@/lib/auth-types";
-import { signInWithGooglePopup, syncFirebaseIdentity } from "@/lib/firebase";
+import {
+  getVerifiedIdToken,
+  signInWithGooglePopup,
+  startEmailVerification,
+  syncFirebaseIdentity,
+} from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -399,6 +404,68 @@ interface AuthScreenProps {
   onClose: () => void;
 }
 
+function VerifyPanel({
+  email,
+  busy,
+  note,
+  onCheck,
+  onResend,
+  onBack,
+}: {
+  email: string;
+  busy: boolean;
+  note: string | null;
+  onCheck: () => void;
+  onResend: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10, transition: { duration: 0.18 } }}
+      transition={{ duration: 0.45, ease: EASE }}
+    >
+      <Eyebrow>FIG. 04 — Verify your email</Eyebrow>
+      <h1 className="mt-4 font-display text-[36px] font-black leading-[1.04] tracking-[-0.025em] text-ink-950 sm:text-[42px]">
+        Check your inbox<span className="text-brand-600">.</span>
+      </h1>
+      <p className="mt-3 text-[15px] leading-relaxed text-ink-600">
+        We sent a verification link to <span className="font-semibold text-ink-900">{email}</span>. Open it,
+        then come back here to continue.
+      </p>
+      {note && (
+        <p role="status" className="mt-5 rounded-xl border border-ink-200 bg-white px-4 py-3 text-[13px] font-semibold leading-snug text-ink-700">
+          {note}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={onCheck}
+        disabled={busy}
+        className="mt-6 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-ink-950 text-[15px] font-semibold text-white transition-all hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-70"
+      >
+        I&apos;ve verified my email
+      </button>
+      <button
+        type="button"
+        onClick={onResend}
+        disabled={busy}
+        className="mt-3 inline-flex h-12 w-full items-center justify-center rounded-xl border border-ink-200 bg-white text-[14px] font-semibold text-ink-900 transition-all hover:border-ink-400 disabled:cursor-not-allowed disabled:opacity-70"
+      >
+        Resend verification email
+      </button>
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-5 w-full text-center text-[13px] font-semibold text-brand-700 underline decoration-brand-300 underline-offset-4"
+      >
+        Use a different email
+      </button>
+    </motion.div>
+  );
+}
+
 export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, onClose }: AuthScreenProps) {
   const [values, setValues] = useState({ name: "", email: "", organization: "", inviteCode: "", password: "" });
   const [remember, setRemember] = useState(true);
@@ -406,7 +473,12 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
   const [showPw, setShowPw] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [status, setStatus] = useState<"form" | "sending" | "success">("form");
+  const [status, setStatus] = useState<"form" | "sending" | "success" | "verify">("form");
+  const [verifyEmail, setVerifyEmail] = useState<string | null>(null);
+  const [verifyNote, setVerifyNote] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  /* Credentials kept in memory only, so "Resend" can re-open the Firebase identity. */
+  const pendingRef = useRef<{ name: string; email: string; password: string } | null>(null);
   const [granted, setGranted] = useState<AuthUser | null>(null);
   const [googleFlow, setGoogleFlow] = useState(false);
   const [memoOpen, setMemoOpen] = useState(false);
@@ -447,6 +519,69 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
     onSuccess(u);
   }
 
+  /* Send (or re-send) the Firebase verification email, then show the verify step. */
+  async function beginVerification(creds: { name: string; email: string; password: string }) {
+    pendingRef.current = creds;
+    setVerifyEmail(creds.email);
+    setVerifyNote(null);
+    setVerifyBusy(true);
+    setStatus("verify");
+    const state = await startEmailVerification(creds);
+    setVerifyNote(
+      state === null
+        ? "We couldn't reach Firebase to send the verification email. Use Resend in a moment."
+        : state.verified
+          ? "This email is already verified. Continue to finish signing in."
+          : `Verification link sent to ${creds.email}.`
+    );
+    setVerifyBusy(false);
+  }
+
+  /* Reload the Firebase user; once verified, the server checks the token and opens the session. */
+  async function completeVerification() {
+    setVerifyBusy(true);
+    setVerifyNote(null);
+    const idToken = await getVerifiedIdToken();
+    if (!idToken) {
+      setVerifyNote("Not verified yet. Open the link in the email from Quorum, then press the button again.");
+      setVerifyBusy(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      const data = (await res.json().catch(() => null)) as { user?: AuthUser; error?: string } | null;
+      if (res.ok && data?.user) {
+        pendingRef.current = null;
+        grant(data.user);
+        return;
+      }
+      setVerifyNote(data?.error ?? "Verification could not be confirmed. Try again.");
+    } catch {
+      setVerifyNote("Cannot reach the server. Check your connection and try again.");
+    }
+    setVerifyBusy(false);
+  }
+
+  async function resendVerification() {
+    const creds = pendingRef.current;
+    if (!creds) {
+      setVerifyNote("Sign in again to request a new link.");
+      return;
+    }
+    await beginVerification(creds);
+  }
+
+  function backToForm() {
+    pendingRef.current = null;
+    setVerifyEmail(null);
+    setVerifyNote(null);
+    setStatus("form");
+  }
+
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
     setGoogleFlow(false);
@@ -471,11 +606,17 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
           body: JSON.stringify({ email, password, remember }),
         });
         const data = (await res.json().catch(() => null)) as
-          | { user?: AuthUser; error?: string }
+          | { user?: AuthUser; error?: string; code?: string }
           | null;
         if (res.ok && data?.user) {
           void syncFirebaseIdentity({ name: data.user.name, email, password, mode: "login" });
           grant(data.user);
+          return;
+        }
+
+        /* Known credentials, but the email hasn't been verified yet: verify before access. */
+        if (res.status === 403 && data?.code === "EMAIL_UNVERIFIED") {
+          await beginVerification({ name: deriveName(email), email, password });
           return;
         }
 
@@ -517,13 +658,12 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
         return;
       }
 
-      void syncFirebaseIdentity({
+      /* No session yet — the account opens once the verification link is confirmed. */
+      await beginVerification({
         name: data.user.name,
         email: values.email.trim(),
         password: values.password,
-        mode: "register",
       });
-      grant(data.user);
     } catch {
       setFormError("Cannot reach the server. Check your connection and try again.");
       setStatus("form");
@@ -544,18 +684,23 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
     setStatus("sending");
 
     const fb = await signInWithGooglePopup();
-    if (fb?.email) {
-      const name = fb.name.trim() || deriveName(fb.email);
+    if (fb?.idToken) {
       try {
-        await fetch("/api/auth/register", {
+        const res = await fetch("/api/auth/google", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email: fb.email, password: `google-${fb.uid.slice(0, 18)}` }),
+          body: JSON.stringify({ idToken: fb.idToken }),
         });
+        const data = (await res.json().catch(() => null)) as { user?: AuthUser; error?: string } | null;
+        if (res.ok && data?.user) {
+          grant(data.user);
+          return;
+        }
+        setFormError(data?.error ?? "Google sign-in could not be confirmed. Try again or use your email.");
       } catch {
-        /* Server unreachable — the local session still opens the workspace. */
+        setFormError("Cannot reach the server. Check your connection and try again.");
       }
-      grant({ id: `google-${fb.uid}`, name, email: fb.email, organization: null });
+      setStatus("form");
       return;
     }
 
@@ -615,6 +760,16 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                     mode={mode}
                     onClose={onClose}
                     onEnterWorkspace={onEnterWorkspace}
+                  />
+                ) : status === "verify" && verifyEmail ? (
+                  <VerifyPanel
+                    key="verify"
+                    email={verifyEmail}
+                    busy={verifyBusy}
+                    note={verifyNote}
+                    onCheck={completeVerification}
+                    onResend={resendVerification}
+                    onBack={backToForm}
                   />
                 ) : (
                   <motion.div

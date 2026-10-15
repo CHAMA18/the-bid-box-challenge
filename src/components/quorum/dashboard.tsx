@@ -1659,8 +1659,8 @@ function SidebarContent({
           </p>
           <p className="mt-1.5 font-code text-[7.5px] leading-[1.8] tracking-[0.16em] text-ink-500">
             {agent.health
-              ? `MCP · ${agent.health.fsMcp.tools.length} FS TOOLS · OPEN WEIGHTS`
-              : "MCP · OPEN WEIGHTS"}
+              ? `MCP · ${agent.health.fsMcp.tools.length} FS TOOLS · LLM DRAFTING`
+              : "MCP · LLM DRAFTING"}
             <br />
             {agent.health
               ? `${agent.health.counts.toolCalls} TOOL CALLS LOGGED · ${agent.health.counts.pendingGates} GATE${
@@ -2745,7 +2745,7 @@ function RequestsPanel({ requests }: { requests: SourceRequestRow[] }) {
 }
 
 function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; firstName: string }) {
-  const standards = ["OCDS 1.1", "MCP TOOLS", "OPEN WEIGHTS", "PAGE CITATIONS"];
+  const standards = ["OCDS 1.1", "MCP TOOLS", "LLM DRAFTING", "PAGE CITATIONS"];
   const degraded = PORTALS.filter((p) => !p.ok).length;
 
   /* Live source requests from the quorum-mcp sidecar — pending ones show
@@ -3739,7 +3739,7 @@ function SettingsView({
       label: "Filesystem MCP",
       value: health ? `${health.fsMcp.status.toUpperCase()} · ${health.fsMcp.tools.length} TOOLS` : "—",
     },
-    { label: "Open-weights graphs", value: health ? String(health.graphs.length) : "—" },
+    { label: "Agent graphs", value: health ? String(health.graphs.length) : "—" },
     { label: "Runs recorded", value: health ? health.counts.runs.toLocaleString("en-US") : "—" },
     { label: "Tool calls logged", value: health ? health.counts.toolCalls.toLocaleString("en-US") : "—" },
   ];
@@ -3935,7 +3935,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
   {
     section: "mc-stack",
     title: "Inspect tools and models",
-    summary: "The sidecar's tools, the agent graphs and the open-weights models behind them.",
+    summary: "The sidecar's tools, the agent graphs and the LLM endpoint behind them.",
     steps: [
       "Each graph runs its checks and stops at the human gate.",
       "The tool log records every call the agent makes.",

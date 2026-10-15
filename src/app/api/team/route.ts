@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomBytes } from "crypto";
-import { db } from "@/lib/db";
+import {
+  createInvite,
+  findInviteById,
+  listInvites,
+  listUsers,
+  updateInvite,
+} from "@/lib/db";
 import { getUserFromToken, SESSION_COOKIE } from "@/lib/auth";
 
 /**
@@ -30,10 +36,8 @@ export async function GET(req: NextRequest) {
   const user = await requireUser(req);
   if (!user) return NextResponse.json({ error: "Sign in to manage workspace access." }, { status: 401 });
 
-  const [invites, users] = await Promise.all([
-    db.workspaceInvite.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
-    db.user.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, name: true, email: true, organization: true, createdAt: true } }),
-  ]);
+  const invites = listInvites(100);
+  const users = listUsers();
 
   const now = Date.now();
   const invitesView = invites.map((inv) => ({
@@ -72,14 +76,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "That doesn't look like an email address." }, { status: 422 });
   }
 
-  const invite = await db.workspaceInvite.create({
-    data: {
-      code: newCode(),
-      email: email || null,
-      role,
-      createdBy: user.id,
-      inviterName: user.name,
-    },
+  const invite = createInvite({
+    code: newCode(),
+    email: email || null,
+    role,
+    createdBy: user.id,
+    inviterName: user.name,
   });
 
   return NextResponse.json(
@@ -105,12 +107,12 @@ export async function DELETE(req: NextRequest) {
   const inviteId = req.nextUrl.searchParams.get("inviteId") ?? "";
   if (!inviteId) return NextResponse.json({ error: "inviteId required." }, { status: 422 });
 
-  const invite = await db.workspaceInvite.findUnique({ where: { id: inviteId } });
+  const invite = findInviteById(inviteId);
   if (!invite) return NextResponse.json({ error: "Invite not found." }, { status: 404 });
   if (invite.status !== "PENDING") {
     return NextResponse.json({ error: `Invite already ${invite.status.toLowerCase()}.` }, { status: 409 });
   }
 
-  await db.workspaceInvite.update({ where: { id: inviteId }, data: { status: "REVOKED" } });
+  updateInvite(inviteId, { status: "REVOKED" });
   return NextResponse.json({ ok: true });
 }
