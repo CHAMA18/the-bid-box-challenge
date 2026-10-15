@@ -61,5 +61,8 @@ server.log
 /tool-results/
 /upload/
 
+# internal build log (agent work notes, never part of the product)
+/worklog.md
+
 # ...but ship the example
 !.env.example
