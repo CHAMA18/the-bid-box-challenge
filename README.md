@@ -109,8 +109,9 @@ quorum-mcp (:3031 · Bun)  ── own MCP server (JSON-RPC 2.0) ── tools + g
    │                          └── stdio ──▶ @modelcontextprotocol/server-filesystem
    │                                          (official third-party server, path-jailed)
    │  LangGraph.js (open source)
-   ├── review_graph : load → extract_requirements → flag_findings
-   │                  → verify_findings → draft_redlines (configured LLM endpoint)
+   ├── review_graph : load → plan_review → extract_requirements → flag_findings
+   │                  → verify_findings ⇄ revise_findings (bounded repair)
+   │                  → draft_redlines (configured LLM endpoint, plan-ordered)
    │                  → propose_gate ─▶ END (the edge to filing does NOT exist)
    └── filing_graph : seal_bundle (sha-256) → transmit_submission
                       (runs ONLY after a named human signs the gate)
@@ -137,7 +138,11 @@ settings · workspace invites               working directory
 
 **Memory.** No vector store — durable, structured state: `state.json` (runs, gates, receipts; restored on boot), per-run accumulators (requirements, findings, drafts, progress trail), and the append-only `tool-log.jsonl` audit file (which the UI streams live).
 
-**Orchestration.** **LangGraph.js**. Review = 6 nodes (`load → extract_requirements → flag_findings → verify_findings → draft_redlines → propose_gate`), terminal at the gate; filing = a *separate, disconnected* 2-node graph (`filing_graph`) reachable only from the gate-decision endpoint. The halt is in the topology, not a prompt.
+**Orchestration.** **LangGraph.js**. Review = 8 nodes (`load_documents → plan_review → extract_requirements → flag_findings → verify_findings ⇄ revise_findings → draft_redlines → propose_gate`), terminal at the gate; filing = a *separate, disconnected* 2-node graph (`filing_graph`) reachable only from the gate-decision endpoint. The halt is in the topology, not a prompt.
+
+**Planning.** `plan_review` — the graph's second node — decides how deep *this* pack gets reviewed: whether deep value parsing runs (markdown `**Bid value:**` lines joining OCDS records), which rule families are drafted first, and how many redlines to draft. The configured LLM decides when one is set (strict-JSON plan, validated and clamped; unknown rules filtered); a deterministic pack inspection decides otherwise. The plan is stored on the run, audit-logged, and shown in every sourced report — the depth decision is visible instead of hard-coded.
+
+**Reason-and-retry.** `verify_findings` refuses a finding whose anchor text is not in its cited document — and now says *why*. `revise_findings` gets a bounded number of passes (2) to repair each refusal: deterministic re-anchoring to a line that actually exists in the cited document first, model-assisted evidence correction only when a model is configured — and the model's proposal is re-verified by the same deterministic self-check, so the model never writes a finding the self-check would refuse. Every rejection, repair and drop is an audit line.
 
 **Workflows.** Publish dossier → run review (every step audit-logged) → park at HUMAN GATE → named approver signs (422 without a name · 403 if not on the roster · 503 fail-closed if the roster can't be read) → sealed sha-256 filing → receipt → FILED. Rejected gates return the file to the agent.
 
@@ -206,7 +211,7 @@ Full workflow detail (incl. supporting capabilities): [`SUBMISSION/03-solution.m
 | Databases | One dependency-free JSON file for the web app (users, sessions, committee roster, settings, workspace invites, pilot requests), written atomically; file-backed state + append-only audit JSONL on the agent side | Small, inspectable, zero native dependencies; append-only where auditable |
 | Identity | Firebase Auth (email/passphrase + Google Sign-In) + Firebase Storage mirror | Real authentication without a homegrown password system |
 | Infra | nginx, systemd, EC2 `t4g.small` in `af-south-1`, Route 53 zone, Elastic IP | Small, boring, reproducible from the repo |
-| Tests | Bun test runner, `engine.test.ts` — 26 tests green | Safety rules enforced by tests, not just docs |
+| Tests | Bun test runner, `engine.test.ts` — 38 tests green | Safety rules enforced by tests, not just docs |
 
 ---
 
@@ -226,9 +231,22 @@ bun run mcp
 > and self-heals via `GET /api/mcp-ensure` — terminal 2 is only needed for
 > development on the MCP service itself.
 
-Optional: set `LLM_BASE_URL` + `LLM_MODEL` (optionally `LLM_API_KEY`) to any OpenAI-compatible endpoint to switch redline drafting from the template fallback to a live open-weights model — e.g. a self-hosted vLLM/Ollama instance.
-
 Open `http://localhost:3000`. Sign up or sign in — there is no demo workspace; every view reads the live MCP sidecar.
+
+### Configuration
+
+Copy `.env.example` — every variable is optional; the product runs fully without any of them:
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `LLM_BASE_URL` | quorum-mcp | Any OpenAI-compatible chat-completions endpoint for redline drafting. Intended setup: an **open-weights model served in-region** (vLLM, TGI, Ollama) so procurement data stays in the jurisdiction. |
+| `LLM_MODEL` | quorum-mcp | Model name the endpoint serves. |
+| `LLM_API_KEY` | quorum-mcp | Bearer token, only if the endpoint requires one. |
+| `QUORUM_WEB_URL` | quorum-mcp | Where the sidecar reads the committee roster (default `http://127.0.0.1:3000`). |
+
+**With no LLM configured**, redline drafting runs on the deterministic template fallback and every draft is labelled `template` — nothing breaks, prose quality does. The review plan (see Agent architecture) falls back the same way: a deterministic pack inspection decides review depth when no model is configured.
+
+**Firebase (identity mirror + document storage).** The client-safe web config ships in `src/lib/firebase.ts` — Firebase web configs are public identifiers by design; access is guarded by Firebase Security Rules, not by secrecy of these values. To use your own project: create one at console.firebase.google.com, enable the Email/Password provider (and Google sign-in if wanted) under Authentication, enable Storage, and replace the `firebaseConfig` object. Every Firebase call is lazy and failure-tolerant: if the project is unreachable, rate-limited or a provider is not yet enabled, each helper resolves quietly to null and the product carries on with its local stack (scrypt sessions, local vault) — nothing is blocked on Firebase.
 
 ---
 
