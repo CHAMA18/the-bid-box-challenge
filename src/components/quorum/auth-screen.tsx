@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff, Lock } from "lucide-re
 import { QuorumLogo } from "@/components/quorum/logo";
 import { Eyebrow } from "@/components/quorum/reveal";
 import type { AuthMode, AuthUser } from "@/lib/auth-types";
-import { syncFirebaseIdentity } from "@/lib/firebase";
+import { signInWithGooglePopup, syncFirebaseIdentity } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -213,6 +213,30 @@ function inputCls(invalid?: boolean) {
   );
 }
 
+/* The official four-colour G — drawn inline so it stays crisp and needs no asset. */
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] shrink-0" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.65l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.11a6.6 6.6 0 0 1 0-4.22V7.05H2.18a11 11 0 0 0 0 9.9l3.66-2.84Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11 11 0 0 0 2.18 7.05l3.66 2.84c.87-2.6 3.3-4.51 6.16-4.51Z"
+      />
+    </svg>
+  );
+}
+
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
   return (
@@ -387,6 +411,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<"form" | "sending" | "success">("form");
   const [granted, setGranted] = useState<AuthUser | null>(null);
+  const [googleFlow, setGoogleFlow] = useState(false);
   const [memoOpen, setMemoOpen] = useState(false);
   const shake = useAnimationControls();
 
@@ -435,6 +460,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
 
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
+    setGoogleFlow(false);
     setFormError(null);
     const errs = validate();
     setErrors(errs);
@@ -562,6 +588,50 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
     }
   }
 
+  /*
+   * Google sign-in — the real Firebase popup first (project "public-tender").
+   * A successful popup grants the Google identity and mirrors it into the
+   * product's own account stack; if the Google provider isn't enabled in the
+   * console yet (or the popup is blocked / closed / times out), the flow
+   * falls through to the demo identity exactly like the email form — the
+   * workspace never locks the officer out.
+   */
+  async function signInWithGoogle() {
+    if (status !== "form") return;
+    setFormError(null);
+    setGoogleFlow(true);
+    setStatus("sending");
+
+    const fb = await signInWithGooglePopup();
+    if (fb?.email) {
+      const name = fb.name.trim() || deriveName(fb.email);
+      try {
+        await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email: fb.email, password: `google-${fb.uid.slice(0, 18)}` }),
+        });
+      } catch {
+        /* Server unreachable — the local session still opens the workspace. */
+      }
+      grant({ id: `google-${fb.uid}`, name, email: fb.email, organization: null });
+      return;
+    }
+
+    void syncFirebaseIdentity({
+      name: DEMO.name,
+      email: DEMO.email,
+      password: DEMO.password,
+      mode: "login",
+    });
+    grant({
+      id: `local-${Date.now()}`,
+      name: DEMO.name,
+      email: DEMO.email,
+      organization: DEMO.organization,
+    });
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-paper font-body text-ink-900 antialiased">
       {/* Top bar */}
@@ -572,7 +642,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
           aria-label="Back to the Quorum site"
           className="rounded-lg outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-brand-500"
         >
-          <QuorumLogo variant="light" />
+          <QuorumLogo variant="light" tagline={false} />
         </button>
         <div className="flex items-center gap-4 sm:gap-6">
           <p className="hidden items-center gap-2.5 font-code text-[9px] tracking-[0.22em] text-ink-400 md:flex">
@@ -679,8 +749,38 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                       </p>
                     )}
 
+                    {/* Federated access */}
+                    <button
+                      type="button"
+                      onClick={signInWithGoogle}
+                      disabled={status === "sending"}
+                      className="mt-6 inline-flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-ink-200 bg-white text-[14.5px] font-semibold text-ink-900 transition-all hover:border-ink-400 hover:bg-ink-50 focus-visible:ring-2 focus-visible:ring-brand-600/15 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {status === "sending" && googleFlow ? (
+                        <>
+                          <span
+                            className="h-4 w-4 animate-spin rounded-full border-2 border-ink-200 border-t-ink-900"
+                            aria-hidden="true"
+                          />
+                          Connecting to Google…
+                        </>
+                      ) : (
+                        <>
+                          <GoogleMark />
+                          Continue with Google
+                        </>
+                      )}
+                    </button>
+                    <div className="mt-4 flex items-center gap-3" aria-hidden="true">
+                      <span className="h-px flex-1 bg-ink-100" />
+                      <span className="font-code text-[8.5px] font-semibold tracking-[0.22em] text-ink-400">
+                        OR CONTINUE WITH EMAIL
+                      </span>
+                      <span className="h-px flex-1 bg-ink-100" />
+                    </div>
+
                     <motion.div animate={shake}>
-                      <form onSubmit={submit} noValidate className="mt-6 space-y-4">
+                      <form onSubmit={submit} noValidate className="mt-4 space-y-4">
                         <AnimatePresence initial={false}>
                           {mode === "register" && (
                             <motion.div
@@ -997,7 +1097,11 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                                 className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
                                 aria-hidden="true"
                               />
-                              {mode === "register" ? "Opening account…" : "Verifying…"}
+                              {googleFlow
+                                ? "One moment…"
+                                : mode === "register"
+                                  ? "Opening account…"
+                                  : "Verifying…"}
                             </>
                           ) : (
                             <>
@@ -1036,7 +1140,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
           {/* Right column footer */}
           <div className="border-t border-ink-100 px-4 py-4 text-center sm:px-10">
             <p className="font-code text-[8.5px] tracking-[0.24em] text-ink-400">
-              QUORUM · AGENTIC PROCUREMENT · THE COMMITTEE SIGNS — THE AGENT NEVER DOES
+              QUORUM · THE COMMITTEE SIGNS — THE AGENT NEVER DOES
             </p>
           </div>
         </main>

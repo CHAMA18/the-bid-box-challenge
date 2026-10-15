@@ -15,6 +15,7 @@
  * Used by:
  *  - FirebaseAnalytics  — page-view telemetry for the "public-tender" project
  *  - auth-screen        — best-effort identity mirror into Firebase Auth
+ *                         + Google sign-in (signInWithGooglePopup)
  *  - dashboard New Run  — tender document uploads to Firebase Storage
  */
 
@@ -141,6 +142,55 @@ export async function syncFirebaseIdentity(input: FirebaseIdentityInput): Promis
   } catch (err) {
     debugLog(input.mode, err);
     return false;
+  }
+}
+
+/* ── Google sign-in ────────────────────────────────────────────────────────── */
+
+export interface GoogleIdentity {
+  uid: string;
+  name: string;
+  email: string;
+}
+
+/**
+ * Open the Firebase Google sign-in popup for the "public-tender" project.
+ * Resolves to the signed-in Google identity, or null when anything goes
+ * wrong (Google provider not yet enabled in the console, popup blocked or
+ * closed, network down, 15s budget exceeded) — callers decide how to carry
+ * on; the demo workspace always stays reachable.
+ */
+export async function signInWithGooglePopup(): Promise<GoogleIdentity | null> {
+  try {
+    const pair = await getAuthLazy();
+    if (!pair) return null;
+    const { mod, auth } = pair;
+    const provider = new mod.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+
+    const popup = mod.signInWithPopup(auth, provider).then(
+      (cred) => {
+        const user = cred.user;
+        if (!user.email) return null;
+        return { uid: user.uid, name: user.displayName ?? "", email: user.email };
+      },
+      (err) => {
+        debugLog("google-signin", err);
+        return null;
+      }
+    );
+
+    /* Hard budget: a never-resolving popup must not hang the flow. */
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const budget = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), 15_000);
+    });
+    const result = await Promise.race([popup, budget]);
+    if (timer) clearTimeout(timer);
+    return result;
+  } catch (err) {
+    debugLog("google-signin", err);
+    return null;
   }
 }
 
