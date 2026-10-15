@@ -27,7 +27,7 @@ export function QuorumLogo({
       <span
         className={cn(
           "relative grid h-10 w-10 place-items-center rounded-xl transition-colors",
-          variant === "dark" ? "bg-ink-950" : "bg-white"
+          variant === "dark" ? "bg-ink-950" : "keep-light bg-white"
         )}
       >
         <svg viewBox="0 0 22 22" className="h-[22px] w-[22px]" fill="none" aria-hidden="true">

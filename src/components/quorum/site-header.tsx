@@ -7,6 +7,7 @@ import { ArrowUpRight, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { QuorumLogo } from "@/components/quorum/logo";
 import type { AuthUser } from "@/lib/auth-types";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/quorum/theme-toggle";
 
 const NAV = [
   { label: "Overview", href: "#overview" },
@@ -79,6 +80,7 @@ export function SiteHeader({
 
         {/* Desktop actions */}
         <div className="hidden items-center gap-2.5 lg:flex">
+          <ThemeToggle />
           {!authReady ? (
             <div className="h-10 w-[196px] animate-pulse rounded-full bg-ink-100/70" aria-hidden="true" />
           ) : user ? (
