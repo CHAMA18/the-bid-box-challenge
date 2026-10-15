@@ -6,7 +6,14 @@ import { cn } from "@/lib/utils";
  * deciding one. A quorum is the minimum of members a committee needs
  * before a decision becomes lawful — the mark is that threshold, drawn.
  */
-export function QuorumLogo({ variant = "dark" }: { variant?: "dark" | "light" }) {
+export function QuorumLogo({
+  variant = "dark",
+  tagline = true,
+}: {
+  variant?: "dark" | "light";
+  /** Hide the mono subtitle where a screen wants the bare wordmark. */
+  tagline?: boolean;
+}) {
   const vote = variant === "dark" ? "#ffffff" : "#16181d";
 
   /* Cells of the 3×3 grid — 6px squares on a 22px canvas, 2px gutters. */
@@ -55,14 +62,16 @@ export function QuorumLogo({ variant = "dark" }: { variant?: "dark" | "light" })
         >
           QUORUM
         </span>
-        <span
-          className={cn(
-            "mt-1 block whitespace-nowrap font-code text-[8.5px] font-semibold tracking-[0.32em]",
-            variant === "dark" ? "text-ink-500" : "text-ink-400"
-          )}
-        >
-          AGENTIC PROCUREMENT
-        </span>
+        {tagline && (
+          <span
+            className={cn(
+              "mt-1 block whitespace-nowrap font-code text-[8.5px] font-semibold tracking-[0.32em]",
+              variant === "dark" ? "text-ink-500" : "text-ink-400"
+            )}
+          >
+            AGENTIC PROCUREMENT
+          </span>
+        )}
       </span>
     </span>
   );
