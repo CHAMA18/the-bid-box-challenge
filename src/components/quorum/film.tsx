@@ -754,13 +754,19 @@ export function Film() {
 
         {/* chapter index */}
         <ol className="mt-6 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-          {CHAPTERS.map((c) => (
-            <li key={c.id}>
+          {CHAPTERS.map((c, ci) => (
+            <motion.li
+              key={c.id}
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ delay: 0.07 * ci, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            >
               <button
                 type="button"
                 onClick={() => jumpChapter(c.id)}
                 className={cn(
-                  "group w-full rounded-xl border px-3.5 py-3 text-left transition-all",
+                  "group w-full rounded-xl border px-3.5 py-3 text-left transition-all duration-300 hover:-translate-y-0.5",
                   activeChapter?.id === c.id && showStage
                     ? "border-brand-500/70 bg-brand-600/10"
                     : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.07]"
@@ -771,7 +777,7 @@ export function Film() {
                   {c.title.toUpperCase()}
                 </span>
               </button>
-            </li>
+            </motion.li>
           ))}
         </ol>
 

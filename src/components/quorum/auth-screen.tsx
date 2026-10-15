@@ -13,21 +13,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-/*
- * Demo workspace credentials. Sign-in never blocks: empty or malformed
- * fields resolve to this identity, and if the cloud account doesn't exist
- * yet it is silently provisioned — so pressing "Sign in" always opens
- * Mission Control.
- */
-const DEMO = {
-  name: "Naledi Mokoena",
-  email: "n.mokoena@procurement.gov",
-  password: "gatekeeper-01",
-  organization: "Public Procurement Authority",
-};
-
 function deriveName(email: string): string {
-  if (email.trim().toLowerCase() === DEMO.email) return DEMO.name;
   const parts = email.split("@")[0].split(/[._-]+/).filter(Boolean);
   if (parts.length === 0) return "Procurement Officer";
   return parts
@@ -38,28 +24,38 @@ function deriveName(email: string): string {
 /* ── The looping access terminal (left panel) ────────────────────────────── */
 
 type LineKind = "cmd" | "step" | "ok" | "gate";
-const SCRIPT: { text: string; kind: LineKind }[] = [
-  { text: "quorum-agent run --tender KE-NCB-104293 --format ocds", kind: "cmd" },
-  { text: "▸ ingesting 214 pages · 4 bids parsed", kind: "step" },
-  { text: "▸ document checklist — 16/16 present", kind: "step" },
-  { text: "▸ cross-checking the supplier registry", kind: "step" },
-  { text: "▸ 3 findings flagged · every claim cited", kind: "step" },
-  { text: "✓ run complete — 6 findings · 6 citations · 0 unsourced", kind: "ok" },
-  { text: "⏸ human gate — the committee awards the tender", kind: "gate" },
-];
+type LiveLogEntry = { tool?: string; status?: string };
 
+/* Live activity from the quorum-mcp audit log — nothing scripted. */
 function AccessTerminal({ grantedFirstName }: { grantedFirstName: string | null }) {
-  const [step, setStep] = useState(0);
-  const done = step >= SCRIPT.length;
+  const [feed, setFeed] = useState<{ text: string; kind: LineKind }[]>([]);
 
   useEffect(() => {
-    if (step >= SCRIPT.length) {
-      const t = setTimeout(() => setStep(0), 4600);
-      return () => clearTimeout(t);
-    }
-    const t = setTimeout(() => setStep((s) => s + 1), step === 0 ? 750 : 640);
-    return () => clearTimeout(t);
-  }, [step]);
+    let alive = true;
+    const pull = async () => {
+      try {
+        const res = await fetch("/api/log?limit=8&XTransformPort=3031");
+        const j = (await res.json()) as { entries?: LiveLogEntry[] };
+        if (!alive) return;
+        setFeed(
+          (j.entries ?? []).slice(0, 8).reverse().map((e) => {
+            const status = e.status ?? "";
+            const kind: LineKind = status === "PENDING_GATE" ? "gate" : status === "OK" ? "ok" : "step";
+            const prefix = kind === "gate" ? "⏸" : kind === "ok" ? "✓" : "▸";
+            return { text: `${prefix} ${e.tool ?? "event"} · ${status || "logged"}`, kind };
+          })
+        );
+      } catch {
+        /* sidecar briefly down — keep the last snapshot */
+      }
+    };
+    void pull();
+    const id = setInterval(() => void pull(), 3500);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
 
   return (
     <div className="w-full max-w-md rounded-2xl border border-white/10 bg-night-2/90 shadow-[0_36px_90px_rgba(0,0,0,0.5)]">
@@ -78,9 +74,9 @@ function AccessTerminal({ grantedFirstName }: { grantedFirstName: string | null 
         role="img"
         aria-label="Animated terminal: a Quorum agent run ingesting a tender, checking documents, citing findings and stopping at the human gate"
       >
-        {SCRIPT.slice(0, step).map((line) => (
+        {feed.map((line, i) => (
           <p
-            key={line.text}
+            key={`${i}-${line.text}`}
             className={cn(
               "transition-colors",
               line.kind === "cmd" && "text-ink-200",
@@ -93,9 +89,10 @@ function AccessTerminal({ grantedFirstName }: { grantedFirstName: string | null 
             {line.text}
           </p>
         ))}
-        {!done && (
-          <span className="mt-1 inline-block h-3.5 w-[7px] animate-pulse bg-brand-500" aria-hidden="true" />
+        {feed.length === 0 && (
+          <p className="text-ink-400">▸ waiting for the quorum-mcp audit log…</p>
         )}
+        <span className="mt-1 inline-block h-3.5 w-[7px] animate-pulse bg-brand-500" aria-hidden="true" />
         {grantedFirstName && (
           <p className="mt-1 font-semibold text-brand-300">
             ✓ session issued — welcome, {grantedFirstName}
@@ -108,7 +105,7 @@ function AccessTerminal({ grantedFirstName }: { grantedFirstName: string | null 
 
 /* ── Brand panel (left, dark) ────────────────────────────────────────────── */
 
-const FACTS = ["26 DAYS → 20 MIN", "100% CITED", "1 HUMAN GATE"];
+const FACTS = ["AGENT PREPARES", "EVERY FINDING CITED", "1 HUMAN GATE"];
 
 function CornerTicks() {
   const tick = "pointer-events-none absolute h-4 w-4 border-white/25";
@@ -429,20 +426,12 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
     });
   }
 
-  /* Pre-fill the demo credentials the first time the login form shows. */
-  useEffect(() => {
-    if (mode !== "login") return;
-    const id = requestAnimationFrame(() => {
-      setValues((prev) =>
-        prev.email || prev.password ? prev : { ...prev, email: DEMO.email, password: DEMO.password }
-      );
-    });
-    return () => cancelAnimationFrame(id);
-  }, [mode]);
-
   function validate(): Record<string, string> {
-    /* Registration validates; sign-in never blocks — see submit(). */
     const e: Record<string, string> = {};
+    if (mode === "login") {
+      if (!EMAIL_RE.test(values.email.trim())) e.email = "Enter your work email.";
+      if (values.password.length === 0) e.password = "Enter your passphrase.";
+    }
     if (mode === "register") {
       if (values.name.trim().length < 2) e.name = "Enter your full name.";
       if (!terms) e.terms = "Please accept the terms to continue.";
@@ -471,28 +460,9 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
 
     setStatus("sending");
 
-    /*
-     * Sign-in resolves silently: empty or malformed input falls back to the
-     * demo identity, and an unknown email is provisioned on the fly. The one
-     * honest failure is a real account with the wrong passphrase.
-     */
     if (mode === "login") {
-      let email = values.email.trim();
-      let password = values.password;
-      if (!EMAIL_RE.test(email)) email = DEMO.email;
-      if (password.length === 0) password = DEMO.password;
-      setValues((prev) => ({ ...prev, email, password }));
-
-      const openLocal = () => {
-        /* Mirror the demo identity into Firebase Auth too (best-effort). */
-        void syncFirebaseIdentity({ name: deriveName(email), email, password, mode: "login" });
-        grant({
-          id: `local-${Date.now()}`,
-          name: deriveName(email),
-          email,
-          organization: null,
-        });
-      };
+      const email = values.email.trim();
+      const password = values.password;
 
       try {
         const res = await fetch("/api/auth/login", {
@@ -509,46 +479,17 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
           return;
         }
 
-        if (res.status === 401 && password.length >= 8) {
-          /* No account (yet)? Provision one silently and continue. */
-          const reg = await fetch("/api/auth/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: deriveName(email),
-              email,
-              password,
-              organization: email === DEMO.email ? DEMO.organization : undefined,
-            }),
-          });
-          if (reg.ok) {
-            const rd = (await reg.json().catch(() => null)) as { user?: AuthUser } | null;
-            if (rd?.user) {
-              void syncFirebaseIdentity({
-                name: rd.user.name,
-                email,
-                password,
-                mode: "register",
-              });
-              grant(rd.user);
-              return;
-            }
-          }
-          if (reg.status === 409) {
-            /* A real account exists and the passphrase didn't match. */
-            setFormError(
-              "Incorrect email or password. Check your credentials and try again."
-            );
-            await shake.start({ x: [0, -10, 10, -6, 6, 0], transition: { duration: 0.38 } });
-            setStatus("form");
-            return;
-          }
-        }
-
-        /* Server unreachable, rate-limited, or validation refused — open the local workspace. */
-        openLocal();
+        /* Wrong credentials or no account — no silent provisioning. */
+        setFormError(
+          res.status === 401
+            ? "Incorrect email or password. Check your credentials, or create an account."
+            : data?.error ?? "Sign-in is unavailable right now. Try again shortly."
+        );
+        await shake.start({ x: [0, -10, 10, -6, 6, 0], transition: { duration: 0.38 } });
+        setStatus("form");
       } catch {
-        openLocal();
+        setFormError("Cannot reach the server. Check your connection and try again.");
+        setStatus("form");
       }
       return;
     }
@@ -593,8 +534,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
    * A successful popup grants the Google identity and mirrors it into the
    * product's own account stack; if the Google provider isn't enabled in the
    * console yet (or the popup is blocked / closed / times out), the flow
-   * falls through to the demo identity exactly like the email form — the
-   * workspace never locks the officer out.
+   * fails with an explicit message — no fallback identity is ever granted.
    */
   async function signInWithGoogle() {
     if (status !== "form") return;
@@ -618,18 +558,9 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
       return;
     }
 
-    void syncFirebaseIdentity({
-      name: DEMO.name,
-      email: DEMO.email,
-      password: DEMO.password,
-      mode: "login",
-    });
-    grant({
-      id: `local-${Date.now()}`,
-      name: DEMO.name,
-      email: DEMO.email,
-      organization: DEMO.organization,
-    });
+    /* Google unavailable — no fallback identity. Ask for the credentials instead. */
+    setFormError("Google sign-in is unavailable. Use your email and passphrase.");
+    setStatus("form");
   }
 
   return (
@@ -745,7 +676,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                     {mode === "login" && (
                       <p className="mt-3 flex items-center justify-center gap-1.5 text-center font-code text-[8px] font-semibold tracking-[0.18em] text-ink-400">
                         <Lock className="h-3 w-3 text-brand-600" aria-hidden="true" />
-                        DEMO BUILD — ANY CREDENTIALS OPEN THE WORKSPACE
+                        SIGNED ACCESS — YOUR OFFICE ACCOUNT ONLY
                       </p>
                     )}
 
@@ -802,7 +733,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                                 type="text"
                                 value={values.name}
                                 onChange={(e) => set("name", e.target.value)}
-                                placeholder="Naledi Mokoena"
+                                placeholder="Your full name"
                                 autoComplete="name"
                                 autoFocus
                                 aria-invalid={!!errors.name}
@@ -826,7 +757,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                             type="email"
                             value={values.email}
                             onChange={(e) => set("email", e.target.value)}
-                            placeholder="n.mokoena@procurement.gov"
+                            placeholder="you@agency.gov"
                             autoComplete="email"
                             {...(mode === "login" ? { autoFocus: true } : {})}
                             aria-invalid={!!errors.email}

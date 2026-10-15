@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * StackConsole — the "AGENT STACK" view in mission control.
+ * StackConsole — the "Tools & models" view in mission control.
  *
  * Everything here is LIVE and wired to the real quorum-mcp mini-service on
  * :3031 (reached through the gateway with XTransformPort):
@@ -198,15 +198,21 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
   }, [pull]);
 
   const launchRun = async () => {
+    /* Re-run the most recent real tender — nothing is launched without one. */
+    const tenderId = runs[0]?.tenderId;
+    if (!tenderId) {
+      onToast("NO TENDER STAGED — START A NEW RUN FROM THE DASHBOARD");
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch(`${SVC}/runs?XTransformPort=3031`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tenderId: "KE-NCB-104293" }),
+        body: JSON.stringify({ tenderId }),
       });
       if (!res.ok) throw new Error("run failed");
-      onToast("REVIEW GRAPH INVOKED — LANGGRAPH.JS PICKING UP KE-NCB-104293");
+      onToast(`REVIEW GRAPH INVOKED — LANGGRAPH.JS PICKING UP ${tenderId}`);
     } catch {
       onToast("STACK UNREACHABLE — quorum-mcp NOT RESPONDING");
     } finally {

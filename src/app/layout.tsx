@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Quorum — Agentic tender review for public health procurement",
     description:
-      "Twenty-six days of committee work in twenty minutes of agent work — with every finding cited, and a hard stop before the award.",
+      "The agent prepares the tender file, every finding cited — and a hard stop before the committee's award.",
     siteName: "Quorum",
     type: "website",
   },

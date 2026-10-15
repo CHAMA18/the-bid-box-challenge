@@ -11,6 +11,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 export type ToolKind = "READ" | "WRITES" | "IRREVERSIBLE" | "GATE_DECISION";
 
@@ -82,7 +83,8 @@ export interface Run {
   error?: string;
 }
 
-const DATA = new URL("./data/", import.meta.url).pathname;
+/* fileURLToPath decodes %20 etc. — .pathname breaks on paths with spaces. */
+const DATA = fileURLToPath(new URL("./data/", import.meta.url));
 
 function cap(value: unknown, max = 420): unknown {
   const s = typeof value === "string" ? value : JSON.stringify(value);

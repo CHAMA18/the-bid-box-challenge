@@ -18,7 +18,7 @@ then is the bundle sealed, filed and receipted.
 | — a tool that actually *does something* (read-only is not an agent's hands) | `draft_redline` (WRITES a draft record), `flag_finding` (WRITES to the findings ledger), `file_gate_submission` (files the award) |
 | **A third-party MCP server we did not write** | [`@modelcontextprotocol/server-filesystem`](mini-services/quorum-mcp/engine.ts) — the **official** one, spawned over stdio (`initFsMcp()`), with a logged direct-fs fallback. Why it beats writing our own: sandboxed path-jail, battle-tested fs ops, maintained by the MCP core team |
 | **Open-source orchestration** | [LangGraph.js](mini-services/quorum-mcp/engine.ts) (`@langchain/langgraph`) — `review_graph` (5 nodes: load → extract → flag → draft → propose_gate) **halts at the gate by construction: the edge from the gate to filing does not exist**; `filing_graph` (seal → transmit) is a separate graph that runs only after a named human approves |
-| **A full task on an open-weights model** | `draft_redline` calls GLM (open weights, in-region) — procurement data never leaves the jurisdiction; a template fallback keeps runs alive if inference is unreachable |
+| **A full task on an open-weights model** | `draft_redline` calls Llama (open weights, served in-region via `LLM_BASE_URL`) — procurement data never leaves the jurisdiction; a template fallback keeps runs alive if inference is unreachable |
 | **A logged tool call for every action** | [`data/tool-log.jsonl`](mini-services/quorum-mcp/store.ts) — append-only; every call records actor, server, tool, kind (READ/WRITES/IRREVERSIBLE), inputs, outputs, timestamps, duration, status |
 | **A gate on every irreversible action** | `file_gate_submission` returns `gate_pending` — execution is **blocked** until `POST /api/gates/:id/decision` arrives with a **named approver** (rejected without one, HTTP 422); approval triggers the filing graph and a written receipt |
 | **Human-in-the-loop handoff** | The product itself: Mission Control → HUMAN GATE queue → named sign-off → ledger; the landing page's live stack console |
@@ -40,8 +40,8 @@ bun run mcp
 > and self-heals via `GET /api/mcp-ensure` — terminal 2 is only needed for
 > development on the MCP service itself.
 
-Open `http://localhost:3000`. Any credentials open the demo workspace
-(demo officer: `n.mokoena@procurement.gov`). The frontend reaches the MCP
+Open `http://localhost:3000`. Sign in with a real account — there is no demo
+workspace or sample data; every view reads from the live MCP service. The frontend reaches the MCP
 service through the gateway as `/api/...?XTransformPort=3031` — same origin, no CORS.
 
 ## The 90-second evaluator walkthrough
@@ -49,9 +49,9 @@ service through the gateway as `/api/...?XTransformPort=3031` — same origin, n
 1. **Landing page → the live stack console.** It talks to `quorum-mcp` in real time:
    health (including the third-party fs-MCP connection status), the five tools with
    their READ/WRITES/IRREVERSIBLE kind, the architecture map, and the streaming audit log.
-2. **Sign in** (any credentials) → Mission Control.
-3. **New run** → step 02 DOCUMENTS: drop real files (they mirror to Firebase Storage)
-   or stage the sample pack → pick the checks → launch.
+2. **Sign in** with your account → Mission Control.
+3. **New run** → step 02 DOCUMENTS: drop real tender files (they mirror to Firebase Storage)
+   → pick the checks → launch.
 4. Watch the orchestrated run: documents read over MCP → requirements pinned →
    findings flagged, each cited → redlines drafted on open weights.
 5. The run parks at the **human gate**. Open the gate, sign as the named approver —
@@ -68,13 +68,13 @@ Browser (Next.js 16 · :3000)
 quorum-mcp (:3031 · Bun)  ── stdio ──▶ @modelcontextprotocol/server-filesystem
    │  LangGraph.js (open source)
    ├── review_graph : load_documents → extract_requirements → flag_findings
-   │                  → draft_redlines (GLM · open weights) → propose_gate ─▶ END
+   │                  → draft_redlines (Llama · open weights) → propose_gate ─▶ END
    └── filing_graph : seal_bundle → transmit_submission
                       (runs ONLY after a named human signs the gate)
    │
    ├── data/tool-log.jsonl                append-only audit: every tool call
    ├── data/submissions/*.json            receipts for executed (approved) filings
-   └── data/tenders/KE-NCB-104293/        the tender pack the agent reads
+   └── data/tenders/<tender-ref>/         the tender documents the agent reads
 ```
 
 ## API surface

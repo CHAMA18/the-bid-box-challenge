@@ -1,5 +1,8 @@
+"use client";
+
 import { Activity, Banknote, Globe2, Scale, Stethoscope, Users } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/quorum/reveal";
+import { Aurora, Spotlight } from "@/components/quorum/motion-kit";
 
 /**
  * The chosen theme — health & life sciences. One vertical, mastered:
@@ -36,8 +39,9 @@ const NEXT_THEMES = [
 
 export function UseCases() {
   return (
-    <section id="use-cases" className="scroll-mt-20 bg-paper">
-      <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+    <section id="use-cases" className="relative scroll-mt-20 overflow-hidden bg-paper">
+      <Aurora tone="soft" className="-left-48 top-1/3 h-[460px] w-[460px] opacity-80" />
+      <div className="relative mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <Reveal>
@@ -60,6 +64,7 @@ export function UseCases() {
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {CHECKS.map((check, i) => (
             <Reveal key={check.no} delay={0.08 * i} className="h-full">
+              <Spotlight className="h-full rounded-3xl">
               <article className="group flex h-full flex-col rounded-3xl border border-ink-100 bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-brand-300 hover:shadow-[0_20px_44px_rgba(11,12,15,0.10)]">
                 <div className="flex items-center justify-between">
                   <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 ring-1 ring-brand-200 transition-colors group-hover:bg-brand-600">
@@ -77,6 +82,7 @@ export function UseCases() {
                 </h3>
                 <p className="mt-3 text-[14px] leading-relaxed text-ink-600">{check.body}</p>
               </article>
+              </Spotlight>
             </Reveal>
           ))}
         </div>

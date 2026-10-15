@@ -17,6 +17,7 @@ import { Pricing } from "@/components/quorum/pricing";
 import { GetStarted } from "@/components/quorum/get-started";
 import { SiteFooter } from "@/components/quorum/site-footer";
 import { AuthScreen } from "@/components/quorum/auth-screen";
+import { ScrollProgress } from "@/components/quorum/motion-kit";
 import { Dashboard } from "@/components/quorum/dashboard";
 import type { AuthMode, AuthUser } from "@/lib/auth-types";
 
@@ -29,7 +30,7 @@ import type { AuthMode, AuthUser } from "@/lib/auth-types";
  * the committee awards the tender.
  */
 
-/* Local identity mirror — keeps a demo/local session alive across reloads
+/* Local identity mirror — keeps a signed-in session alive across reloads
    when no httpOnly cloud session exists. */
 const IDENTITY_KEY = "quorum.identity";
 
@@ -200,6 +201,7 @@ export default function Home() {
                 onSignOut={signOut}
                 onDashboard={enterWorkspace}
               />
+              <ScrollProgress />
               <main className="w-full flex-1">
                 <Hero onGetStarted={() => openAuth("register")} />
                 <Overview />

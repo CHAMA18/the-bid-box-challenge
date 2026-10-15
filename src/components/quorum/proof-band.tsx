@@ -4,35 +4,33 @@ import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 
-const STATS = [
-  { value: 1284, format: (n: number) => Math.round(n).toLocaleString("en-US"), label: "tenders read end to end" },
-  { value: 9317, format: (n: number) => Math.round(n).toLocaleString("en-US"), label: "findings cited to a source" },
-  { value: 11, format: (n: number) => String(Math.round(n)), label: "OCDS portals covered" },
-  { value: 23, format: (n: number) => String(Math.round(n)), label: "min — median run, notice to report" },
-];
+interface LiveRun {
+  tenderId: string;
+  findings: unknown[];
+  drafts: unknown[];
+}
 
-const QUOTES = [
-  {
-    quote:
-      "The first run found a lapsed registration our own reviewers had passed over twice. The citation made it undeniable.",
-    name: "A. Mwangi",
-    role: "Procurement lead · county health supply agency",
-  },
-  {
-    quote:
-      "I sign the gate the way I sign anything else — after the evidence. The audit log is what sold our auditors.",
-    name: "T. Okonkwo",
-    role: "Internal audit · state finance ministry",
-  },
-];
+interface LiveTotals {
+  tenders: number;
+  findings: number;
+  drafts: number;
+  runs: number;
+}
 
-function CountUp({ value, format }: { value: number; format: (n: number) => string }) {
+const EMPTY: LiveTotals = { tenders: 0, findings: 0, drafts: 0, runs: 0 };
+
+function CountUp({ value }: { value: number }) {
   const reduce = useReducedMotion();
   const [display, setDisplay] = useState(0);
   const ref = useRef<HTMLSpanElement>(null);
   const started = useRef(false);
 
   useEffect(() => {
+    // Already animated once: follow later value changes (live data arrives async).
+    if (started.current) {
+      setDisplay(value);
+      return;
+    }
     const el = ref.current;
     if (!el) return;
     const io = new IntersectionObserver(
@@ -61,14 +59,46 @@ function CountUp({ value, format }: { value: number; format: (n: number) => stri
     return () => io.disconnect();
   }, [value, reduce]);
 
-  return <span ref={ref}>{format(display)}</span>;
+  return <span ref={ref}>{Math.round(display).toLocaleString("en-US")}</span>;
 }
 
 /**
- * Proof band — pilot telemetry with count-up animation, plus two
- * committee-side testimonials. Dark statement surface.
+ * Proof band — counters computed from the runs on the quorum-mcp sidecar.
+ * Shows zero until a run exists; nothing is invented.
  */
 export function ProofBand() {
+  const [totals, setTotals] = useState<LiveTotals>(EMPTY);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/runs?XTransformPort=3031");
+        const json = (await res.json()) as { runs?: LiveRun[] };
+        if (!alive) return;
+        const runs = json.runs ?? [];
+        setTotals({
+          tenders: new Set(runs.map((r) => r.tenderId)).size,
+          findings: runs.reduce((n, r) => n + r.findings.length, 0),
+          drafts: runs.reduce((n, r) => n + r.drafts.length, 0),
+          runs: runs.length,
+        });
+      } catch {
+        /* Sidecar unreachable — counters stay at zero rather than showing invented numbers. */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const STATS = [
+    { value: totals.tenders, label: "tenders reviewed" },
+    { value: totals.runs, label: "review runs" },
+    { value: totals.findings, label: "findings flagged" },
+    { value: totals.drafts, label: "redlines drafted" },
+  ];
+
   return (
     <section id="proof" className="relative scroll-mt-20 overflow-hidden bg-ink-950 text-white">
       <div className="bg-grid-dark absolute inset-0" aria-hidden="true" />
@@ -80,57 +110,33 @@ export function ProofBand() {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <Reveal>
-              <Eyebrow tone="light">Receipts, not promises</Eyebrow>
+              <Eyebrow tone="light">Live from this workspace</Eyebrow>
             </Reveal>
             <Reveal delay={0.06}>
               <h2 className="mt-4 max-w-2xl font-display text-[34px] font-black leading-[1.06] tracking-[-0.025em] text-white sm:text-[44px]">
-                Numbers from pilot runs.
+                What the agent has actually done.
               </h2>
             </Reveal>
           </div>
           <Reveal delay={0.12}>
             <p className="max-w-sm text-[15px] leading-relaxed text-ink-400">
-              Aggregate telemetry across pilot deployments — every number below is itself sourced,
-              from the run logs.
+              Counted from the review runs on this server. Zero means no run has happened yet.
             </p>
           </Reveal>
         </div>
 
-        {/* Counters */}
         <Reveal delay={0.1}>
           <dl className="mt-12 grid grid-cols-2 gap-y-10 sm:gap-x-6 lg:grid-cols-4">
             {STATS.map((s) => (
               <div key={s.label} className="border-l-2 border-brand-600/60 pl-5">
                 <dd className="font-display text-[38px] font-black leading-none tracking-tight text-white tabular sm:text-[46px]">
-                  <CountUp value={s.value} format={s.format} />
+                  <CountUp value={s.value} />
                 </dd>
                 <dt className="mt-2.5 text-[13px] font-medium leading-snug text-ink-400">{s.label}</dt>
               </div>
             ))}
           </dl>
         </Reveal>
-
-        {/* Testimonials */}
-        <div className="mt-14 grid gap-5 lg:grid-cols-2">
-          {QUOTES.map((q, i) => (
-            <Reveal key={q.name} delay={0.08 * i} className="h-full">
-              <figure className="flex h-full flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-6 sm:p-7">
-                <span className="font-display text-[34px] font-black leading-none text-brand-400" aria-hidden="true">
-                  &ldquo;
-                </span>
-                <blockquote className="mt-2 text-[15.5px] font-medium leading-relaxed text-ink-100">
-                  {q.quote}
-                </blockquote>
-                <figcaption className="mt-5 border-t border-white/10 pt-4">
-                  <p className="font-display text-[14.5px] font-extrabold tracking-tight text-white">{q.name}</p>
-                  <p className="mt-0.5 font-code text-[10px] tracking-[0.16em] text-ink-400">
-                    {q.role.toUpperCase()}
-                  </p>
-                </figcaption>
-              </figure>
-            </Reveal>
-          ))}
-        </div>
       </div>
     </section>
   );
