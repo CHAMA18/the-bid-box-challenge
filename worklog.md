@@ -54,3 +54,20 @@ Work Log:
 Stage Summary:
 - / now serves a world-class Galina Express site: native Next.js 16, zero external CDNs, live API-backed tracking + instant quotes + contact intake.
 - All golden paths browser-verified end-to-end; lint clean; pushed to GitHub (3dd1aa3).
+
+---
+Task ID: 4
+Agent: Z.ai Code (main)
+Task: "Run the code" — user asked to run the site.
+
+Work Log:
+- Found the sandbox had been reset between sessions: git history reverted to a fresh scaffold "Initial commit", page.tsx replaced with the scaffold placeholder, src/components/bidbox and galina deleted, remote config wiped.
+- Confirmed no work was lost: GitHub origin/main still held e858338 (the full Bid Box Challenge build pushed in Task 3).
+- Backed up .env plus scaffold-tracked download/ and upload/ folders before touching anything.
+- Re-added origin (https://github.com/CHAMA18/the-bid-box-challenge.git), fetched, verified e858338, then git reset --hard origin/main to restore the entire project; restored .env; re-set upstream tracking.
+- Confirmed download/README.md and upload content are tracked in e858338 and were restored automatically.
+- bun install: 915 packages, no changes needed. Dev server picked up restored code immediately.
+- Browser-verified (agent-browser, 1440x900): correct title, h1, all 5 anchor sections present, terminal auto-played to completion (RUN COMPLETE · 6 FINDINGS · 6 CITATIONS · 0 UNSOURCED), checklist toggles update the aria-live status, zero page errors.
+
+Stage Summary:
+- Site fully recovered from the sandbox reset and running on port 3000; local repo = GitHub e858338 with clean upstream. Nothing to re-push.
