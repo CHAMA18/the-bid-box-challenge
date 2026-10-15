@@ -1,0 +1,25 @@
+{
+  "gate": {
+    "id": "gate_fxsrag",
+    "runId": "run_809cf98f",
+    "tenderId": "FINAL-CHECK",
+    "tool": "file_gate_submission",
+    "inputs": {
+      "bidder": "bidder",
+      "value": "NOT STATED IN BID",
+      "attachments": 1,
+      "findings": [],
+      "drafts": []
+    },
+    "status": "APPROVED",
+    "createdAt": "2026-10-15T18:35:19.885Z",
+    "approver": "Chungu424",
+    "note": "Signed by the committee",
+    "decidedAt": "2026-10-15T18:35:56.976Z"
+  },
+  "receipt": {
+    "submissionId": "SUB-MV9VQDO4",
+    "hash": "952a61bae4668af3dfa38d577eb422ac",
+    "portal": "egp-portal (simulated)"
+  }
+}

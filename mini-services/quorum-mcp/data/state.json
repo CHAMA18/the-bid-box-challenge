@@ -1,21 +1,8 @@
 {
   "gates": [
     {
-      "id": "gate_5e0yph",
-      "runId": "mcp-direct",
-      "tenderId": "KE-NCB-104293",
-      "tool": "file_gate_submission",
-      "inputs": {
-        "bidder": "MedEquip East Africa Ltd",
-        "value": "KES 412,600,000",
-        "attachments": 7
-      },
-      "status": "PENDING",
-      "createdAt": "2026-10-15T10:48:49.455Z"
-    },
-    {
-      "id": "gate_tswcmw",
-      "runId": "run_bc2af496",
+      "id": "gate_1rm43t",
+      "runId": "run_14e9bbef",
       "tenderId": "KE-NCB-104293",
       "tool": "file_gate_submission",
       "inputs": {
@@ -29,16 +16,16 @@
           "F-04"
         ],
         "drafts": [
-          "draft_22s98s",
-          "draft_hlh5c8"
+          "draft_xl31b2",
+          "draft_8jq3w6"
         ]
       },
       "status": "PENDING",
-      "createdAt": "2026-10-15T10:42:05.292Z"
+      "createdAt": "2026-10-15T20:17:25.607Z"
     },
     {
-      "id": "gate_ebi3zp",
-      "runId": "run_5c831e8e",
+      "id": "gate_2yhtt6",
+      "runId": "run_d13c08e5",
       "tenderId": "KE-NCB-104293",
       "tool": "file_gate_submission",
       "inputs": {
@@ -52,40 +39,89 @@
           "F-04"
         ],
         "drafts": [
-          "draft_w9syvr",
-          "draft_huyq3v"
+          "draft_n4nx24",
+          "draft_g1ev57"
         ]
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-15T20:10:51.508Z"
+    },
+    {
+      "id": "gate_uo7zqq",
+      "runId": "run_d9f5e0dd",
+      "tenderId": "KE-MOH-2026-001",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "bidder",
+        "value": "NOT STATED IN BID",
+        "attachments": 1,
+        "findings": [],
+        "drafts": []
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-15T19:16:18.925Z"
+    },
+    {
+      "id": "gate_0bcy04",
+      "runId": "run_21b43f7d",
+      "tenderId": "KRERER--RERER",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "bidder",
+        "value": "NOT STATED IN BID",
+        "attachments": 1,
+        "findings": [],
+        "drafts": []
+      },
+      "status": "REJECTED",
+      "createdAt": "2026-10-15T18:38:25.721Z",
+      "approver": "Chungu424",
+      "note": "Returned for clarification",
+      "decidedAt": "2026-10-15T18:40:01.644Z"
+    },
+    {
+      "id": "gate_zpru7c",
+      "runId": "run_51a69fe1",
+      "tenderId": "KRERER--RERER",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "bidder",
+        "value": "NOT STATED IN BID",
+        "attachments": 1,
+        "findings": [],
+        "drafts": []
       },
       "status": "EXECUTED",
-      "createdAt": "2026-10-15T07:36:21.702Z",
-      "approver": "Dr. Chanda Mwale",
-      "note": "Clarifications attached; proceed to committee.",
-      "decidedAt": "2026-10-15T07:36:34.785Z",
-      "executedAt": "2026-10-15T07:36:34.794Z",
+      "createdAt": "2026-10-15T18:35:37.191Z",
+      "approver": "Chungu424",
+      "note": "Signed by the committee",
+      "decidedAt": "2026-10-15T18:35:54.978Z",
+      "executedAt": "2026-10-15T18:35:54.994Z",
       "receipt": {
-        "submissionId": "SUB-MV986FAF",
-        "hash": "2ff006763e0f836cf25262452bde8dcb",
+        "submissionId": "SUB-MV9VQC4V",
+        "hash": "639ddebe6d2906e00b0345ecd153dff7",
         "portal": "egp-portal (simulated)"
       }
     }
   ],
   "runs": [
     {
-      "id": "run_bc2af496",
+      "id": "run_14e9bbef",
       "tenderId": "KE-NCB-104293",
       "status": "AWAITING_GATE",
-      "startedAt": "2026-10-15T10:42:03.028Z",
-      "updatedAt": "2026-10-15T10:42:05.294Z",
+      "startedAt": "2026-10-15T20:16:40.969Z",
+      "updatedAt": "2026-10-15T20:17:25.610Z",
       "progress": [
         "▸ review_graph invoked — langgraph.js · tender KE-NCB-104293",
         "▸ tender_documents_list — via server-filesystem MCP",
-        "▸ 3 documents read · 2 bids parsed",
+        "▸ 3 documents read · 2 bids · 0 awards · 0 OCDS records",
         "▸ extract_requirements — 8 SHALL/must clauses pinned",
         "▸ flag_finding — 4 findings flagged, each cited",
+        "▸ verify_findings — 4/4 confirmed in their cited document",
         "▸ draft_redline — open-weights model drafting for R-PRICE-OUTLIER",
         "▸ draft_redline — open-weights model drafting for R-PRICE-OUTLIER",
         "▸ 2 redline drafts ready for committee",
-        "⏸ human gate raised (gate_tswcmw) — filing blocked until a named human signs",
+        "⏸ human gate raised (gate_1rm43t) — filing blocked until a named human signs",
         "✓ review graph complete — the graph itself stops at the gate"
       ],
       "requirements": [
@@ -137,7 +173,7 @@
           "severity": "HIGH",
           "item": "MRI 1.5T scanner with full coil suite × 2 — MEDIQUEAST",
           "evidence": "Unit price KES 118,400,000 vs peer median KES 52,900,000 (2.2×) on line item \"mri 1.5t scanner\".",
-          "citation": "bid-mediqueast.md, price schedule"
+          "citation": "02-bid-mediqueast.md, price schedule"
         },
         {
           "id": "F-02",
@@ -145,63 +181,63 @@
           "severity": "HIGH",
           "item": "Coil, phased array knee × 4 — MEDIQUEAST",
           "evidence": "Unit price KES 4,850,000 vs peer median KES 1,950,000 (2.5×) on line item \"coil, phased array\".",
-          "citation": "bid-mediqueast.md, price schedule"
+          "citation": "02-bid-mediqueast.md, price schedule"
         },
         {
           "id": "F-03",
+          "rule": "R-SPEC-DEVIATION",
+          "severity": "HIGH",
+          "item": "MEDIQUEAST",
+          "evidence": "Note: alternative offered for the cooling system — chiller specification deviation requested (see annex C).",
+          "citation": "02-bid-mediqueast.md, specifications matrix"
+        },
+        {
+          "id": "F-04",
           "rule": "R-DOC-MISSING",
           "severity": "MEDIUM",
           "item": "MEDIQUEAST — manufacturer authorization letter",
           "evidence": "Tender notice lists \"manufacturer authorization letter\" as REQUIRED; the bid does not reference it.",
           "citation": "01-tender-notice.md, eligibility checklist"
-        },
-        {
-          "id": "F-04",
-          "rule": "R-SPEC-DEVIATION",
-          "severity": "HIGH",
-          "item": "MEDIQUEAST",
-          "evidence": "Note: alternative offered for the cooling system — chiller specification deviation requested (see annex C).",
-          "citation": "bid file — specifications matrix"
         }
       ],
       "drafts": [
         {
-          "id": "draft_22s98s",
+          "id": "draft_xl31b2",
           "findingId": "F-01",
           "original": "Unit price KES 118,400,000 vs peer median KES 52,900,000 (2.2×) on line item \"mri 1.5t scanner\".",
-          "proposed": "The Bidder shall provide a detailed breakdown of the costs comprising the unit price for the MRI 1.5T scanner with full coil suite × 2, including but not limited to equipment specifications, installation costs, maintenance agreements, and training provisions, within five (5) working days of notification. Failure to provide a satisfactory explanation may result in rejection of the bid.",
-          "rationale": "The significant price deviation requires transparent justification to ensure value for money and prevent potential overpricing. This clause mandates cost transparency while maintaining procedural fairness and allowing the Bidder an opportunity to explain the value proposition behind the premium pricing.",
-          "model": "glm-4-plus"
+          "proposed": "Any bid for the MRI 1.5T scanner line item priced at more than 50% above the peer median shall require submission of a detailed cost breakdown and justification from the bidder within three (3) working days; failure to comply will result in disqualification of the affected line item.",
+          "rationale": "This clause ensures transparency and cost reasonableness by requiring bidders with significant price deviations to substantiate their pricing, thereby protecting the procuring entity from overpayment and supporting fair competition.",
+          "model": "gpt-4.1-2025-04-14"
         },
         {
-          "id": "draft_hlh5c8",
+          "id": "draft_8jq3w6",
           "findingId": "F-02",
           "original": "Unit price KES 4,850,000 vs peer median KES 1,950,000 (2.5×) on line item \"coil, phased array\".",
-          "proposed": "The bidder must submit a detailed justification for the unit price of 'coil, phased array' exceeding the peer median by more than 100% within five (5) working days of notification; failure to provide satisfactory justification may result in disqualification of the bid.",
-          "rationale": "The proposed clause addresses the significant price anomaly by requiring the bidder to substantiate the unusually high price for the specified line item, ensuring transparency and value for money while maintaining a reasonable timeframe for response.",
-          "model": "glm-4-plus"
+          "proposed": "Any bid containing a unit price for a line item that exceeds twice the established peer median shall require the bidder to submit a detailed cost breakdown and justification within five (5) working days of notification; failure to provide satisfactory justification will result in disqualification of the affected line item.",
+          "rationale": "This clause ensures transparency and fairness by requiring bidders to substantiate significant price deviations, thereby protecting the procuring entity from overpricing and enabling informed award decisions.",
+          "model": "gpt-4.1-2025-04-14"
         }
       ],
-      "gateId": "gate_tswcmw"
+      "gateId": "gate_1rm43t"
     },
     {
-      "id": "run_5c831e8e",
+      "id": "run_d13c08e5",
       "tenderId": "KE-NCB-104293",
-      "status": "FILED",
-      "startedAt": "2026-10-15T07:36:18.757Z",
-      "updatedAt": "2026-10-15T07:36:34.794Z",
+      "status": "AWAITING_GATE",
+      "startedAt": "2026-10-15T20:10:50.242Z",
+      "updatedAt": "2026-10-15T20:10:51.509Z",
       "progress": [
         "▸ review_graph invoked — langgraph.js · tender KE-NCB-104293",
         "▸ tender_documents_list — via server-filesystem MCP",
-        "▸ 3 documents read · 2 bids parsed",
+        "▸ 3 documents read · 2 bids · 0 awards · 0 OCDS records",
         "▸ extract_requirements — 8 SHALL/must clauses pinned",
         "▸ flag_finding — 4 findings flagged, each cited",
+        "▸ verify_findings — 4/4 confirmed in their cited document",
         "▸ draft_redline — open-weights model drafting for R-PRICE-OUTLIER",
         "▸ draft_redline — open-weights model drafting for R-PRICE-OUTLIER",
         "▸ 2 redline drafts ready for committee",
-        "⏸ human gate raised (gate_ebi3zp) — filing blocked until a named human signs",
-        "✓ review graph complete — the graph itself stops at the gate",
-        "✓ Dr. Chanda Mwale signed the gate — bundle filed · SUB-MV986FAF"
+        "⏸ human gate raised (gate_2yhtt6) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate"
       ],
       "requirements": [
         {
@@ -252,7 +288,7 @@
           "severity": "HIGH",
           "item": "MRI 1.5T scanner with full coil suite × 2 — MEDIQUEAST",
           "evidence": "Unit price KES 118,400,000 vs peer median KES 52,900,000 (2.2×) on line item \"mri 1.5t scanner\".",
-          "citation": "bid-mediqueast.md, price schedule"
+          "citation": "02-bid-mediqueast.md, price schedule"
         },
         {
           "id": "F-02",
@@ -260,45 +296,123 @@
           "severity": "HIGH",
           "item": "Coil, phased array knee × 4 — MEDIQUEAST",
           "evidence": "Unit price KES 4,850,000 vs peer median KES 1,950,000 (2.5×) on line item \"coil, phased array\".",
-          "citation": "bid-mediqueast.md, price schedule"
+          "citation": "02-bid-mediqueast.md, price schedule"
         },
         {
           "id": "F-03",
+          "rule": "R-SPEC-DEVIATION",
+          "severity": "HIGH",
+          "item": "MEDIQUEAST",
+          "evidence": "Note: alternative offered for the cooling system — chiller specification deviation requested (see annex C).",
+          "citation": "02-bid-mediqueast.md, specifications matrix"
+        },
+        {
+          "id": "F-04",
           "rule": "R-DOC-MISSING",
           "severity": "MEDIUM",
           "item": "MEDIQUEAST — manufacturer authorization letter",
           "evidence": "Tender notice lists \"manufacturer authorization letter\" as REQUIRED; the bid does not reference it.",
           "citation": "01-tender-notice.md, eligibility checklist"
-        },
-        {
-          "id": "F-04",
-          "rule": "R-SPEC-DEVIATION",
-          "severity": "HIGH",
-          "item": "MEDIQUEAST",
-          "evidence": "Note: alternative offered for the cooling system — chiller specification deviation requested (see annex C).",
-          "citation": "bid file — specifications matrix"
         }
       ],
       "drafts": [
         {
-          "id": "draft_w9syvr",
+          "id": "draft_n4nx24",
           "findingId": "F-01",
           "original": "Unit price KES 118,400,000 vs peer median KES 52,900,000 (2.2×) on line item \"mri 1.5t scanner\".",
-          "proposed": "The Bidder shall provide a detailed justification for the unit price of KES 118,400,000 for the MRI 1.5T scanner with full coil suite × 2, including a breakdown of costs and comparison with market rates, within five (5) working days of notification. Failure to provide satisfactory justification may result in the rejection of the bid.",
-          "rationale": "The significant price deviation (2.2× peer median) requires transparency to ensure value for money. This clause ensures the Bidder substantiates the pricing through detailed cost analysis, allowing the committee to evaluate if the premium is justified by superior specifications, technology, or service components.",
-          "model": "glm-4-plus"
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-PRICE-OUTLIER on MRI 1.5T scanner with full coil suite × 2 — MEDIQUEAST prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (llm endpoint answered 400); template guard applied so the run never stalls.",
+          "model": "llama (gpt-4.1) · unreachable — template fallback"
         },
         {
-          "id": "draft_huyq3v",
+          "id": "draft_g1ev57",
           "findingId": "F-02",
           "original": "Unit price KES 4,850,000 vs peer median KES 1,950,000 (2.5×) on line item \"coil, phased array\".",
-          "proposed": "The Buyer reserves the right to seek written clarification regarding the unit price of 'coil, phased array' which exceeds the peer median by 150% (2.5×). The bidder must provide detailed justification for this pricing within five (5) working days of notification. Failure to provide satisfactory justification may result in disqualification of the bid or adjustment of the price to the peer median.",
-          "rationale": "This clause addresses the significant price outlier for the specified line item while maintaining fair procurement practices. It requires the bidder to substantiate their pricing, protects against potential overcharging, and establishes a clear timeframe for response with consequences for non-compliance, ensuring value for money without unfairly penalizing bidders with legitimate cost structures.",
-          "model": "glm-4-plus"
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-PRICE-OUTLIER on Coil, phased array knee × 4 — MEDIQUEAST prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (llm endpoint answered 400); template guard applied so the run never stalls.",
+          "model": "llama (gpt-4.1) · unreachable — template fallback"
         }
       ],
-      "gateId": "gate_ebi3zp"
+      "gateId": "gate_2yhtt6"
+    },
+    {
+      "id": "run_d9f5e0dd",
+      "tenderId": "KE-MOH-2026-001",
+      "status": "AWAITING_GATE",
+      "startedAt": "2026-10-15T19:16:18.760Z",
+      "updatedAt": "2026-10-15T19:16:18.948Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KE-MOH-2026-001",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 0 documents read · 0 bids · 0 awards · 0 OCDS records",
+        "▸ extract_requirements — 0 SHALL/must clauses pinned",
+        "▸ flag_finding — 0 findings flagged, each cited",
+        "▸ verify_findings — 0/0 confirmed in their cited document",
+        "▸ 0 redline drafts ready for committee",
+        "⏸ human gate raised (gate_uo7zqq) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate"
+      ],
+      "requirements": [],
+      "findings": [],
+      "drafts": [],
+      "gateId": "gate_uo7zqq"
+    },
+    {
+      "id": "run_21b43f7d",
+      "tenderId": "KRERER--RERER",
+      "status": "REJECTED",
+      "startedAt": "2026-10-15T18:38:25.676Z",
+      "updatedAt": "2026-10-15T18:40:01.644Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KRERER--RERER",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 0 documents read · 0 bids · 0 awards · 0 OCDS records",
+        "▸ extract_requirements — 0 SHALL/must clauses pinned",
+        "▸ flag_finding — 0 findings flagged, each cited",
+        "▸ verify_findings — 0/0 confirmed in their cited document",
+        "▸ 0 redline drafts ready for committee",
+        "⏸ human gate raised (gate_0bcy04) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate",
+        "✗ Chungu424 returned the submission — back to the agent"
+      ],
+      "requirements": [],
+      "findings": [],
+      "drafts": [],
+      "gateId": "gate_0bcy04"
+    },
+    {
+      "id": "run_51a69fe1",
+      "tenderId": "KRERER--RERER",
+      "status": "FILED",
+      "startedAt": "2026-10-15T18:35:37.174Z",
+      "updatedAt": "2026-10-15T18:35:54.994Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KRERER--RERER",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 0 documents read · 0 bids parsed",
+        "▸ extract_requirements — 0 SHALL/must clauses pinned",
+        "▸ flag_finding — 0 findings flagged, each cited",
+        "▸ 0 redline drafts ready for committee",
+        "⏸ human gate raised (gate_zpru7c) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate",
+        "✓ Chungu424 signed the gate — bundle filed · SUB-MV9VQC4V"
+      ],
+      "requirements": [],
+      "findings": [],
+      "drafts": [],
+      "gateId": "gate_zpru7c"
     }
   ],
-  "seq": 31
+  "sourceRequests": [
+    {
+      "id": "srq_7f2cbe88",
+      "name": "Kenya OR Code — beneficial ownership registry",
+      "kind": "REGISTRY",
+      "note": "Match every bidder before findings are raised",
+      "requestedBy": "Chungu424",
+      "createdAt": "2026-10-15T19:25:11.594Z",
+      "status": "PENDING"
+    }
+  ],
+  "seq": 62
 }

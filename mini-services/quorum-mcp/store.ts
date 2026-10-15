@@ -119,14 +119,25 @@ export function appendLog(e: Omit<LogEntry, "seq" | "id" | "ts">): LogEntry {
   return entry;
 }
 
-/* ── Durable state (gates + runs survive --hot reloads) ──────────────────── */
+/* ── Durable state (gates + runs + source requests survive reloads) ─────── */
+
+export interface SourceRequest {
+  id: string;
+  name: string;
+  kind: string;
+  note?: string;
+  requestedBy: string;
+  createdAt: string;
+  status: "PENDING" | "CONNECTED" | "DISMISSED";
+}
 
 interface PersistShape {
   gates: Gate[];
   runs: Run[];
+  sourceRequests: SourceRequest[];
 }
 
-export const state: PersistShape = { gates: [], runs: [] };
+export const state: PersistShape = { gates: [], runs: [], sourceRequests: [] };
 
 export async function loadState() {
   try {
@@ -136,6 +147,8 @@ export async function loadState() {
     state.gates.push(...(raw.gates ?? []));
     state.runs.length = 0;
     state.runs.push(...(raw.runs ?? []));
+    state.sourceRequests.length = 0;
+    state.sourceRequests.push(...(raw.sourceRequests ?? []));
     seq = raw.seq ?? 0;
   } catch {
     /* first boot */

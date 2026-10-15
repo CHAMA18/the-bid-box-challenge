@@ -60,6 +60,9 @@ type RunStatus = "running" | "queued" | "gate" | "complete";
 
 type McRun = {
   id: string;
+  /* Backend run identity (`run_…`) — unique even when the same tender is
+     reviewed twice. React keys use this; `id` stays the human-facing ref. */
+  uid?: string;
   title: string;
   buyer: string;
   bids: number | null;
@@ -181,6 +184,7 @@ function useMissionData() {
         const citations = r.findings.filter((f) => f.citation).length;
         return {
           id: r.tenderId,
+          uid: r.id,
           title: r.tenderId,
           buyer: "",
           bids: null,
@@ -672,6 +676,87 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/* ── Tender-reference autofill ─────────────────────────────────────────────
+   The reference is ready before the officer types a character. It drafts
+   itself three ways, in order of authority: a reference-shaped token in the
+   staged pack wins (the documents speak), then the register's own sequence
+   continues (KE-MOH-2026-014 → 015, never colliding), then a fresh
+   registry-shaped reference for the year. Every draft is labelled inline
+   and freely editable — autofill proposes, the officer disposes. */
+
+interface RefSeed {
+  prefix: string;
+  year: number;
+  seq: number;
+}
+
+/** Parse a procurement-shaped reference: KE-MOH-2026-014. */
+function parseRefSeed(raw: string): RefSeed | null {
+  const m = raw.trim().toUpperCase().match(/^([A-Z]{2,10})-([A-Z0-9]{2,10})-(\d{4})-(\d{1,6})$/);
+  if (!m) return null;
+  return { prefix: `${m[1]}-${m[2]}`, year: Number(m[3]), seq: Number(m[4]) };
+}
+
+function formatRefSeed(seed: RefSeed): string {
+  return `${seed.prefix}-${seed.year}-${String(seed.seq).padStart(3, "0")}`;
+}
+
+/** The highest sequence per prefix across the register. */
+function latestRefSeed(refs: string[]): RefSeed | null {
+  let best: RefSeed | null = null;
+  for (const raw of refs) {
+    const seed = parseRefSeed(raw);
+    if (!seed) continue;
+    if (!best || seed.year > best.year || (seed.year === best.year && seed.seq > best.seq)) best = seed;
+  }
+  return best;
+}
+
+/** Next in the register's sequence — skipping any reference already taken. */
+function nextRefFrom(refs: string[], now = new Date()): string | null {
+  const latest = latestRefSeed(refs);
+  if (!latest) return null;
+  /* A new procurement year resets the sequence to 001, prefix intact. */
+  let seed: RefSeed = latest.year < now.getFullYear() ? { ...latest, year: now.getFullYear(), seq: 0 } : { ...latest };
+  const taken = new Set(refs.map((r) => r.trim().toUpperCase()));
+  do {
+    seed = { ...seed, seq: seed.seq + 1 };
+  } while (taken.has(formatRefSeed(seed)) && seed.seq < 9999);
+  return formatRefSeed(seed);
+}
+
+/** A fresh registry-shaped reference when the register has none to continue. */
+function freshRef(now = new Date()): string {
+  return formatRefSeed({ prefix: "KE-MOH", year: now.getFullYear(), seq: 1 });
+}
+
+/** A reference-shaped token inside a staged filename claims the field. */
+function extractRef(names: string[]): string | null {
+  for (const name of names) {
+    /* Negative lookahead, not \b — an underscore after the token is still a
+       boundary ("KE-MOH-2026-021_bid.pdf" must match). */
+    const m = name.toUpperCase().match(/([A-Z]{2,10}-[A-Z0-9]{2,10}-\d{4}-\d{1,6})(?![A-Z0-9])/);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/** Draft the tender title from the first staged filename worth reading. */
+function draftTitleFrom(names: string[]): string | null {
+  for (const name of names) {
+    const cleaned = name
+      .replace(/\.[a-z0-9]+$/i, "")
+      .replace(/[A-Z]{2,10}-[A-Z0-9]{2,10}-\d{4}-\d{1,6}/gi, " ")
+      .replace(/[_\-.]+/g, " ")
+      .replace(/\b\d{4}\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (cleaned.length < 4) continue;
+    return cleaned.replace(/(^|\s|["'(])([a-z])/g, (_match: string, sep: string, ch: string) => sep + ch.toUpperCase());
+  }
+  return null;
+}
+
 function DocStatusChip({ status }: { status: StagedDoc["status"] }) {
   if (status === "INDEXED")
     return (
@@ -729,10 +814,13 @@ function NewRunModal({
   open,
   onClose,
   onLaunch,
+  pastRefs = [],
 }: {
   open: boolean;
   onClose: () => void;
   onLaunch: (ref: string, title: string, format: string, docs: number, checks: number) => void;
+  /* The register's references — the sequence the draft continues. */
+  pastRefs?: string[];
 }) {
   const [step, setStep] = useState(0);
   const [ref, setRef] = useState("");
@@ -744,13 +832,22 @@ function NewRunModal({
   const [detailsError, setDetailsError] = useState("");
   const [launchError, setLaunchError] = useState("");
   const [launching, setLaunching] = useState(false);
+  /* Where the current ref/title draft came from — shown inline, cleared the
+     moment the officer edits (then it's theirs, not a suggestion). */
+  const [refSource, setRefSource] = useState<"" | "sequence" | "fresh" | "document">("");
+  const [titleSource, setTitleSource] = useState<"" | "document">("");
+  const titleTouchedRef = useRef(false);
   const refInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docsRef = useRef<StagedDoc[]>([]);
   const filesRef = useRef<Map<string, File>>(new Map());
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  /* Every fresh open is a fresh tender: back to step one, no pack staged. */
+  /* Every fresh open is a fresh tender: back to step one, no pack staged.
+     The register's references arrive through a ref so a mid-session refresh
+     never re-runs this effect and never stomps a wizard in progress. */
+  const pastRefsRef = useRef(pastRefs);
+  pastRefsRef.current = pastRefs;
   useEffect(() => {
     if (!open) return;
     timersRef.current.forEach(clearTimeout);
@@ -761,6 +858,8 @@ function NewRunModal({
       setStep(0);
       setRef("");
       setTitle("");
+      setRefSource("");
+      setTitleSource("");
       setFormat("OCDS");
       setDocs([]);
       setDragging(false);
@@ -768,6 +867,13 @@ function NewRunModal({
       setDetailsError("");
       setLaunchError("");
       setLaunching(false);
+      titleTouchedRef.current = false;
+      /* Autofill the reference the instant the modal opens — the register's
+         sequence continues itself; a fresh registry shape when there is none. */
+      const refs = pastRefsRef.current;
+      const next = nextRefFrom(refs);
+      setRef(next ?? freshRef());
+      setRefSource(next ? "sequence" : "fresh");
       refInputRef.current?.focus();
     });
     return () => cancelAnimationFrame(id);
@@ -805,6 +911,24 @@ function NewRunModal({
     });
   };
 
+  /* Documents outrank the register: a reference-shaped token in a staged
+     filename claims the field instantly — the pack identifies its own tender. */
+  const adoptFromDocs = (names: string[]) => {
+    const docRef = extractRef(names);
+    if (docRef) {
+      setRef(docRef);
+      setRefSource("document");
+      setDetailsError("");
+    }
+    if (!titleTouchedRef.current) {
+      const draft = draftTitleFrom(names);
+      if (draft) {
+        setTitle(draft);
+        setTitleSource("document");
+      }
+    }
+  };
+
   const addDocs = (items: { name: string; size: string; file?: File }[]) => {
     const seen = new Set(docsRef.current.map((d) => d.name));
     const fresh = items
@@ -832,6 +956,8 @@ function NewRunModal({
     const fresh = addDocs(
       Array.from(list).map((f) => ({ name: f.name, size: formatBytes(f.size), file: f }))
     );
+    /* The staged pack speaks for the tender — adopt its reference and title. */
+    adoptFromDocs(fresh.map((d) => d.name));
     /* Every real file mirrors to Firebase Storage (project "public-tender")
        in parallel with the ingestion pipeline. If the bucket is unreachable
        the document simply stays in the local vault — never an error. */
@@ -1009,16 +1135,22 @@ function NewRunModal({
                           ref={refInputRef}
                           type="text"
                           value={ref}
-                          onChange={(e) => {
-                            setRef(e.target.value);
-                            setDetailsError("");
-                          }}
+                          readOnly
+                          aria-readonly="true"
                           placeholder="e.g. KE-MOH-2026-014"
                           autoComplete="off"
                           aria-required="true"
                           aria-invalid={Boolean(detailsError && !ref.trim())}
-                          className="h-12 w-full rounded-xl border border-ink-200 bg-white px-4 font-code text-[13px] tracking-[0.04em] text-ink-900 outline-none transition-all placeholder:font-sans placeholder:tracking-normal placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15 sm:h-[52px]"
+                          className="h-12 w-full rounded-xl border border-ink-200 bg-white px-4 font-code text-[13px] tracking-[0.04em] text-ink-900 outline-none transition-all placeholder:font-sans placeholder:tracking-normal placeholder:text-ink-300 read-only:cursor-default read-only:focus:ring-0 read-only:focus:ring-offset-0 sm:h-[52px]"
                         />
+                        {refSource !== "" && !detailsError && (
+                          <p className="mt-1.5 flex items-center gap-1.5 font-code text-[8px] tracking-[0.14em] text-ink-400" aria-live="polite">
+                            <CircleCheck className="h-2.5 w-2.5 text-brand-600" aria-hidden="true" />
+                            {refSource === "sequence" && "ASSIGNED BY QUORUM — CONTINUES THE REGISTER'S SEQUENCE · LOCKED"}
+                            {refSource === "fresh" && "ASSIGNED BY QUORUM — NEW REGISTRY SEQUENCE · LOCKED"}
+                            {refSource === "document" && "READ FROM THE STAGED PACK · LOCKED"}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <label htmlFor="nr-title" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
@@ -1029,7 +1161,9 @@ function NewRunModal({
                           type="text"
                           value={title}
                           onChange={(e) => {
+                            titleTouchedRef.current = true;
                             setTitle(e.target.value);
+                            setTitleSource("");
                             setDetailsError("");
                           }}
                           placeholder="Use the title exactly as published"
@@ -1037,6 +1171,12 @@ function NewRunModal({
                           aria-invalid={Boolean(detailsError && !title.trim())}
                           className="h-12 w-full rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15 sm:h-[52px]"
                         />
+                        {titleSource === "document" && (
+                          <p className="mt-1.5 flex items-center gap-1.5 font-code text-[8px] tracking-[0.14em] text-ink-400" aria-live="polite">
+                            <CircleCheck className="h-2.5 w-2.5 text-brand-600" aria-hidden="true" />
+                            DRAFTED FROM THE STAGED PACK — REPLACE WITH THE PUBLISHED TITLE
+                          </p>
+                        )}
                       </div>
                       <div>
                         <div className="mb-2 flex items-end justify-between gap-3">
@@ -1584,21 +1724,21 @@ function RunRegister({
             </thead>
             <tbody>
               {filtered.map((run) => {
-                const isOpen = expanded === run.id;
+                const isOpen = expanded === (run.uid ?? run.id);
                 const notesFor = notes[run.id] ?? [];
                 return (
-                  <Fragment key={run.id}>
+                  <Fragment key={run.uid ?? run.id}>
                     <tr
                       className={cn(
                         "cursor-pointer border-b border-ink-50 transition-colors hover:bg-paper",
                         isOpen && "bg-paper"
                       )}
                       tabIndex={0}
-                      onClick={() => setExpanded(isOpen ? null : run.id)}
+                      onClick={() => setExpanded(!isOpen ? run.uid ?? run.id : null)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          setExpanded(isOpen ? null : run.id);
+                          setExpanded(!isOpen ? run.uid ?? run.id : null);
                         }
                       }}
                       aria-expanded={isOpen}
@@ -1660,9 +1800,9 @@ function RunRegister({
                                   TOP ISSUES · {run.findings} FLAGGED · {run.citations} SOURCED · {run.unsourced} WITHOUT A SOURCE
                                 </p>
                                 <ul className="mt-2.5 flex flex-wrap gap-1.5">
-                                  {notesFor.map((note) => (
+                                  {notesFor.map((note, ni) => (
                                     <li
-                                      key={note}
+                                      key={`${run.uid ?? run.id}-note-${ni}`}
                                       className="rounded-md bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-medium text-brand-800"
                                     >
                                       {note}
@@ -2331,7 +2471,7 @@ function ReportPacksView({
           const size = (2.4 + run.findings * 1.6).toFixed(1);
           return (
             <motion.article
-              key={run.id}
+              key={run.uid ?? run.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
@@ -2428,9 +2568,112 @@ const PORTAL_KINDS: Record<string, string> = {
   "GGPPBD · GHANA": "NATIONAL PORTAL",
 };
 
-function SourcesView({ onToast }: { onToast: (m: string) => void }) {
+type SourceRequestRow = {
+  id: string;
+  name: string;
+  kind: string;
+  note?: string;
+  requestedBy: string;
+  createdAt: string;
+  status: "PENDING" | "CONNECTED" | "DISMISSED";
+};
+
+/* Pending source requests, read live from the sidecar. Visible proof that
+   REQUEST A SOURCE actually files — not a toast into the void. */
+function RequestsPanel({ requests }: { requests: SourceRequestRow[] }) {
+  if (requests.length === 0) return null;
+  return (
+    <div className="mb-4 overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+      <header className="flex items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
+        <div>
+          <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">Source requests</h2>
+          <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
+            {requests.filter((r) => r.status === "PENDING").length} PENDING · {requests.length} FILED
+          </p>
+        </div>
+      </header>
+      <ul>
+        {requests.map((r) => (
+          <li key={r.id} className="flex flex-wrap items-center gap-3 border-b border-ink-50 px-5 py-3.5 last:border-b-0">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-code text-[10px] font-bold tracking-[0.12em] text-ink-950">{r.name}</span>
+              <span className="mt-0.5 block font-code text-[7.5px] tracking-[0.18em] text-ink-400">
+                {r.kind} · BY {r.requestedBy.toUpperCase()} · {clockOf(r.createdAt).toUpperCase()}
+              </span>
+            </span>
+            {r.note && <span className="max-w-[320px] truncate text-[12px] text-ink-500">{r.note}</span>}
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em]",
+                r.status === "PENDING" ? "bg-brand-600 text-white" : "bg-ink-950 text-white"
+              )}
+            >
+              {r.status}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; firstName: string }) {
   const standards = ["OCDS 1.1", "MCP TOOLS", "OPEN WEIGHTS", "PAGE CITATIONS"];
   const degraded = PORTALS.filter((p) => !p.ok).length;
+
+  /* Live source requests from the quorum-mcp sidecar — pending ones show
+     up right on the page; every request is audit-logged on the sidecar. */
+  const [requests, setRequests] = useState<SourceRequestRow[]>([]);
+  const [reqOpen, setReqOpen] = useState(false);
+  const [reqName, setReqName] = useState("");
+  const [reqKind, setReqKind] = useState("DATA SOURCE");
+  const [reqNote, setReqNote] = useState("");
+  const [reqError, setReqError] = useState("");
+  const [reqBusy, setReqBusy] = useState(false);
+  const reqNameRef = useRef<HTMLInputElement | null>(null);
+
+  const loadRequests = useCallback(() => {
+    fetch("/api/source-requests?XTransformPort=3031")
+      .then((x) => x.json())
+      .then((d) => setRequests(d.requests ?? []))
+      .catch(() => setRequests([]));
+  }, []);
+
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
+
+  const submitRequest = async () => {
+    if (!reqName.trim()) {
+      setReqError("Name the source you need — the registry, portal or feed.");
+      return;
+    }
+    setReqBusy(true);
+    setReqError("");
+    try {
+      const res = await fetch("/api/source-requests?XTransformPort=3031", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: reqName.trim(),
+          kind: reqKind,
+          note: reqNote.trim() || undefined,
+          requestedBy: firstName || "the committee",
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      void loadRequests();
+      setReqOpen(false);
+      setReqName("");
+      setReqNote("");
+      setReqKind("DATA SOURCE");
+      onToast("SOURCE REQUEST FILED — WRITTEN TO THE AUDIT TRAIL");
+    } catch {
+      setReqError("The request could not be filed — try again.");
+    } finally {
+      setReqBusy(false);
+    }
+  };
 
   return (
     <ViewShell
@@ -2440,7 +2683,10 @@ function SourcesView({ onToast }: { onToast: (m: string) => void }) {
       action={
         <button
           type="button"
-          onClick={() => onToast("SOURCE REQUESTS ARE ADMIN-LOCKED IN v0.9")}
+          onClick={() => {
+            setReqOpen(true);
+            requestAnimationFrame(() => reqNameRef.current?.focus());
+          }}
           className="inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.18em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -2465,6 +2711,7 @@ function SourcesView({ onToast }: { onToast: (m: string) => void }) {
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
+          <RequestsPanel requests={requests} />
           <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
             <header className="flex items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
               <div>
@@ -2548,9 +2795,136 @@ function SourcesView({ onToast }: { onToast: (m: string) => void }) {
           </div>
         </div>
       </div>
+      {/* Request modal — files a real, audit-logged source request. */}
+      <AnimatePresence>
+        {reqOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[80] grid place-items-center bg-night/70 p-4 backdrop-blur-sm"
+            onClick={() => {
+              if (!reqBusy) setReqOpen(false);
+            }}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="req-source-title"
+              initial={{ opacity: 0, y: 22, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ duration: 0.28, ease: EASE }}
+              className="w-full max-w-lg rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_40px_100px_rgba(11,12,15,0.45)] sm:p-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="flex items-center gap-2.5 font-code text-[9px] font-semibold uppercase tracking-[0.28em] text-ink-500">
+                <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
+                REQUEST A SOURCE
+              </p>
+              <h2 id="req-source-title" className="mt-3 font-display text-[24px] font-black tracking-[-0.03em] text-ink-950 sm:text-[28px]">
+                File a source request.
+              </h2>
+              <p className="mt-1.5 text-[12.5px] text-ink-500">
+                Name the registry, portal or feed. It lands in the audit trail with your name and a pending status.
+              </p>
+              <form
+                className="mt-5 space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void submitRequest();
+                }}
+              >
+                <div>
+                  <label htmlFor="req-name" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+                    SOURCE NAME <span className="text-brand-600" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    id="req-name"
+                    ref={reqNameRef}
+                    type="text"
+                    value={reqName}
+                    onChange={(e) => {
+                      setReqName(e.target.value);
+                      setReqError("");
+                    }}
+                    placeholder="e.g. Kenya OR Code — beneficial ownership registry"
+                    autoComplete="off"
+                    aria-required="true"
+                    aria-invalid={Boolean(reqError && !reqName.trim())}
+                    className="h-12 w-full rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="req-kind" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+                    KIND
+                  </label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="group" aria-label="Source kind">
+                    {["NATIONAL PORTAL", "REGISTRY", "DATA SOURCE"].map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setReqKind(k)}
+                        aria-pressed={reqKind === k}
+                        className={cn(
+                          "flex min-h-10 items-center justify-center rounded-xl border px-2 font-code text-[9px] font-bold tracking-[0.12em] transition-all",
+                          reqKind === k
+                            ? "border-ink-950 bg-ink-950 text-white"
+                            : "border-ink-200 bg-white text-ink-500 hover:border-ink-400"
+                        )}
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="req-note" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+                    NOTE
+                  </label>
+                  <textarea
+                    id="req-note"
+                    value={reqNote}
+                    onChange={(e) => setReqNote(e.target.value)}
+                    rows={3}
+                    placeholder="What it must supply, and why — optionally."
+                    className="w-full resize-none rounded-xl border border-ink-200 bg-white px-4 py-3 text-[13.5px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                  />
+                </div>
+                {reqError && (
+                  <p role="alert" className="rounded-lg bg-brand-50 px-3.5 py-2.5 text-[12px] font-medium text-brand-800">
+                    {reqError}
+                  </p>
+                )}
+                <div className="flex items-center justify-end gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!reqBusy) setReqOpen(false);
+                    }}
+                    className="inline-flex h-10 items-center rounded-xl border border-ink-200 px-4 font-code text-[9px] font-bold tracking-[0.14em] text-ink-600 transition-colors hover:border-ink-900 hover:text-ink-950"
+                  >
+                    CANCEL
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reqBusy}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink-950 px-5 font-code text-[9px] font-bold tracking-[0.14em] text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {reqBusy ? "FILING…" : "FILE REQUEST"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </ViewShell>
   );
 }
+
 
 /* ── Award ledger ────────────────────────────────────────────────────────── */
 
@@ -3430,52 +3804,52 @@ function RulesView({ onToast }: { onToast: (m: string) => void }) {
       title="Rules & guards"
       sub="The thresholds the agent must obey inside a run. Three clauses are carved; the guards below are tunable — and every change is written to the audit trail with your name on it."
     >
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-        <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-2">
-          {guards.map((g, i) => (
-            <motion.div
-              key={g.no}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
-              className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
-            >
-              <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">GUARD {g.no}</p>
-              <h3 className="mt-1.5 font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">{g.title}</h3>
-              <p className="mt-1 text-[12.5px] text-ink-500">{g.desc}</p>
-              <div className="mt-4">{g.control}</div>
-            </motion.div>
-          ))}
+      {/* Full-width: guards flow edge-to-edge in a two-column grid,
+          with the standing-rule rail as a full-width row beneath. */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+        {guards.map((g, i) => (
           <motion.div
+            key={g.no}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2, ease: EASE }}
+            transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
             className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
           >
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">GUARD 04</p>
-                <h3 className="mt-1.5 font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Citation policy</h3>
-                <p className="mt-1 max-w-md text-[12.5px] text-ink-500">
-                  Page-level citations on every claim. Zero unsourced tolerated — not a setting, a design constraint.
-                </p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 font-code text-[8px] font-bold tracking-[0.16em] text-brand-800">
-                <Lock className="h-3 w-3" aria-hidden="true" />
-                LOCKED BY DESIGN
-              </span>
-            </div>
+            <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">GUARD {g.no}</p>
+            <h3 className="mt-1.5 font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">{g.title}</h3>
+            <p className="mt-1 text-[12.5px] text-ink-500">{g.desc}</p>
+            <div className="mt-4">{g.control}</div>
           </motion.div>
-        </div>
-
-        <div className="grid content-start gap-4 sm:gap-6">
-          <StandingRuleCard onToast={onToast} />
-          <div className="flex items-start gap-3 rounded-2xl border border-ink-100 bg-sand p-5">
-            <ShieldCheck className="h-4 w-4 shrink-0 text-brand-700" aria-hidden="true" />
-            <p className="font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-600">
-              EVERY GUARD CHANGE IS LOGGED — NAME, TIMESTAMP, BEFORE &amp; AFTER VALUES.
-            </p>
+        ))}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2, ease: EASE }}
+          className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">GUARD 04</p>
+              <h3 className="mt-1.5 font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Citation policy</h3>
+              <p className="mt-1 max-w-md text-[12.5px] text-ink-500">
+                Page-level citations on every claim. Zero unsourced tolerated — not a setting, a design constraint.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 font-code text-[8px] font-bold tracking-[0.16em] text-brand-800">
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              LOCKED BY DESIGN
+            </span>
           </div>
+        </motion.div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-2">
+        <StandingRuleCard onToast={onToast} />
+        <div className="flex items-start gap-3 rounded-2xl border border-ink-100 bg-sand p-5">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-brand-700" aria-hidden="true" />
+          <p className="font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-600">
+            EVERY GUARD CHANGE IS LOGGED — NAME, TIMESTAMP, BEFORE &amp; AFTER VALUES.
+          </p>
         </div>
       </div>
     </ViewShell>
@@ -3887,7 +4261,7 @@ export function Dashboard({
       case "mc-reports":
         return <ReportPacksView runs={runs} verdicts={verdicts} onToast={onToast} />;
       case "mc-sources":
-        return <SourcesView onToast={onToast} />;
+        return <SourcesView onToast={onToast} firstName={firstName} />;
       case "mc-ledger":
         return <AwardLedgerView ledger={ledger} awaiting={queue.length} onToast={onToast} />;
       case "mc-committee":
@@ -4012,7 +4386,7 @@ export function Dashboard({
         {/* Sticky utility bar */}
         <div className="sticky top-0 z-30 border-b border-ink-100 bg-paper/85 backdrop-blur-xl">
           <div
-            className={`mx-auto flex h-14 w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 ${active === "mc-findings" ? "" : "max-w-[1200px]"}`}
+            className="mx-auto flex h-14 w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-8"
           >
             <p className="truncate font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
               MISSION CONTROL <span className="text-ink-200">/</span>{" "}
@@ -4049,7 +4423,7 @@ export function Dashboard({
 
         <main
           id="mc-main"
-          className={`mx-auto w-full px-4 pb-14 pt-8 sm:px-6 lg:px-8 ${active === "mc-findings" ? "" : "max-w-[1200px]"}`}
+          className="mx-auto w-full px-4 pb-14 pt-8 sm:px-6 lg:px-8"
         >
           <AnimatePresence mode="wait" initial={false}>
             {active === "mc-overview" ? (
@@ -4179,7 +4553,12 @@ export function Dashboard({
         </main>
       </div>
 
-      <NewRunModal open={modalOpen} onClose={() => setModalOpen(false)} onLaunch={launchRun} />
+      <NewRunModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onLaunch={launchRun}
+        pastRefs={runs.map((r) => r.id)}
+      />
     </div>
   );
 }
