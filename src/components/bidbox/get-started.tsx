@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowRight, Check, Gauge, Send } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import type { AuthUser } from "@/lib/auth-types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -21,9 +22,21 @@ type FormState = "idle" | "sending" | "sent" | "error";
  * an interactive first-run readiness checklist, and a pilot-request
  * form persisted through /api/contact.
  */
-export function GetStarted() {
+export function GetStarted({
+  user,
+  onCreateAccount,
+  onSignIn,
+}: {
+  user?: AuthUser | null;
+  onCreateAccount?: () => void;
+  onSignIn?: () => void;
+}) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const [form, setForm] = useState({ name: "", email: "", institution: "" });
+  const [form, setForm] = useState({
+    name: user?.name ?? "",
+    email: user?.email ?? "",
+    institution: user?.organization ?? "",
+  });
   const [state, setState] = useState<FormState>("idle");
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -95,16 +108,17 @@ export function GetStarted() {
             </Reveal>
             <Reveal delay={0.22}>
               <div className="mt-9 flex flex-wrap items-center gap-3.5">
-                <a
-                  href="#inside"
+                <button
+                  type="button"
+                  onClick={onCreateAccount}
                   className="group inline-flex h-[52px] items-center gap-2 rounded-full bg-ink-950 px-7 text-[15px] font-semibold text-white transition-all hover:bg-ink-900 hover:shadow-[0_14px_36px_rgba(11,12,15,0.35)]"
                 >
-                  See what&apos;s inside
+                  Create your account
                   <ArrowRight
                     className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1"
                     aria-hidden="true"
                   />
-                </a>
+                </button>
                 <a
                   href="#pricing"
                   className="inline-flex h-[52px] items-center rounded-full border border-white/35 px-7 text-[15px] font-semibold text-white transition-all hover:border-white hover:bg-white/10"
@@ -112,6 +126,18 @@ export function GetStarted() {
                   Compare tiers
                 </a>
               </div>
+            </Reveal>
+            <Reveal delay={0.28}>
+              <p className="mt-4 text-[14px] text-white/75">
+                Already have access?{" "}
+                <button
+                  type="button"
+                  onClick={onSignIn}
+                  className="font-semibold text-white underline decoration-white/50 underline-offset-4 transition-colors hover:decoration-white"
+                >
+                  Sign in
+                </button>
+              </p>
             </Reveal>
           </div>
 

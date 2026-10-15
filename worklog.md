@@ -114,3 +114,23 @@ Work Log:
 Stage Summary:
 - All four review gaps closed: visual variety (report mock centerpiece), social proof (counters + testimonials), conversion (pricing + working pilot form with DB persistence), clock drawn to scale.
 - Page is now 11 sections, product voice throughout, footer flush, fully responsive.
+
+---
+Task ID: 7
+Agent: Z.ai Code (main)
+Task: Wire every "Get Started" CTA to a world-class authentication screen — build registration + login.
+
+Work Log:
+- Prisma: added User (name, unique email, scrypt password, optional organization) + Session (opaque token, userId cascade, expiresAt) models; `bun run db:push` OK.
+- Backend: src/lib/auth.ts (scrypt hash/verify via node:crypto + timingSafeEqual, DB-backed sessions, httpOnly cookie helpers, naive in-memory rate limiter) + src/lib/auth-types.ts (shared AuthUser/AuthMode); API routes POST /api/auth/register (201+cookie, 400 field errors, 409 email taken, 429), POST /api/auth/login (200+cookie, remember → 30d vs 1d TTL, 401, 429), POST /api/auth/logout (revokes row, clears cookie), GET /api/auth/me (always 200, user|null).
+- Restarted the stale dev server (old process held a pre-User Prisma client — same trap as Task 6); regenerated client.
+- Frontend: src/components/bidbox/auth-screen.tsx — full-screen split screen. Left: night panel (grid, corner ticks, red glow, "The agent reads the file. You still award the tender.", looping bidbox-agent terminal that prints "✓ session issued — welcome, {name}" on auth, fact chips, manifesto). Right: paper panel with FIG.01/FIG.02 eyebrows, register/login segmented switch (layoutId pill), animated field transitions, live password strength meter (red→ink segments + 4 requirement chips), show/hide password, terms checkbox, remember-me + "Forgot access?" memo card, inline field errors + role=alert banner, shake on invalid, and a rotated red "ACCESS GRANTED" rubber-stamp success state with session facts (HTTPONLY/SCRYPT/HUMAN) — everything on the / route.
+- Routing: page.tsx now 'use client'; the URL hash is the single source of truth via useSyncExternalStore (#/register, #/login — deep-linkable, back-button works, replaceState for mode switches to avoid history spam); AnimatePresence crossfade between landing and auth; scroll save/restore; /api/auth/me session restore on boot with skeleton placeholder in header.
+- CTAs wired to openAuth: header "Get started" (desktop + mobile menu), hero "Start your first run", get-started "Create your account" + "Sign in" link. Header gains signed-in state (initials chip + name + sign-out icon, mobile equivalent). GetStarted prefills the pilot form for signed-in users. Toasts: "ACCESS GRANTED — SIGNED IN AS …", "SESSION CLOSED — SEE YOU AT THE NEXT RUN".
+- API tests (curl): register 201+cookie; duplicate 409; bad login 401; validation 400 with per-field errors; login 200; me with cookie → user; logout → me null. Test rows deleted afterwards.
+- Browser E2E (agent-browser, 1440x900 + 390x844): header Get started → #/register; filled form (strength meter STRONG, all 4 chips lit) → stamp success with terminal "welcome, Thabo"; back to site → TN chip + toast; sign out → toast + header restored; header Sign in → #/login; forgot memo toggles; login success ("Welcome back, Thabo."); wrong password → role=alert banner; mode switch pill syncs hash; browser Back returns to landing; deep link /#/login renders auth directly; mobile menu → Get started → auth, no horizontal scroll; fixed 390px top-bar wrapping (whitespace-nowrap on "Back to site" + logo subline); console clean, lint clean, dev.log all 200/201/401 as designed.
+
+Stage Summary:
+- Every "Get Started"-intent CTA now lands on a full-screen, brand-native authentication experience at #/register or #/login (no extra user-visible routes — sandbox constraint respected).
+- Real accounts: scrypt-hashed passwords, DB-backed httpOnly sessions, rate limiting, validation on both client and server; session survives reload via /api/auth/me.
+- Landing↔auth navigation is back-button friendly with scroll restoration; signed-in header state closes the loop.

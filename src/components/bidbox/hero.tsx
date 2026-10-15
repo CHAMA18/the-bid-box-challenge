@@ -12,7 +12,7 @@ const STATS = [
   { value: "1", suffix: "", label: "human gate before anything irreversible" },
 ];
 
-export function Hero() {
+export function Hero({ onGetStarted }: { onGetStarted: () => void }) {
   return (
     <section className="relative overflow-hidden bg-paper">
       <div
@@ -83,13 +83,14 @@ export function Hero() {
               transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
               className="mt-8 flex flex-wrap items-center gap-3.5"
             >
-              <a
-                href="#get-started"
+              <button
+                type="button"
+                onClick={onGetStarted}
                 className="group inline-flex h-[52px] items-center gap-2 rounded-full bg-brand-600 px-7 text-[15px] font-semibold text-white shadow-[0_12px_30px_rgba(217,38,22,0.32)] transition-all hover:bg-brand-700 hover:shadow-[0_14px_36px_rgba(217,38,22,0.4)]"
               >
                 Start your first run
                 <ArrowRight className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
-              </a>
+              </button>
               <a
                 href="#overview"
                 className="inline-flex h-[52px] items-center gap-2.5 rounded-full border border-ink-200 bg-white px-7 text-[15px] font-semibold text-ink-900 transition-all hover:border-ink-300 hover:shadow-md"

@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUpRight, Menu, X } from "lucide-react";
+import { ArrowUpRight, LogOut, Menu, X } from "lucide-react";
 import { BidBoxLogo } from "@/components/bidbox/logo";
+import type { AuthUser } from "@/lib/auth-types";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -14,7 +15,24 @@ const NAV = [
   { label: "Pricing", href: "#pricing" },
 ];
 
-export function SiteHeader() {
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "BB";
+}
+
+export function SiteHeader({
+  user,
+  authReady,
+  onGetStarted,
+  onSignIn,
+  onSignOut,
+}: {
+  user: AuthUser | null;
+  authReady: boolean;
+  onGetStarted: () => void;
+  onSignIn: () => void;
+  onSignOut: () => void;
+}) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -57,23 +75,55 @@ export function SiteHeader() {
           ))}
         </nav>
 
+        {/* Desktop actions */}
         <div className="hidden items-center gap-2.5 lg:flex">
-          <a
-            href="#inside"
-            className="inline-flex h-10 items-center gap-2 rounded-full border border-ink-200 bg-white px-4 text-[13.5px] font-semibold text-ink-800 transition-all hover:border-ink-300 hover:shadow-sm"
-          >
-            Inside the box
-          </a>
-          <a
-            href="#get-started"
-            className="group inline-flex h-10 items-center gap-1.5 rounded-full bg-brand-600 px-5 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700 hover:shadow-[0_10px_26px_rgba(217,38,22,0.36)]"
-          >
-            Get started
-            <ArrowUpRight
-              className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-              aria-hidden="true"
-            />
-          </a>
+          {!authReady ? (
+            <div className="h-10 w-[196px] animate-pulse rounded-full bg-ink-100/70" aria-hidden="true" />
+          ) : user ? (
+            <>
+              <span className="flex h-10 items-center gap-2.5 rounded-full border border-ink-200 bg-white py-1 pl-1 pr-4">
+                <span
+                  className="grid h-8 w-8 place-items-center rounded-full bg-ink-950 font-code text-[10px] font-bold text-white"
+                  aria-hidden="true"
+                >
+                  {initialsOf(user.name)}
+                </span>
+                <span className="max-w-[168px] truncate text-[13px] font-semibold text-ink-900">
+                  {user.name}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={onSignOut}
+                aria-label={`Sign out ${user.name}`}
+                title="Sign out"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-ink-200 bg-white text-ink-600 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onSignIn}
+                className="inline-flex h-10 items-center rounded-full px-4 text-[13.5px] font-semibold text-ink-700 transition-colors hover:bg-ink-50 hover:text-ink-950"
+              >
+                Sign in
+              </button>
+              <button
+                type="button"
+                onClick={onGetStarted}
+                className="group inline-flex h-10 items-center gap-1.5 rounded-full bg-brand-600 px-5 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700 hover:shadow-[0_10px_26px_rgba(217,38,22,0.36)]"
+              >
+                Get started
+                <ArrowUpRight
+                  className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                  aria-hidden="true"
+                />
+              </button>
+            </>
+          )}
         </div>
 
         <button
@@ -108,14 +158,57 @@ export function SiteHeader() {
                   <ArrowUpRight className="h-4 w-4 text-ink-300" aria-hidden="true" />
                 </a>
               ))}
-              <a
-                href="#get-started"
-                onClick={() => setOpen(false)}
-                className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white"
-              >
-                Get started
-                <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-              </a>
+
+              {!authReady ? (
+                <div className="mt-2 h-12 animate-pulse rounded-xl bg-ink-100/70" aria-hidden="true" />
+              ) : user ? (
+                <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-3">
+                  <span
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-950 font-code text-[10px] font-bold text-white"
+                    aria-hidden="true"
+                  >
+                    {initialsOf(user.name)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-ink-900">
+                    {user.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      onSignOut();
+                    }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-ink-200 px-3.5 text-[12.5px] font-semibold text-ink-700 transition-all hover:border-brand-300 hover:text-brand-700"
+                  >
+                    <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      onGetStarted();
+                    }}
+                    className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white"
+                  >
+                    Get started
+                    <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      onSignIn();
+                    }}
+                    className="inline-flex h-12 items-center justify-center rounded-xl border border-ink-200 bg-white text-[15px] font-semibold text-ink-900"
+                  >
+                    Sign in
+                  </button>
+                </>
+              )}
             </nav>
           </motion.div>
         )}
