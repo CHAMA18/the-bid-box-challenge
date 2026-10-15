@@ -299,3 +299,18 @@ Stage Summary:
 - Token must be user-provided (fine-grained, Contents: read/write on the-bid-box-challenge). Do not persist; verify .git/config stays clean after push (use inline URL, not remote rewrite).
 - Repo confirmed public & accessible (submission checklist item ① satisfied).
 - Evaluator README.md arrives on the remote with this push (not yet on origin/main).
+
+---
+Task ID: 12 (completion)
+Agent: Z.ai Code (main)
+Task: Push to GitHub — executed with the user-provided fresh PAT
+
+Work Log:
+- One-off inline-URL push of the staged 18 commits: e858338..76fb9ac main -> main (env auto-snapshot commit included).
+- .git/config verified token-free after push (grep ghp_ = 0); remote.origin.url remains the clean HTTPS URL.
+- git fetch re-synced tracking; main == origin/main. Anonymous verification: repo page 200, raw README.md 200 (evaluator README now live), raw quorum-mcp/index.ts 200.
+- Follow-up commit pushed with same one-off procedure: edf6e87 "feat: real information end-to-end — committee roll-call from stored data + live agent-status telemetry" (76fb9ac..edf6e87).
+- Advised (again): rotate this PAT — it was shared in chat.
+
+Stage Summary:
+- GitHub main = local main = edf6e87; repo public & anonymously accessible; evaluator README + MCP server code live on the remote.
