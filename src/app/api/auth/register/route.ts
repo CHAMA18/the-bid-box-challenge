@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
   const password = typeof body.password === "string" ? body.password : "";
   const organization =
     typeof body.organization === "string" ? body.organization.trim() : "";
+  const inviteCode = typeof body.inviteCode === "string" ? body.inviteCode.trim().toUpperCase() : "";
 
   const errors: Record<string, string> = {};
   if (name.length < 2 || name.length > 80) errors.name = "Enter your full name (2–80 characters).";
@@ -63,8 +64,22 @@ export async function POST(req: NextRequest) {
     data: { name, email, password: passwordHash, organization: organization || null },
   });
 
+  /* If they brought a workspace invite code: claim it (PENDING + unexpired only). */
+  let claimedInvite: { code: string; role: string } | null = null;
+  if (inviteCode) {
+    const invite = await db.workspaceInvite.findUnique({ where: { code: inviteCode } }).catch(() => null);
+    if (invite && invite.status === "PENDING" && Date.now() - invite.createdAt.getTime() <= 14 * 86_400_000) {
+      await db.workspaceInvite.update({
+        where: { id: invite.id },
+        data: { status: "CLAIMED", claimedBy: user.id, claimedByEmail: user.email, claimedAt: new Date() },
+      });
+      claimedInvite = { code: invite.code, role: invite.role };
+    }
+    /* An unknown/expired/claimed code is not an error — registration still works as a standalone account. */
+  }
+
   const { token, expiresAt } = await createSession(user.id, true);
-  const res = NextResponse.json({ user: publicUser(user) }, { status: 201 });
+  const res = NextResponse.json({ user: publicUser(user), invite: claimedInvite }, { status: 201 });
   res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
   return res;
 }

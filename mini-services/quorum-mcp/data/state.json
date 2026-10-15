@@ -1,6 +1,43 @@
 {
   "gates": [
     {
+      "id": "gate_whdinl",
+      "runId": "run_195bd2c7",
+      "tenderId": "KE-MOH-2026-117",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "SAVANNA PHARMA",
+        "value": "KES 588,400,000",
+        "attachments": 6,
+        "findings": [
+          "F-01",
+          "F-02",
+          "F-03"
+        ],
+        "drafts": [
+          "draft_vdpjdr",
+          "draft_i5mtt9"
+        ]
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-15T21:51:04.222Z"
+    },
+    {
+      "id": "gate_cadoa7",
+      "runId": "run_2f2d46ed",
+      "tenderId": "KE-MOH-2026-002",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "bidder",
+        "value": "NOT STATED IN BID",
+        "attachments": 1,
+        "findings": [],
+        "drafts": []
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-15T21:32:10.699Z"
+    },
+    {
       "id": "gate_1rm43t",
       "runId": "run_14e9bbef",
       "tenderId": "KE-NCB-104293",
@@ -105,6 +142,135 @@
     }
   ],
   "runs": [
+    {
+      "id": "run_195bd2c7",
+      "tenderId": "KE-MOH-2026-117",
+      "status": "AWAITING_GATE",
+      "startedAt": "2026-10-15T21:50:25.042Z",
+      "updatedAt": "2026-10-15T21:51:04.235Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KE-MOH-2026-117",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 3 documents read · 2 bids · 0 awards · 0 OCDS records",
+        "▸ extract_requirements — 8 SHALL/must clauses pinned",
+        "▸ flag_finding — 3 findings flagged, each cited",
+        "▸ verify_findings — 3/3 confirmed in their cited document",
+        "▸ draft_redline — open-weights model drafting for R-PRICE-OUTLIER",
+        "▸ draft_redline — open-weights model drafting for R-PRICE-OUTLIER",
+        "▸ 2 redline drafts ready for committee",
+        "⏸ human gate raised (gate_whdinl) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate"
+      ],
+      "requirements": [
+        {
+          "id": "REQ-01",
+          "clause": "SHALL supply only medicines prequalified by the WHO or registered by the PPB",
+          "page": 1
+        },
+        {
+          "id": "REQ-02",
+          "clause": "SHALL deliver each tracer item to the county medical stores within forty-five (45) days of contract signature",
+          "page": 1
+        },
+        {
+          "id": "REQ-03",
+          "clause": "SHALL assign a shelf life of not less than twenty-four (24) months at delivery for every batch",
+          "page": 1
+        },
+        {
+          "id": "REQ-04",
+          "clause": "SHALL transport cold-chain items at 2–8 °C with validated data loggers on every shipment",
+          "page": 1
+        },
+        {
+          "id": "REQ-05",
+          "clause": "SHALL report any recall or quality defect to the buyer within twenty-four (24) hours",
+          "page": 1
+        },
+        {
+          "id": "REQ-06",
+          "clause": "must hold a valid PPB wholesaler licence for the contract period",
+          "page": 1
+        },
+        {
+          "id": "REQ-07",
+          "clause": "must submit a certificate of analysis for every batch offered",
+          "page": 1
+        },
+        {
+          "id": "REQ-08",
+          "clause": "must declare any anti-dumping or subsidy arrangements affecting quoted prices",
+          "page": 1
+        }
+      ],
+      "findings": [
+        {
+          "id": "F-01",
+          "rule": "R-PRICE-OUTLIER",
+          "severity": "HIGH",
+          "item": "Insulin glargine 100IU/ml, pack of 5 pens × 1200 — EQUATORIAL MEDICINES",
+          "evidence": "Unit price KES 41,300 vs peer median KES 6,420 (6.4×) on line item \"insulin glargine 100iu/ml,\".",
+          "citation": "03-bid-equatorial-medicines.md, price schedule"
+        },
+        {
+          "id": "F-02",
+          "rule": "R-PRICE-OUTLIER",
+          "severity": "HIGH",
+          "item": "Cold-chain shipment, validated 2–8 °C × 12 — EQUATORIAL MEDICINES",
+          "evidence": "Unit price KES 8,050,000 vs peer median KES 480,000 (16.8×) on line item \"cold-chain shipment, validated\".",
+          "citation": "03-bid-equatorial-medicines.md, price schedule"
+        },
+        {
+          "id": "F-03",
+          "rule": "R-SPEC-DEVIATION",
+          "severity": "HIGH",
+          "item": "EQUATORIAL MEDICINES",
+          "evidence": "Note: alternative offered for the cold-chain segment — imported passive shippers requested in place of validated reefer trucks (see annex B).",
+          "citation": "03-bid-equatorial-medicines.md, specifications matrix"
+        }
+      ],
+      "drafts": [
+        {
+          "id": "draft_vdpjdr",
+          "findingId": "F-01",
+          "original": "Unit price KES 41,300 vs peer median KES 6,420 (6.4×) on line item \"insulin glargine 100iu/ml,\".",
+          "proposed": "Any bid containing a unit price for insulin glargine 100IU/ml that exceeds three times the peer median shall require submission of a detailed cost justification, including manufacturer invoices and distribution markups, within five (5) working days of notification; failure to comply will result in bid rejection for that line item.",
+          "rationale": "This clause ensures transparency and cost reasonableness by requiring bidders with significant price deviations to substantiate their pricing, thereby protecting public funds and promoting fair competition.",
+          "model": "gpt-4.1-2025-04-14"
+        },
+        {
+          "id": "draft_i5mtt9",
+          "findingId": "F-02",
+          "original": "Unit price KES 8,050,000 vs peer median KES 480,000 (16.8×) on line item \"cold-chain shipment, validated\".",
+          "proposed": "All bids containing line-item prices for 'cold-chain shipment, validated 2–8 °C' that exceed the peer median by more than 200% must be accompanied by a detailed cost breakdown and justification; failure to provide satisfactory documentation within seven (7) calendar days of request will result in bid rejection for that item.",
+          "rationale": "This clause ensures transparency and cost reasonableness by requiring bidders to substantiate significant price deviations, thereby protecting the procuring entity from overpricing and supporting fair competition.",
+          "model": "gpt-4.1-2025-04-14"
+        }
+      ],
+      "gateId": "gate_whdinl"
+    },
+    {
+      "id": "run_2f2d46ed",
+      "tenderId": "KE-MOH-2026-002",
+      "status": "AWAITING_GATE",
+      "startedAt": "2026-10-15T21:32:06.396Z",
+      "updatedAt": "2026-10-15T21:32:10.706Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KE-MOH-2026-002",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 0 documents read · 0 bids · 0 awards · 0 OCDS records",
+        "▸ extract_requirements — 0 SHALL/must clauses pinned",
+        "▸ flag_finding — 0 findings flagged, each cited",
+        "▸ verify_findings — 0/0 confirmed in their cited document",
+        "▸ 0 redline drafts ready for committee",
+        "⏸ human gate raised (gate_cadoa7) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate"
+      ],
+      "requirements": [],
+      "findings": [],
+      "drafts": [],
+      "gateId": "gate_cadoa7"
+    },
     {
       "id": "run_14e9bbef",
       "tenderId": "KE-NCB-104293",
@@ -414,5 +580,5 @@
       "status": "PENDING"
     }
   ],
-  "seq": 62
+  "seq": 75
 }
