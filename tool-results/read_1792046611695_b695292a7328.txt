@@ -1,0 +1,1531 @@
+     1→"use client";
+     2→
+     3→import { Fragment, useEffect, useRef, useState } from "react";
+     4→import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+     5→import {
+     6→  ArrowLeft,
+     7→  ArrowRight,
+     8→  ArrowUpRight,
+     9→  ChevronDown,
+    10→  CircleAlert,
+    11→  CircleCheck,
+    12→  Copy,
+    13→  Download,
+    14→  Gavel,
+    15→  Gauge,
+    16→  LogOut,
+    17→  Menu,
+    18→  Plus,
+    19→  Radio,
+    20→  RefreshCw,
+    21→  Search,
+    22→  ShieldCheck,
+    23→  Stamp,
+    24→  Terminal,
+    25→  X,
+    26→} from "lucide-react";
+    27→import { QuorumLogo } from "@/components/quorum/logo";
+    28→import type { AuthUser } from "@/lib/auth-types";
+    29→import { cn } from "@/lib/utils";
+    30→
+    31→/**
+    32→ * Quorum — Mission Control.
+    33→ * The signed-in workspace: a living picture of every run, every finding
+    34→ * and every gate waiting on a named human. The agent prepares the file;
+    35→ * the committee awards the tender — so the gavel sits in the UI, not in
+    36→ * the pipeline.
+    37→ */
+    38→
+    39→const EASE = [0.22, 1, 0.36, 1] as const;
+    40→
+    41→/* ── Data model ──────────────────────────────────────────────────────────── */
+    42→
+    43→type RunStatus = "running" | "queued" | "gate" | "complete";
+    44→
+    45→type McRun = {
+    46→  id: string;
+    47→  title: string;
+    48→  buyer: string;
+    49→  bids: number | null;
+    50→  findings: number;
+    51→  citations: number;
+    52→  unsourced: number;
+    53→  status: RunStatus;
+    54→  startedAt: string;
+    55→  duration: string;
+    56→};
+    57→
+    58→type GateItem = {
+    59→  id: string;
+    60→  tender: string;
+    61→  title: string;
+    62→  supplier: string;
+    63→  value: string;
+    64→  flags: number;
+    65→  ago: string;
+    66→};
+    67→
+    68→type LedgerRow = { tender: string; action: "AWARDED" | "RETURNED"; by: string; at: string };
+    69→
+    70→const SEED_RUNS: McRun[] = [
+    71→  { id: "KE-NCB-104293", title: "Supply & delivery of MRI scanners", buyer: "Ministry of Health · Kenya", bids: 4, findings: 6, citations: 6, unsourced: 0, status: "gate", startedAt: "08:12", duration: "20 MIN" },
+    72→  { id: "KE-NCB-104318", title: "County vaccine cold-chain — phase 2", buyer: "Public Health Institute · Kenya", bids: 7, findings: 0, citations: 0, unsourced: 0, status: "running", startedAt: "JUST NOW", duration: "LIVE" },
+    73→  { id: "ZM-PPA-8841", title: "Clinic refurbishment framework — Lusaka", buyer: "Provincial Health · Zambia", bids: 11, findings: 4, citations: 4, unsourced: 0, status: "gate", startedAt: "YESTERDAY", duration: "23 MIN" },
+    74→  { id: "RW-RPPA-0552", title: "Essential medicines framework — lot 2", buyer: "Medical Stores · Rwanda", bids: 9, findings: 5, citations: 5, unsourced: 0, status: "complete", startedAt: "YESTERDAY", duration: "24 MIN" },
+    75→  { id: "KE-NCB-104277", title: "Oxygen plant consumables — 6 counties", buyer: "Health Infrastructure · Kenya", bids: 6, findings: 6, citations: 6, unsourced: 0, status: "complete", startedAt: "MON", duration: "18 MIN" },
+    76→  { id: "ZM-PPA-8830", title: "Clinic laboratory reagents", buyer: "Health Procurement · Zambia", bids: 8, findings: 3, citations: 3, unsourced: 0, status: "complete", startedAt: "MON", duration: "15 MIN" },
+    77→  { id: "GH-PPA-3107", title: "District pharmaceuticals frame", buyer: "Health Commodities · Ghana", bids: null, findings: 0, citations: 0, unsourced: 0, status: "queued", startedAt: "QUEUED", duration: "—" },
+    78→];
+    79→
+    80→const SEED_GATES: GateItem[] = [
+    81→  { id: "g-1", tender: "KE-NCB-104293", title: "Supply & delivery of MRI scanners", supplier: "MedEquip East Africa Ltd", value: "KES 412.6M", flags: 3, ago: "18 MIN AGO" },
+    82→  { id: "g-2", tender: "ZM-PPA-8841", title: "Clinic refurbishment framework — Lusaka", supplier: "Copperbelt Joinery Co-op", value: "ZMW 38.4M", flags: 1, ago: "2 H AGO" },
+    83→];
+    84→
+    85→const SEED_LEDGER: LedgerRow[] = [
+    86→  { tender: "RW-RPPA-0552", action: "AWARDED", by: "C. Mwangi", at: "YESTERDAY" },
+    87→  { tender: "KE-NCB-104277", action: "RETURNED", by: "THE COMMITTEE", at: "MON" },
+    88→];
+    89→
+    90→const FINDING_NOTES: Record<string, string[]> = {
+    91→  "KE-NCB-104293": ["Bank statement anomaly — p.114", "Bid bond expires before award", "Registry match — related bidders"],
+    92→  "ZM-PPA-8841": ["Unit price 38% above framework median"],
+    93→  "RW-RPPA-0552": ["Missing tax clearance — bid 3", "Arithmetic variance — BOQ p.22", "Subcontractor undisclosed"],
+    94→  "KE-NCB-104277": ["Two bids share one IP address", "Deposit source undocumented", "Delivery window infeasible"],
+    95→  "ZM-PPA-8830": ["Quotation date mismatch"],
+    96→};
+    97→
+    98→const PORTALS = [
+    99→  { name: "OCDS EXPLORER", at: "2 MIN AGO", ok: true },
+   100→  { name: "PPA · KENYA", at: "6 MIN AGO", ok: true },
+   101→  { name: "PRAZ · ZIMBABWE", at: "31 MIN AGO", ok: true },
+   102→  { name: "GGPPBD · GHANA", at: "4 H AGO", ok: false },
+   103→];
+   104→
+   105→const SPARK_A = [40, 62, 34, 78, 52, 70, 44, 88, 58, 74, 48, 84];
+   106→const SPARK_B = [55, 40, 70, 46, 82, 60, 38, 74, 50, 66, 42, 90];
+   107→
+   108→const SECTION_NAV = [
+   109→  { id: "mc-overview", label: "OVERVIEW", icon: Gauge },
+   110→  { id: "mc-runs", label: "RUN REGISTER", icon: Terminal },
+   111→  { id: "mc-gates", label: "HUMAN GATES", icon: Stamp },
+   112→  { id: "mc-activity", label: "AGENT FEED", icon: Radio },
+   113→] as const;
+   114→
+   115→type SectionId = (typeof SECTION_NAV)[number]["id"];
+   116→
+   117→function firstNameOf(user: AuthUser | null): string {
+   118→  return user?.name.trim().split(/\s+/)[0] ?? "Officer";
+   119→}
+   120→
+   121→function initialsOf(name: string): string {
+   122→  const parts = name.trim().split(/\s+/).slice(0, 2);
+   123→  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "Q";
+   124→}
+   125→
+   126→function clockNow(d: Date): string {
+   127→  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+   128→}
+   129→
+   130→function dateLine(d: Date): string {
+   131→  return d
+   132→    .toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "short", year: "numeric" })
+   133→    .toUpperCase();
+   134→}
+   135→
+   136→/* ── Motion primitives ───────────────────────────────────────────────────── */
+   137→
+   138→function useCountUp(target: number, duration = 1100): number {
+   139→  const reduce = useReducedMotion();
+   140→  const [val, setVal] = useState(0);
+   141→  useEffect(() => {
+   142→    if (reduce) {
+   143→      const id = requestAnimationFrame(() => setVal(target));
+   144→      return () => cancelAnimationFrame(id);
+   145→    }
+   146→    let raf = 0;
+   147→    const t0 = performance.now();
+   148→    const tick = (t: number) => {
+   149→      const p = Math.min(1, (t - t0) / duration);
+   150→      setVal(Math.round(target * (1 - Math.pow(1 - p, 3))));
+   151→      if (p < 1) raf = requestAnimationFrame(tick);
+   152→    };
+   153→    raf = requestAnimationFrame(tick);
+   154→    return () => cancelAnimationFrame(raf);
+   155→  }, [target, duration, reduce]);
+   156→  return val;
+   157→}
+   158→
+   159→function LiveClock() {
+   160→  const [now, setNow] = useState<Date | null>(null);
+   161→  useEffect(() => {
+   162→    const first = requestAnimationFrame(() => setNow(new Date()));
+   163→    const id = setInterval(() => setNow(new Date()), 1000);
+   164→    return () => {
+   165→      cancelAnimationFrame(first);
+   166→      clearInterval(id);
+   167→    };
+   168→  }, []);
+   169→  return (
+   170→    <span className="tabular" aria-label={now ? `Local time ${clockNow(now)}` : "Local time"}>
+   171→      {now ? clockNow(now) : "--:--:--"}
+   172→    </span>
+   173→  );
+   174→}
+   175→
+   176→/* ── Agent feed terminal ─────────────────────────────────────────────────── */
+   177→
+   178→type FeedKind = "cmd" | "step" | "ok" | "gate";
+   179→const FEED_SCRIPT: { text: string; kind: FeedKind }[] = [
+   180→  { text: "quorum-agent run --tender KE-NCB-104318 --format ocds", kind: "cmd" },
+   181→  { text: "▸ ingesting 96 pages · 7 bids parsed", kind: "step" },
+   182→  { text: "▸ document checklist — 12/16 present", kind: "step" },
+   183→  { text: "▸ cross-checking the supplier registry", kind: "step" },
+   184→  { text: "▸ flagging anomaly — bank statement p.41", kind: "step" },
+   185→  { text: "✓ findings ready — every claim cited", kind: "ok" },
+   186→  { text: "⏸ human gate — queued for the committee", kind: "gate" },
+   187→];
+   188→
+   189→function AgentFeed() {
+   190→  const [step, setStep] = useState(0);
+   191→  const done = step >= FEED_SCRIPT.length;
+   192→
+   193→  useEffect(() => {
+   194→    if (step >= FEED_SCRIPT.length) {
+   195→      const t = setTimeout(() => setStep(0), 5200);
+   196→      return () => clearTimeout(t);
+   197→    }
+   198→    const t = setTimeout(() => setStep((s) => s + 1), step === 0 ? 800 : 680);
+   199→    return () => clearTimeout(t);
+   200→  }, [step]);
+   201→
+   202→  return (
+   203→    <div className="overflow-hidden rounded-2xl border border-white/10 bg-night-2 shadow-[0_28px_70px_rgba(11,12,15,0.35)]">
+   204→      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+   205→        <div className="flex items-center gap-1.5" aria-hidden="true">
+   206→          <span className="h-2.5 w-2.5 rounded-full bg-brand-600/90" />
+   207→          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
+   208→          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
+   209→        </div>
+   210→        <p className="flex items-center gap-2 font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
+   211→          <span className="relative flex h-1.5 w-1.5">
+   212→            <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+   213→            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+   214→          </span>
+   215→          QUORUM-AGENT · LIVE
+   216→        </p>
+   217→      </div>
+   218→      <div
+   219→        className="min-h-[190px] px-4 py-4 font-code text-[10.5px] leading-[2] sm:text-[11.5px]"
+   220→        role="img"
+   221→        aria-label="Live agent feed: the current run ingesting bids, checking documents, citing findings and queueing a human gate"
+   222→      >
+   223→        {FEED_SCRIPT.slice(0, step).map((line) => (
+   224→          <p
+   225→            key={line.text}
+   226→            className={cn(
+   227→              line.kind === "cmd" && "text-ink-200",
+   228→              line.kind === "step" && "text-ink-400",
+   229→              line.kind === "ok" && "font-semibold text-white",
+   230→              line.kind === "gate" && "text-brand-300"
+   231→            )}
+   232→          >
+   233→            {line.kind === "cmd" && <span className="mr-2 text-brand-400">$</span>}
+   234→            {line.text}
+   235→          </p>
+   236→        ))}
+   237→        {!done && <span className="mt-1 inline-block h-3.5 w-[7px] animate-pulse bg-brand-500" aria-hidden="true" />}
+   238→      </div>
+   239→    </div>
+   240→  );
+   241→}
+   242→
+   243→/* ── Small pieces ────────────────────────────────────────────────────────── */
+   244→
+   245→function StatusChip({ status }: { status: RunStatus }) {
+   246→  if (status === "running")
+   247→    return (
+   248→      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em] text-brand-700">
+   249→        <span className="relative flex h-1.5 w-1.5">
+   250→          <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+   251→          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+   252→        </span>
+   253→        LIVE
+   254→      </span>
+   255→    );
+   256→  if (status === "queued")
+   257→    return (
+   258→      <span className="inline-flex items-center rounded-full border border-ink-200 px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em] text-ink-500">
+   259→        QUEUED
+   260→      </span>
+   261→    );
+   262→  if (status === "gate")
+   263→    return (
+   264→      <span className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em] text-brand-800">
+   265→        <Gavel className="h-2.5 w-2.5" aria-hidden="true" />
+   266→        HUMAN GATE
+   267→      </span>
+   268→    );
+   269→  return (
+   270→    <span className="inline-flex items-center gap-1 rounded-full bg-ink-950 px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em] text-white">
+   271→      <CircleCheck className="h-2.5 w-2.5" aria-hidden="true" />
+   272→      COMPLETE
+   273→    </span>
+   274→  );
+   275→}
+   276→
+   277→function Spark({ data, tone = "ink" }: { data: number[]; tone?: "ink" | "brand" }) {
+   278→  return (
+   279→    <div className="flex h-8 items-end gap-[3px]" aria-hidden="true">
+   280→      {data.map((h, i) => (
+   281→        <motion.span
+   282→          key={i}
+   283→          initial={{ height: 2 }}
+   284→          animate={{ height: `${h}%` }}
+   285→          transition={{ duration: 0.7, delay: 0.5 + i * 0.045, ease: EASE }}
+   286→          className={cn("w-[4px] rounded-full", tone === "ink" ? "bg-ink-200" : "bg-brand-200")}
+   287→        />
+   288→      ))}
+   289→    </div>
+   290→  );
+   291→}
+   292→
+   293→function StatCard({
+   294→  label,
+   295→  value,
+   296→  suffix,
+   297→  sub,
+   298→  spark,
+   299→  featured,
+   300→  pulse,
+   301→  delay,
+   302→}: {
+   303→  label: string;
+   304→  value: number;
+   305→  suffix?: string;
+   306→  sub: string;
+   307→  spark: number[];
+   308→  featured?: boolean;
+   309→  pulse?: boolean;
+   310→  delay: number;
+   311→}) {
+   312→  const n = useCountUp(value);
+   313→  return (
+   314→    <motion.div
+   315→      initial={{ opacity: 0, y: 22 }}
+   316→      animate={{ opacity: 1, y: 0 }}
+   317→      transition={{ duration: 0.6, delay, ease: EASE }}
+   318→      className={cn(
+   319→        "relative overflow-hidden rounded-2xl border p-5",
+   320→        featured
+   321→          ? "border-ink-950 bg-night text-white shadow-[0_22px_55px_rgba(11,12,15,0.35)]"
+   322→          : "border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+   323→      )}
+   324→    >
+   325→      {featured && <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />}
+   326→      <div className="relative">
+   327→        <div className="flex items-center justify-between gap-2">
+   328→          <p className={cn("font-code text-[9px] font-semibold tracking-[0.22em]", featured ? "text-ink-300" : "text-ink-400")}>
+   329→            {label}
+   330→          </p>
+   331→          {pulse && (
+   332→            <span className="relative flex h-1.5 w-1.5" aria-hidden="true">
+   333→              <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" />
+   334→              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-500" />
+   335→            </span>
+   336→          )}
+   337→        </div>
+   338→        <p className="mt-3 flex items-baseline gap-1 font-display text-[40px] font-black leading-none tracking-[-0.02em] tabular">
+   339→          {n}
+   340→          {suffix && <span className={cn("text-[22px]", featured ? "text-brand-400" : "text-brand-600")}>{suffix}</span>}
+   341→        </p>
+   342→        <div className="mt-3 flex items-end justify-between gap-3">
+   343→          <p className={cn("font-code text-[8.5px] leading-[1.7] tracking-[0.14em]", featured ? "text-ink-400" : "text-ink-400")}>
+   344→            {sub}
+   345→          </p>
+   346→          <Spark data={spark} tone={featured ? "brand" : "ink"} />
+   347→        </div>
+   348→      </div>
+   349→    </motion.div>
+   350→  );
+   351→}
+   352→
+   353→/* ── New-run modal ───────────────────────────────────────────────────────── */
+   354→
+   355→const SAMPLE_TITLES = [
+   356→  "Supply & installation of laboratory equipment",
+   357→  "Essential health commodities framework — lot 3",
+   358→  "Electronic medical records rollout — phase 2",
+   359→];
+   360→
+   361→function NewRunModal({
+   362→  open,
+   363→  onClose,
+   364→  onLaunch,
+   365→}: {
+   366→  open: boolean;
+   367→  onClose: () => void;
+   368→  onLaunch: (ref: string, title: string, format: string) => void;
+   369→}) {
+   370→  const [ref, setRef] = useState("KE-NCB-104341");
+   371→  const [title, setTitle] = useState(SAMPLE_TITLES[0]);
+   372→  const [format, setFormat] = useState("OCDS");
+   373→  const inputRef = useRef<HTMLInputElement>(null);
+   374→
+   375→  useEffect(() => {
+   376→    if (!open) return;
+   377→    const id = requestAnimationFrame(() => inputRef.current?.focus());
+   378→    const onKey = (e: KeyboardEvent) => {
+   379→      if (e.key === "Escape") onClose();
+   380→    };
+   381→    window.addEventListener("keydown", onKey);
+   382→    return () => {
+   383→      cancelAnimationFrame(id);
+   384→      window.removeEventListener("keydown", onKey);
+   385→    };
+   386→  }, [open, onClose]);
+   387→
+   388→  return (
+   389→    <AnimatePresence>
+   390→      {open && (
+   391→        <motion.div
+   392→          initial={{ opacity: 0 }}
+   393→          animate={{ opacity: 1 }}
+   394→          exit={{ opacity: 0 }}
+   395→          transition={{ duration: 0.22 }}
+   396→          className="fixed inset-0 z-[80] grid place-items-center bg-night/70 p-4 backdrop-blur-sm"
+   397→          onClick={onClose}
+   398→        >
+   399→          <motion.div
+   400→            role="dialog"
+   401→            aria-modal="true"
+   402→            aria-labelledby="new-run-title"
+   403→            initial={{ opacity: 0, y: 26, scale: 0.97 }}
+   404→            animate={{ opacity: 1, y: 0, scale: 1 }}
+   405→            exit={{ opacity: 0, y: 14, scale: 0.98 }}
+   406→            transition={{ duration: 0.32, ease: EASE }}
+   407→            className="w-full max-w-md rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_40px_100px_rgba(11,12,15,0.45)] sm:p-7"
+   408→            onClick={(e) => e.stopPropagation()}
+   409→          >
+   410→            <div className="flex items-start justify-between gap-4">
+   411→              <div>
+   412→                <p className="flex items-center gap-2.5 font-code text-[9px] font-semibold uppercase tracking-[0.28em] text-ink-500">
+   413→                  <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
+   414→                  FIG. 05 — Launch a run
+   415→                </p>
+   416→                <h2 id="new-run-title" className="mt-3 font-display text-[26px] font-black tracking-[-0.02em] text-ink-950">
+   417→                  New run<span className="text-brand-600">.</span>
+   418→                </h2>
+   419→              </div>
+   420→              <button
+   421→                type="button"
+   422→                onClick={onClose}
+   423→                aria-label="Close"
+   424→                className="grid h-9 w-9 place-items-center rounded-lg border border-ink-200 text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-900"
+   425→              >
+   426→                <X className="h-4 w-4" aria-hidden="true" />
+   427→              </button>
+   428→            </div>
+   429→
+   430→            <form
+   431→              className="mt-6 space-y-4"
+   432→              onSubmit={(e) => {
+   433→                e.preventDefault();
+   434→                onLaunch(ref.trim() || "KE-NCB-104341", title, format);
+   435→              }}
+   436→            >
+   437→              <div>
+   438→                <label htmlFor="nr-ref" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+   439→                  TENDER REFERENCE
+   440→                </label>
+   441→                <input
+   442→                  id="nr-ref"
+   443→                  ref={inputRef}
+   444→                  type="text"
+   445→                  value={ref}
+   446→                  onChange={(e) => setRef(e.target.value)}
+   447→                  className="h-11 w-full rounded-xl border border-ink-200 bg-white px-4 font-code text-[13px] tracking-[0.04em] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+   448→                />
+   449→              </div>
+   450→              <div>
+   451→                <label htmlFor="nr-title" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+   452→                  TENDER TITLE
+   453→                </label>
+   454→                <select
+   455→                  id="nr-title"
+   456→                  value={title}
+   457→                  onChange={(e) => setTitle(e.target.value)}
+   458→                  className="h-11 w-full appearance-none rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+   459→                >
+   460→                  {SAMPLE_TITLES.map((t) => (
+   461→                    <option key={t} value={t}>
+   462→                      {t}
+   463→                    </option>
+   464→                  ))}
+   465→                </select>
+   466→              </div>
+   467→              <div>
+   468→                <p className="mb-1.5 font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">SOURCE FORMAT</p>
+   469→                <div className="grid grid-cols-3 gap-2" role="group" aria-label="Source format">
+   470→                  {["OCDS", "PDF PACK", "EMAIL BAG"].map((f) => (
+   471→                    <button
+   472→                      key={f}
+   473→                      type="button"
+   474→                      onClick={() => setFormat(f)}
+   475→                      aria-pressed={format === f}
+   476→                      className={cn(
+   477→                        "h-10 rounded-xl border font-code text-[9.5px] font-bold tracking-[0.14em] transition-all",
+   478→                        format === f
+   479→                          ? "border-ink-950 bg-ink-950 text-white"
+   480→                          : "border-ink-200 bg-white text-ink-500 hover:border-ink-400"
+   481→                      )}
+   482→                    >
+   483→                      {f}
+   484→                    </button>
+   485→                  ))}
+   486→                </div>
+   487→              </div>
+   488→              <button
+   489→                type="submit"
+   490→                className="group inline-flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.3)] transition-all hover:bg-brand-700"
+   491→              >
+   492→                Launch run
+   493→                <ArrowRight className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+   494→              </button>
+   495→              <p className="text-center font-code text-[8px] tracking-[0.2em] text-ink-400">
+   496→                THE AGENT PREPARES THE FILE — THE COMMITTEE STILL AWARDS
+   497→              </p>
+   498→            </form>
+   499→          </motion.div>
+   500→        </motion.div>
+   501→      )}
+   502→    </AnimatePresence>
+   503→  );
+   504→}
+   505→
+   506→/* ── Sidebar (shared by desktop rail + mobile drawer) ────────────────────── */
+   507→
+   508→function SidebarContent({
+   509→  active,
+   510→  user,
+   511→  runsCount,
+   512→  gatesCount,
+   513→  onNavigate,
+   514→  onNewRun,
+   515→  onSignOut,
+   516→  onExit,
+   517→}: {
+   518→  active: SectionId;
+   519→  user: AuthUser | null;
+   520→  runsCount: number;
+   521→  gatesCount: number;
+   522→  onNavigate: (id: SectionId) => void;
+   523→  onNewRun: () => void;
+   524→  onSignOut: () => void;
+   525→  onExit: () => void;
+   526→}) {
+   527→  return (
+   528→    <div className="flex h-full flex-col">
+   529→      <div className="px-6 pb-6 pt-7">
+   530→        <QuorumLogo variant="light" />
+   531→        <p className="mt-3 font-code text-[8.5px] font-semibold tracking-[0.3em] text-ink-400">
+   532→          MISSION CONTROL · v0.9
+   533→        </p>
+   534→      </div>
+   535→
+   536→      <nav aria-label="Mission control sections" className="flex-1 px-3">
+   537→        <p className="px-3 pb-2 font-code text-[8px] font-semibold tracking-[0.3em] text-ink-600">COMMAND</p>
+   538→        <ul className="space-y-1">
+   539→          {SECTION_NAV.map((item) => {
+   540→            const Icon = item.icon;
+   541→            const isActive = active === item.id;
+   542→            const badge = item.id === "mc-gates" ? gatesCount : item.id === "mc-runs" ? runsCount : null;
+   543→            return (
+   544→              <li key={item.id}>
+   545→                <button
+   546→                  type="button"
+   547→                  onClick={() => onNavigate(item.id)}
+   548→                  aria-current={isActive ? "true" : undefined}
+   549→                  className={cn(
+   550→                    "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+   551→                    isActive ? "bg-white/10 text-white" : "text-ink-400 hover:bg-white/5 hover:text-ink-100"
+   552→                  )}
+   553→                >
+   554→                  {isActive && (
+   555→                    <motion.span
+   556→                      layoutId="mc-nav-rail"
+   557→                      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-brand-500"
+   558→                      aria-hidden="true"
+   559→                    />
+   560→                  )}
+   561→                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+   562→                  <span className="flex-1 font-code text-[10px] font-semibold tracking-[0.18em]">{item.label}</span>
+   563→                  {badge !== null && badge > 0 && (
+   564→                    <span
+   565→                      className={cn(
+   566→                        "grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-code text-[9px] font-bold",
+   567→                        item.id === "mc-gates" ? "bg-brand-600 text-white" : "bg-white/10 text-ink-200"
+   568→                      )}
+   569→                    >
+   570→                      {badge}
+   571→                    </span>
+   572→                  )}
+   573→                </button>
+   574→              </li>
+   575→            );
+   576→          })}
+   577→        </ul>
+   578→
+   579→        <button
+   580→          type="button"
+   581→          onClick={onNewRun}
+   582→          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-3 text-[13px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700"
+   583→        >
+   584→          <Plus className="h-4 w-4" aria-hidden="true" />
+   585→          New run
+   586→        </button>
+   587→      </nav>
+   588→
+   589→      <div className="px-3 pb-5 pt-4">
+   590→        <div className="rounded-xl border border-white/10 bg-night-2 px-3.5 py-3">
+   591→          <p className="flex items-center gap-2 font-code text-[9px] font-semibold tracking-[0.18em] text-ink-200">
+   592→            <span className="relative flex h-1.5 w-1.5">
+   593→              <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+   594→              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-500" aria-hidden="true" />
+   595→            </span>
+   596→            AGENT · ONLINE
+   597→          </p>
+   598→          <p className="mt-1.5 font-code text-[7.5px] leading-[1.8] tracking-[0.16em] text-ink-500">
+   599→            QWEN3-32B · MCP · OPEN WEIGHTS
+   600→            <br />
+   601→            EVERY CLAIM CITED · 1 HUMAN GATE
+   602→          </p>
+   603→        </div>
+   604→
+   605→        <div className="mt-3 flex items-center gap-3 rounded-xl px-2 py-2">
+   606→          <span
+   607→            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 font-code text-[10px] font-bold text-white"
+   608→            aria-hidden="true"
+   609→          >
+   610→            {initialsOf(user?.name ?? "Quorum")}
+   611→          </span>
+   612→          <span className="min-w-0 flex-1">
+   613→            <span className="block truncate text-[13px] font-semibold text-white">{user?.name ?? "Guest officer"}</span>
+   614→            <span className="block truncate font-code text-[8px] tracking-[0.14em] text-ink-500">
+   615→              {(user?.email ?? "demo@quorum.africa").toUpperCase()}
+   616→            </span>
+   617→          </span>
+   618→          <button
+   619→            type="button"
+   620→            onClick={onSignOut}
+   621→            aria-label="Sign out"
+   622→            title="Sign out"
+   623→            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-white/10 hover:text-white"
+   624→          >
+   625→            <LogOut className="h-4 w-4" aria-hidden="true" />
+   626→          </button>
+   627→        </div>
+   628→
+   629→        <button
+   630→          type="button"
+   631→          onClick={onExit}
+   632→          className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 font-code text-[8.5px] font-semibold tracking-[0.22em] text-ink-500 transition-colors hover:text-white"
+   633→        >
+   634→          <ArrowLeft className="h-3 w-3" aria-hidden="true" />
+   635→          BACK TO SITE
+   636→        </button>
+   637→      </div>
+   638→    </div>
+   639→  );
+   640→}
+   641→
+   642→/* ── Run register table ──────────────────────────────────────────────────── */
+   643→
+   644→type RunFilter = "all" | "live" | "gates" | "done";
+   645→
+   646→const RUN_FILTERS: { id: RunFilter; label: string }[] = [
+   647→  { id: "all", label: "ALL" },
+   648→  { id: "live", label: "LIVE" },
+   649→  { id: "gates", label: "GATES" },
+   650→  { id: "done", label: "DONE" },
+   651→];
+   652→
+   653→function RunRegister({
+   654→  runs,
+   655→  query,
+   656→  onQuery,
+   657→  filter,
+   658→  onFilter,
+   659→  onToast,
+   660→}: {
+   661→  runs: McRun[];
+   662→  query: string;
+   663→  onQuery: (v: string) => void;
+   664→  filter: RunFilter;
+   665→  onFilter: (f: RunFilter) => void;
+   666→  onToast: (m: string) => void;
+   667→}) {
+   668→  const [expanded, setExpanded] = useState<string | null>(null);
+   669→
+   670→  const filtered = runs.filter((r) => {
+   671→    const q = query.trim().toLowerCase();
+   672→    const matches =
+   673→      q.length === 0 ||
+   674→      r.id.toLowerCase().includes(q) ||
+   675→      r.title.toLowerCase().includes(q) ||
+   676→      r.buyer.toLowerCase().includes(q);
+   677→    const inFilter =
+   678→      filter === "all" ||
+   679→      (filter === "live" && (r.status === "running" || r.status === "queued")) ||
+   680→      (filter === "gates" && r.status === "gate") ||
+   681→      (filter === "done" && r.status === "complete");
+   682→    return matches && inFilter;
+   683→  });
+   684→
+   685→  return (
+   686→    <section id="mc-runs" aria-labelledby="mc-runs-h" className="scroll-mt-24">
+   687→      <motion.div
+   688→        initial={{ opacity: 0, y: 24 }}
+   689→        animate={{ opacity: 1, y: 0 }}
+   690→        transition={{ duration: 0.6, delay: 0.15, ease: EASE }}
+   691→        className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+   692→      >
+   693→        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
+   694→          <div>
+   695→            <h2 id="mc-runs-h" className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">
+   696→              Run register
+   697→            </h2>
+   698→            <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
+   699→              LAST 7 DAYS · {filtered.length} OF {runs.length} RUNS
+   700→            </p>
+   701→          </div>
+   702→          <div className="flex items-center gap-1.5" role="group" aria-label="Filter runs">
+   703→            {RUN_FILTERS.map((f) => (
+   704→              <button
+   705→                key={f.id}
+   706→                type="button"
+   707→                onClick={() => onFilter(f.id)}
+   708→                aria-pressed={filter === f.id}
+   709→                className={cn(
+   710→                  "h-7 rounded-full border px-3 font-code text-[8.5px] font-bold tracking-[0.14em] transition-all",
+   711→                  filter === f.id
+   712→                    ? "border-ink-950 bg-ink-950 text-white"
+   713→                    : "border-ink-200 bg-white text-ink-500 hover:border-ink-400"
+   714→                )}
+   715→              >
+   716→                {f.label}
+   717→              </button>
+   718→            ))}
+   719→          </div>
+   720→        </header>
+   721→
+   722→        {/* Table */}
+   723→        <div className="overflow-x-auto">
+   724→          <table className="w-full min-w-[660px] border-collapse text-left">
+   725→            <caption className="sr-only">Quorum run register — recent agent runs with status, findings and citations</caption>
+   726→            <thead>
+   727→              <tr className="border-b border-ink-100 bg-paper/60">
+   728→                {["RUN", "BIDS", "FINDINGS", "CITED", "STATUS", "DURATION", ""].map((h, i) => (
+   729→                  <th
+   730→                    key={i}
+   731→                    scope="col"
+   732→                    className={cn(
+   733→                      "px-4 py-2.5 font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400",
+   734→                      i === 0 && "pl-5",
+   735→                      i === 6 && "w-8"
+   736→                    )}
+   737→                  >
+   738→                    {h}
+   739→                  </th>
+   740→                ))}
+   741→              </tr>
+   742→            </thead>
+   743→            <tbody>
+   744→              {filtered.map((run) => {
+   745→                const isOpen = expanded === run.id;
+   746→                const notes = FINDING_NOTES[run.id] ?? [];
+   747→                return (
+   748→                  <Fragment key={run.id}>
+   749→                    <tr
+   750→                      className={cn(
+   751→                        "cursor-pointer border-b border-ink-50 transition-colors hover:bg-paper",
+   752→                        isOpen && "bg-paper"
+   753→                      )}
+   754→                      tabIndex={0}
+   755→                      onClick={() => setExpanded(isOpen ? null : run.id)}
+   756→                      onKeyDown={(e) => {
+   757→                        if (e.key === "Enter" || e.key === " ") {
+   758→                          e.preventDefault();
+   759→                          setExpanded(isOpen ? null : run.id);
+   760→                        }
+   761→                      }}
+   762→                      aria-expanded={isOpen}
+   763→                      aria-label={`${run.id} — ${run.title}. Toggle run details.`}
+   764→                    >
+   765→                      <td className="py-3.5 pl-5 pr-4">
+   766→                        <p className="font-code text-[10px] font-bold tracking-[0.08em] text-ink-950">{run.id}</p>
+   767→                        <p className="mt-0.5 max-w-[240px] truncate text-[12.5px] font-medium text-ink-600">{run.title}</p>
+   768→                      </td>
+   769→                      <td className="px-4 py-3.5 text-[13px] font-semibold text-ink-800 tabular">
+   770→                        {run.bids ?? "—"}
+   771→                      </td>
+   772→                      <td className="px-4 py-3.5">
+   773→                        {run.findings > 0 ? (
+   774→                          <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-brand-700 tabular">
+   775→                            <CircleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+   776→                            {run.findings}
+   777→                          </span>
+   778→                        ) : (
+   779→                          <span className="text-[13px] text-ink-300 tabular">0</span>
+   780→                        )}
+   781→                      </td>
+   782→                      <td className="px-4 py-3.5 text-[13px] font-semibold text-ink-800 tabular">
+   783→                        {run.status === "running" || run.status === "queued" ? "—" : `${run.citations}/${run.findings}`}
+   784→                      </td>
+   785→                      <td className="px-4 py-3.5">
+   786→                        <StatusChip status={run.status} />
+   787→                      </td>
+   788→                      <td className="px-4 py-3.5 font-code text-[9px] tracking-[0.12em] text-ink-500">{run.duration}</td>
+   789→                      <td className="pr-4">
+   790→                        <ChevronDown
+   791→                          className={cn(
+   792→                            "h-4 w-4 text-ink-300 transition-transform duration-300",
+   793→                            isOpen && "rotate-180 text-ink-600"
+   794→                          )}
+   795→                          aria-hidden="true"
+   796→                        />
+   797→                      </td>
+   798→                    </tr>
+   799→                    {isOpen && (
+   800→                      <tr className="border-b border-ink-50 bg-paper">
+   801→                        <td colSpan={7} className="px-5 py-4">
+   802→                          <div className="rounded-xl border border-ink-100 bg-white p-4">
+   803→                            {run.status === "running" || run.status === "queued" ? (
+   804→                              <p className="text-[13px] leading-relaxed text-ink-600">
+   805→                                <span className="font-semibold text-ink-900">Run in progress.</span> Findings stream in at
+   806→                                completion — every claim will carry a page citation before it reaches this table.
+   807→                              </p>
+   808→                            ) : (
+   809→                              <>
+   810→                                <p className="font-code text-[8.5px] font-semibold tracking-[0.2em] text-ink-400">
+   811→                                  TOP FINDINGS · {run.findings} FLAGGED · {run.citations} CITATIONS · {run.unsourced} UNSOURCED
+   812→                                </p>
+   813→                                <ul className="mt-2.5 flex flex-wrap gap-1.5">
+   814→                                  {notes.map((note) => (
+   815→                                    <li
+   816→                                      key={note}
+   817→                                      className="rounded-md bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-medium text-brand-800"
+   818→                                    >
+   819→                                      {note}
+   820→                                    </li>
+   821→                                  ))}
+   822→                                  {run.findings > notes.length && (
+   823→                                    <li className="rounded-md bg-ink-50 px-2.5 py-1.5 font-code text-[10px] font-semibold tracking-[0.1em] text-ink-500">
+   824→                                      +{run.findings - notes.length} MORE IN THE SOURCED REPORT
+   825→                                    </li>
+   826→                                  )}
+   827→                                </ul>
+   828→                              </>
+   829→                            )}
+   830→                            <div className="mt-3.5 flex flex-wrap items-center gap-2">
+   831→                              <button
+   832→                                type="button"
+   833→                                onClick={(e) => {
+   834→                                  e.stopPropagation();
+   835→                                  onToast(
+   836→                                    `SOURCED REPORT — ${run.id} · ${run.findings} FINDINGS · ${run.citations} CITATIONS · EXPORT QUEUED`
+   837→                                  );
+   838→                                }}
+   839→                                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-950 px-3 font-code text-[9px] font-bold tracking-[0.14em] text-white transition-colors hover:bg-brand-600"
+   840→                              >
+   841→                                <Download className="h-3 w-3" aria-hidden="true" />
+   842→                                SOURCED REPORT
+   843→                              </button>
+   844→                              <button
+   845→                                type="button"
+   846→                                onClick={(e) => {
+   847→                                  e.stopPropagation();
+   848→                                  const log = `quorum audit — ${run.id} — ${run.findings} findings · ${run.citations} citations · 0 unsourced · sha256 4f2a…9c31`;
+   849→                                  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(log).catch(() => undefined);
+   850→                                  onToast("AUDIT TRAIL COPIED TO CLIPBOARD");
+   851→                                }}
+   852→                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 px-3 font-code text-[9px] font-bold tracking-[0.14em] text-ink-600 transition-colors hover:border-ink-400 hover:text-ink-900"
+   853→                              >
+   854→                                <Copy className="h-3 w-3" aria-hidden="true" />
+   855→                                COPY AUDIT TRAIL
+   856→                              </button>
+   857→                              <span className="ml-auto font-code text-[8px] tracking-[0.16em] text-ink-300">
+   858→                                BUYER · {run.buyer.toUpperCase()}
+   859→                              </span>
+   860→                            </div>
+   861→                          </div>
+   862→                        </td>
+   863→                      </tr>
+   864→                    )}
+   865→                  </Fragment>
+   866→                );
+   867→              })}
+   868→              {filtered.length === 0 && (
+   869→                <tr>
+   870→                  <td colSpan={7} className="px-5 py-10 text-center">
+   871→                    <p className="font-code text-[10px] tracking-[0.18em] text-ink-400">
+   872→                      NO RUNS MATCH “{query.toUpperCase()}”
+   873→                    </p>
+   874→                    <button
+   875→                      type="button"
+   876→                      onClick={() => {
+   877→                        onQuery("");
+   878→                        onFilter("all");
+   879→                      }}
+   880→                      className="mt-3 inline-flex h-8 items-center rounded-lg border border-ink-200 px-3.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-ink-400"
+   881→                    >
+   882→                      Clear search & filters
+   883→                    </button>
+   884→                  </td>
+   885→                </tr>
+   886→              )}
+   887→            </tbody>
+   888→          </table>
+   889→        </div>
+   890→      </motion.div>
+   891→    </section>
+   892→  );
+   893→}
+   894→
+   895→/* ── Human gate queue ────────────────────────────────────────────────────── */
+   896→
+   897→function GateQueue({
+   898→  queue,
+   899→  ledger,
+   900→  firstName,
+   901→  onSign,
+   902→  onReturn,
+   903→}: {
+   904→  queue: GateItem[];
+   905→  ledger: LedgerRow[];
+   906→  firstName: string;
+   907→  onSign: (g: GateItem) => void;
+   908→  onReturn: (g: GateItem) => void;
+   909→}) {
+   910→  const [decided, setDecided] = useState<Record<string, "AWARDED" | "RETURNED">>({});
+   911→
+   912→  const act = (g: GateItem, kind: "AWARDED" | "RETURNED") => {
+   913→    setDecided((prev) => ({ ...prev, [g.id]: kind }));
+   914→    if (kind === "AWARDED") onSign(g);
+   915→    else onReturn(g);
+   916→  };
+   917→
+   918→  return (
+   919→    <section id="mc-gates" aria-labelledby="mc-gates-h" className="scroll-mt-24">
+   920→      <motion.div
+   921→        initial={{ opacity: 0, y: 24 }}
+   922→        animate={{ opacity: 1, y: 0 }}
+   923→        transition={{ duration: 0.6, delay: 0.22, ease: EASE }}
+   924→        className="flex h-full flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+   925→      >
+   926→        <header className="flex items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
+   927→          <div>
+   928→            <h2 id="mc-gates-h" className="flex items-center gap-2 font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">
+   929→              <Gavel className="h-4 w-4 text-brand-600" aria-hidden="true" />
+   930→              Human gate
+   931→            </h2>
+   932→            <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
+   933→              {queue.length === 0 ? "QUEUE CLEAR — THE GAVEL RESTS" : `${queue.length} AWAITING THE COMMITTEE`}
+   934→            </p>
+   935→          </div>
+   936→          <span
+   937→            aria-live="polite"
+   938→            className={cn(
+   939→              "rounded-full px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em]",
+   940→              queue.length === 0 ? "bg-ink-950 text-white" : "bg-brand-600 text-white"
+   941→            )}
+   942→          >
+   943→            {queue.length === 0 ? "CLEAR" : "ACTION NEEDED"}
+   944→          </span>
+   945→        </header>
+   946→
+   947→        <div className="flex-1 space-y-3 px-4 py-4" aria-live="polite">
+   948→          <AnimatePresence initial={false}>
+   949→            {queue.map((g) => (
+   950→              <motion.article
+   951→                key={g.id}
+   952→                layout
+   953→                initial={{ opacity: 0, y: 14 }}
+   954→                animate={{ opacity: 1, y: 0 }}
+   955→                exit={{ opacity: 0, x: 32, transition: { duration: 0.3 } }}
+   956→                transition={{ duration: 0.4, ease: EASE }}
+   957→                className="rounded-xl border border-ink-100 bg-paper p-4"
+   958→              >
+   959→                <div className="flex items-start justify-between gap-3">
+   960→                  <div className="min-w-0">
+   961→                    <p className="font-code text-[9.5px] font-bold tracking-[0.1em] text-ink-950">{g.tender}</p>
+   962→                    <p className="mt-0.5 truncate text-[13.5px] font-semibold text-ink-800">{g.title}</p>
+   963→                  </div>
+   964→                  {g.flags > 0 && (
+   965→                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-50 px-2 py-1 font-code text-[8.5px] font-bold tracking-[0.1em] text-brand-700">
+   966→                      <CircleAlert className="h-2.5 w-2.5" aria-hidden="true" />
+   967→                      {g.flags} {g.flags === 1 ? "FLAG" : "FLAGS"}
+   968→                    </span>
+   969→                  )}
+   970→                </div>
+   971→                <dl className="mt-3 grid grid-cols-2 gap-2 font-code text-[8.5px] tracking-[0.12em] text-ink-500">
+   972→                  <div>
+   973→                    <dt className="text-ink-300">PROPOSED SUPPLIER</dt>
+   974→                    <dd className="mt-0.5 font-semibold text-ink-800">{g.supplier}</dd>
+   975→                  </div>
+   976→                  <div>
+   977→                    <dt className="text-ink-300">CONTRACT VALUE</dt>
+   978→                    <dd className="mt-0.5 font-semibold text-ink-800">{g.value}</dd>
+   979→                  </div>
+   980→                </dl>
+   981→                <div className="mt-4 flex items-center gap-2">
+   982→                  <button
+   983→                    type="button"
+   984→                    onClick={() => act(g, "AWARDED")}
+   985→                    className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-[12.5px] font-bold tracking-[0.02em] text-white transition-all hover:bg-brand-700"
+   986→                  >
+   987→                    <Stamp className="h-3.5 w-3.5" aria-hidden="true" />
+   988→                    Award
+   989→                  </button>
+   990→                  <button
+   991→                    type="button"
+   992→                    onClick={() => act(g, "RETURNED")}
+   993→                    className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-ink-300 text-[12.5px] font-semibold text-ink-700 transition-colors hover:border-ink-950 hover:text-ink-950"
+   994→                  >
+   995→                    Return for review
+   996→                  </button>
+   997→                </div>
+   998→                <p className="mt-2.5 font-code text-[7.5px] tracking-[0.18em] text-ink-300">
+   999→                  FILE SUBMITTED {g.ago} · EVERY FLAG CITED
+  1000→                </p>
+  1001→              </motion.article>
+  1002→            ))}
+  1003→          </AnimatePresence>
+  1004→
+  1005→          {queue.length === 0 && (
+  1006→            <motion.div
+  1007→              key="empty-queue"
+  1008→              initial={{ opacity: 0, scale: 0.96 }}
+  1009→              animate={{ opacity: 1, scale: 1 }}
+  1010→              transition={{ duration: 0.4, ease: EASE }}
+  1011→              className="grid place-items-center rounded-xl border border-dashed border-ink-200 px-4 py-10 text-center"
+  1012→            >
+  1013→              <CircleCheck className="h-7 w-7 text-ink-300" aria-hidden="true" />
+  1014→              <p className="mt-3 font-display text-[15px] font-black text-ink-900">The committee is caught up.</p>
+  1015→              <p className="mt-1 max-w-[220px] text-[12.5px] leading-relaxed text-ink-500">
+  1016→                No file waits on a human. The agent keeps preparing; the gavel keeps resting.
+  1017→              </p>
+  1018→            </motion.div>
+  1019→          )}
+  1020→        </div>
+  1021→
+  1022→        {/* Ledger */}
+  1023→        <div className="border-t border-ink-100 px-5 py-4">
+  1024→          <p className="font-code text-[8.5px] font-semibold tracking-[0.22em] text-ink-400">GATE LEDGER</p>
+  1025→          <ul className="mt-2.5 space-y-2">
+  1026→            <AnimatePresence initial={false}>
+  1027→              {ledger.slice(0, 4).map((row) => (
+  1028→                <motion.li
+  1029→                  key={`${row.tender}-${row.at}-${row.action}`}
+  1030→                  layout
+  1031→                  initial={{ opacity: 0, y: -8 }}
+  1032→                  animate={{ opacity: 1, y: 0 }}
+  1033→                  transition={{ duration: 0.35, ease: EASE }}
+  1034→                  className="flex items-center justify-between gap-2 font-code text-[8.5px] tracking-[0.12em]"
+  1035→                >
+  1036→                  <span className="font-bold text-ink-800">{row.tender}</span>
+  1037→                  <span className={cn("font-bold", row.action === "AWARDED" ? "text-ink-950" : "text-brand-600")}>
+  1038→                    {row.action}
+  1039→                  </span>
+  1040→                  <span className="ml-auto text-ink-400">
+  1041→                    {row.by} · {row.at}
+  1042→                  </span>
+  1043→                </motion.li>
+  1044→              ))}
+  1045→            </AnimatePresence>
+  1046→            {ledger.length === 0 && (
+  1047→              <li className="font-code text-[8.5px] tracking-[0.12em] text-ink-300">NO DECISIONS YET</li>
+  1048→            )}
+  1049→          </ul>
+  1050→        </div>
+  1051→      </motion.div>
+  1052→    </section>
+  1053→  );
+  1054→}
+  1055→
+  1056→/* ── Portal sync + audit ─────────────────────────────────────────────────── */
+  1057→
+  1058→function PortalSync({ onToast }: { onToast: (m: string) => void }) {
+  1059→  return (
+  1060→    <div className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+  1061→      <div className="flex items-center justify-between">
+  1062→        <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Portal sync</h3>
+  1063→        <span className="font-code text-[8px] tracking-[0.2em] text-ink-400">4 SOURCES</span>
+  1064→      </div>
+  1065→      <ul className="mt-4 space-y-3">
+  1066→        {PORTALS.map((p) => (
+  1067→          <li key={p.name} className="flex items-center gap-3">
+  1068→            <span
+  1069→              className={cn(
+  1070→                "relative flex h-1.5 w-1.5 shrink-0",
+  1071→                !p.ok && "text-brand-600"
+  1072→              )}
+  1073→              aria-hidden="true"
+  1074→            >
+  1075→              {p.ok ? (
+  1076→                <span className="h-1.5 w-1.5 rounded-full bg-ink-950" />
+  1077→              ) : (
+  1078→                <>
+  1079→                  <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" />
+  1080→                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" />
+  1081→                </>
+  1082→              )}
+  1083→            </span>
+  1084→            <span className="flex-1 truncate font-code text-[9.5px] font-semibold tracking-[0.14em] text-ink-800">
+  1085→              {p.name}
+  1086→            </span>
+  1087→            <span className="font-code text-[8px] tracking-[0.14em] text-ink-400">{p.at}</span>
+  1088→            {!p.ok && (
+  1089→              <button
+  1090→                type="button"
+  1091→                onClick={() => onToast("RETRY QUEUED — GGPPBD SYNC · ATTEMPT 2 IN 60S")}
+  1092→                aria-label={`Retry sync for ${p.name}`}
+  1093→                className="grid h-6 w-6 place-items-center rounded-md border border-ink-200 text-ink-500 transition-colors hover:border-brand-400 hover:text-brand-700"
+  1094→              >
+  1095→                <RefreshCw className="h-3 w-3" aria-hidden="true" />
+  1096→              </button>
+  1097→            )}
+  1098→          </li>
+  1099→        ))}
+  1100→      </ul>
+  1101→      <div className="mt-5 flex items-center gap-2.5 rounded-xl bg-sand px-3.5 py-3">
+  1102→        <ShieldCheck className="h-4 w-4 shrink-0 text-brand-700" aria-hidden="true" />
+  1103→        <p className="font-code text-[7.5px] leading-[1.8] tracking-[0.14em] text-ink-600">
+  1104→          AUDIT LOGS sha256-SEALED · ON-PREM READY
+  1105→        </p>
+  1106→      </div>
+  1107→    </div>
+  1108→  );
+  1109→}
+  1110→
+  1111→/* ── The screen ──────────────────────────────────────────────────────────── */
+  1112→
+  1113→export function Dashboard({
+  1114→  user,
+  1115→  onSignOut,
+  1116→  onToast,
+  1117→  onExit,
+  1118→}: {
+  1119→  user: AuthUser | null;
+  1120→  onSignOut: () => void;
+  1121→  onToast: (message: string) => void;
+  1122→  onExit: () => void;
+  1123→}) {
+  1124→  const [runs, setRuns] = useState<McRun[]>(SEED_RUNS);
+  1125→  const [queue, setQueue] = useState<GateItem[]>(SEED_GATES);
+  1126→  const [ledger, setLedger] = useState<LedgerRow[]>(SEED_LEDGER);
+  1127→  const [query, setQuery] = useState("");
+  1128→  const [filter, setFilter] = useState<RunFilter>("all");
+  1129→  const [active, setActive] = useState<SectionId>("mc-overview");
+  1130→  const [navOpen, setNavOpen] = useState(false);
+  1131→  const [modalOpen, setModalOpen] = useState(false);
+  1132→  const [now, setNow] = useState<Date | null>(null);
+  1133→  const completionTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  1134→
+  1135→  /* Clock + date */
+  1136→  useEffect(() => {
+  1137→    const first = requestAnimationFrame(() => setNow(new Date()));
+  1138→    const id = setInterval(() => setNow(new Date()), 30_000);
+  1139→    return () => {
+  1140→      cancelAnimationFrame(first);
+  1141→      clearInterval(id);
+  1142→    };
+  1143→  }, []);
+  1144→
+  1145→  /* Scrollspy */
+  1146→  useEffect(() => {
+  1147→    const observer = new IntersectionObserver(
+  1148→      (entries) => {
+  1149→        const visible = entries
+  1150→          .filter((e) => e.isIntersecting)
+  1151→          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+  1152→        if (visible[0]) setActive(visible[0].target.id as SectionId);
+  1153→      },
+  1154→      { rootMargin: "-30% 0px -55% 0px", threshold: 0 }
+  1155→    );
+  1156→    SECTION_NAV.forEach(({ id }) => {
+  1157→      const el = document.getElementById(id);
+  1158→      if (el) observer.observe(el);
+  1159→    });
+  1160→    return () => observer.disconnect();
+  1161→  }, []);
+  1162→
+  1163→  /* Body scroll lock for the mobile drawer */
+  1164→  useEffect(() => {
+  1165→    document.body.style.overflow = navOpen ? "hidden" : "";
+  1166→    return () => {
+  1167→      document.body.style.overflow = "";
+  1168→    };
+  1169→  }, [navOpen]);
+  1170→
+  1171→  /* Clear pending run-completion timers on unmount */
+  1172→  useEffect(() => {
+  1173→    const timers = completionTimers.current;
+  1174→    return () => timers.forEach(clearTimeout);
+  1175→  }, []);
+  1176→
+  1177→  const firstName = firstNameOf(user);
+  1178→  const hour = now?.getHours() ?? 10;
+  1179→  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  1180→
+  1181→  const activeRuns = runs.filter((r) => r.status === "running" || r.status === "queued").length;
+  1182→  const findingsTotal = runs
+  1183→    .filter((r) => r.status === "gate" || r.status === "complete")
+  1184→    .reduce((sum, r) => sum + r.findings, 0);
+  1185→  const citedTotal = runs
+  1186→    .filter((r) => r.status === "gate" || r.status === "complete")
+  1187→    .reduce((sum, r) => sum + r.citations, 0);
+  1188→  const citationPct = findingsTotal > 0 ? Math.round((citedTotal / findingsTotal) * 100) : 100;
+  1189→
+  1190→  const navigate = (id: SectionId) => {
+  1191→    setNavOpen(false);
+  1192→    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  1193→  };
+  1194→
+  1195→  const launchRun = (ref: string, title: string, format: string) => {
+  1196→    setModalOpen(false);
+  1197→    const run: McRun = {
+  1198→      id: ref,
+  1199→      title,
+  1200→      buyer: `Your workspace · ${format.toLowerCase()}`,
+  1201→      bids: null,
+  1202→      findings: 0,
+  1203→      citations: 0,
+  1204→      unsourced: 0,
+  1205→      status: "running",
+  1206→      startedAt: "JUST NOW",
+  1207→      duration: "LIVE",
+  1208→    };
+  1209→    setRuns((prev) => [run, ...prev]);
+  1210→    onToast(`RUN QUEUED — QUORUM-AGENT PICKING UP ${ref.toUpperCase()} · ${format}`);
+  1211→    const t = setTimeout(() => {
+  1212→      setRuns((prev) =>
+  1213→        prev.map((r) =>
+  1214→          r.id === ref
+  1215→            ? { ...r, status: "complete", bids: 5, findings: 4, citations: 4, duration: "11 MIN" }
+  1216→            : r
+  1217→        )
+  1218→      );
+  1219→      onToast(`RUN COMPLETE — ${ref.toUpperCase()} · 4 FINDINGS · 4 CITATIONS · 0 UNSOURCED`);
+  1220→    }, 12_000);
+  1221→    completionTimers.current.push(t);
+  1222→  };
+  1223→
+  1224→  const signGate = (g: GateItem) => {
+  1225→    setQueue((prev) => prev.filter((item) => item.id !== g.id));
+  1226→    setLedger((prev) => [
+  1227→      { tender: g.tender, action: "AWARDED", by: firstName, at: "JUST NOW" },
+  1228→      ...prev,
+  1229→    ]);
+  1230→    /* The committee has spoken — the run leaves the register as decided. */
+  1231→    setRuns((prev) =>
+  1232→      prev.map((r) => (r.id === g.tender ? { ...r, status: "complete", duration: `${r.duration.split(" ")[0]} MIN` } : r))
+  1233→    );
+  1234→    onToast(`GATE SIGNED — ${g.tender} AWARDED · DECISION LOGGED`);
+  1235→  };
+  1236→
+  1237→  const returnGate = (g: GateItem) => {
+  1238→    setQueue((prev) => prev.filter((item) => item.id !== g.id));
+  1239→    setLedger((prev) => [
+  1240→      { tender: g.tender, action: "RETURNED", by: firstName, at: "JUST NOW" },
+  1241→      ...prev,
+  1242→    ]);
+  1243→    /* Back to the agent for clarification — the file re-opens live. */
+  1244→    setRuns((prev) =>
+  1245→      prev.map((r) => (r.id === g.tender ? { ...r, status: "running", duration: "LIVE", startedAt: "RE-RUN" } : r))
+  1246→    );
+  1247→    onToast(`${g.tender} RETURNED — AGENT TASKED WITH CLARIFICATION`);
+  1248→  };
+  1249→
+  1250→  return (
+  1251→    <div className="min-h-screen bg-paper font-body text-ink-900 antialiased">
+  1252→      <a
+  1253→        href="#mc-main"
+  1254→        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[90] focus:rounded-lg focus:bg-ink-950 focus:px-4 focus:py-2 focus:text-[13px] focus:font-semibold focus:text-white"
+  1255→      >
+  1256→        Skip to mission control
+  1257→      </a>
+  1258→
+  1259→      {/* Desktop sidebar */}
+  1260→      <aside
+  1261→        className="fixed inset-y-0 left-0 z-40 hidden w-[264px] flex-col border-r border-white/5 bg-night lg:flex"
+  1262→        aria-label="Mission control sidebar"
+  1263→      >
+  1264→        <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-50" aria-hidden="true" />
+  1265→        <div className="relative flex h-full flex-col">
+  1266→          <SidebarContent
+  1267→            active={active}
+  1268→            user={user}
+  1269→            runsCount={runs.length}
+  1270→            gatesCount={queue.length}
+  1271→            onNavigate={navigate}
+  1272→            onNewRun={() => setModalOpen(true)}
+  1273→            onSignOut={onSignOut}
+  1274→            onExit={onExit}
+  1275→          />
+  1276→        </div>
+  1277→      </aside>
+  1278→
+  1279→      {/* Mobile top bar */}
+  1280→      <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/10 bg-night px-4 py-3 lg:hidden">
+  1281→        <QuorumLogo variant="light" />
+  1282→        <div className="flex items-center gap-2.5">
+  1283→          <span className="hidden items-center gap-2 font-code text-[8.5px] tracking-[0.2em] text-ink-300 sm:flex">
+  1284→            <span className="relative flex h-1.5 w-1.5">
+  1285→              <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+  1286→              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+  1287→            </span>
+  1288→            AGENT ONLINE
+  1289→          </span>
+  1290→          <button
+  1291→            type="button"
+  1292→            onClick={() => setNavOpen(true)}
+  1293→            aria-label="Open mission control menu"
+  1294→            aria-expanded={navOpen}
+  1295→            className="grid h-10 w-10 place-items-center rounded-full border border-white/15 text-white"
+  1296→          >
+  1297→            <Menu className="h-5 w-5" aria-hidden="true" />
+  1298→          </button>
+  1299→        </div>
+  1300→      </header>
+  1301→
+  1302→      {/* Mobile drawer */}
+  1303→      <AnimatePresence>
+  1304→        {navOpen && (
+  1305→          <>
+  1306→            <motion.div
+  1307→              initial={{ opacity: 0 }}
+  1308→              animate={{ opacity: 1 }}
+  1309→              exit={{ opacity: 0 }}
+  1310→              transition={{ duration: 0.2 }}
+  1311→              className="fixed inset-0 z-[60] bg-night/70 backdrop-blur-sm lg:hidden"
+  1312→              onClick={() => setNavOpen(false)}
+  1313→              aria-hidden="true"
+  1314→            />
+  1315→            <motion.aside
+  1316→              initial={{ x: "-100%" }}
+  1317→              animate={{ x: 0 }}
+  1318→              exit={{ x: "-100%" }}
+  1319→              transition={{ duration: 0.32, ease: EASE }}
+  1320→              className="fixed inset-y-0 left-0 z-[61] w-[290px] bg-night lg:hidden"
+  1321→              aria-label="Mission control menu"
+  1322→            >
+  1323→              <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-50" aria-hidden="true" />
+  1324→              <div className="relative flex h-full flex-col">
+  1325→                <button
+  1326→                  type="button"
+  1327→                  onClick={() => setNavOpen(false)}
+  1328→                  aria-label="Close menu"
+  1329→                  className="absolute right-3 top-4 grid h-9 w-9 place-items-center rounded-lg text-ink-300 hover:bg-white/10 hover:text-white"
+  1330→                >
+  1331→                  <X className="h-4.5 w-4.5" aria-hidden="true" />
+  1332→                </button>
+  1333→                <SidebarContent
+  1334→                  active={active}
+  1335→                  user={user}
+  1336→                  runsCount={runs.length}
+  1337→                  gatesCount={queue.length}
+  1338→                  onNavigate={navigate}
+  1339→                  onNewRun={() => {
+  1340→                    setNavOpen(false);
+  1341→                    setModalOpen(true);
+  1342→                  }}
+  1343→                  onSignOut={onSignOut}
+  1344→                  onExit={onExit}
+  1345→                />
+  1346→              </div>
+  1347→            </motion.aside>
+  1348→          </>
+  1349→        )}
+  1350→      </AnimatePresence>
+  1351→
+  1352→      {/* Main column */}
+  1353→      <div className="lg:pl-[264px]">
+  1354→        {/* Sticky utility bar */}
+  1355→        <div className="sticky top-0 z-30 border-b border-ink-100 bg-paper/85 backdrop-blur-xl">
+  1356→          <div className="mx-auto flex h-14 w-full max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+  1357→            <p className="truncate font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
+  1358→              MISSION CONTROL <span className="text-ink-200">/</span>{" "}
+  1359→              <span className="text-ink-900">
+  1360→                {SECTION_NAV.find((s) => s.id === active)?.label ?? "OVERVIEW"}
+  1361→              </span>
+  1362→            </p>
+  1363→            <div className="flex items-center gap-3 sm:gap-4">
+  1364→              <div className="relative hidden sm:block">
+  1365→                <Search
+  1366→                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-300"
+  1367→                  aria-hidden="true"
+  1368→                />
+  1369→                <input
+  1370→                  type="search"
+  1371→                  value={query}
+  1372→                  onChange={(e) => setQuery(e.target.value)}
+  1373→                  placeholder="Search runs…"
+  1374→                  aria-label="Search runs by reference, title or buyer"
+  1375→                  className="h-9 w-44 rounded-full border border-ink-200 bg-white pl-9 pr-3 text-[12.5px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:w-56 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15 lg:w-52"
+  1376→                />
+  1377→              </div>
+  1378→              <p
+  1379→                className="hidden items-center gap-2 font-code text-[9px] tracking-[0.2em] text-ink-500 md:flex"
+  1380→                aria-label="Local time"
+  1381→              >
+  1382→                <LiveClock />
+  1383→                <span className="text-ink-200">·</span> LOCAL
+  1384→              </p>
+  1385→              <span className="hidden items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1.5 font-code text-[8.5px] font-semibold tracking-[0.18em] text-ink-700 md:inline-flex">
+  1386→                <span className="relative flex h-1.5 w-1.5">
+  1387→                  <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+  1388→                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+  1389→                </span>
+  1390→                AGENT · ONLINE
+  1391→              </span>
+  1392→            </div>
+  1393→          </div>
+  1394→        </div>
+  1395→
+  1396→        <main id="mc-main" className="mx-auto w-full max-w-[1200px] px-4 pb-14 pt-8 sm:px-6 lg:px-8">
+  1397→          {/* Greeting */}
+  1398→          <section id="mc-overview" aria-labelledby="mc-greeting" className="scroll-mt-20">
+  1399→            <div className="flex flex-wrap items-end justify-between gap-5">
+  1400→              <div className="min-w-0">
+  1401→                <p className="flex items-center gap-2.5 font-code text-[10px] font-semibold uppercase tracking-[0.3em] text-ink-500">
+  1402→                  <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
+  1403→                  FIG. 04 — Mission control
+  1404→                </p>
+  1405→                <h1
+  1406→                  id="mc-greeting"
+  1407→                  className="mt-4 font-display text-[34px] font-black leading-[1.02] tracking-[-0.025em] text-ink-950 sm:text-[44px]"
+  1408→                >
+  1409→                  {greeting}, {firstName}
+  1410→                  <span className="text-brand-600">.</span>
+  1411→                </h1>
+  1412→                <p className="mt-3 max-w-xl text-[14.5px] leading-relaxed text-ink-600">
+  1413→                  The agent has been in the files since 06:00. Everything below is cited — and the gavel
+  1414→                  stays with you.
+  1415→                </p>
+  1416→              </div>
+  1417→              <div className="flex flex-col items-start gap-3 sm:items-end">
+  1418→                <p className="font-code text-[9px] tracking-[0.2em] text-ink-400">
+  1419→                  {now ? dateLine(now) : "—"}
+  1420→                </p>
+  1421→                <button
+  1422→                  type="button"
+  1423→                  onClick={() => setModalOpen(true)}
+  1424→                  className="group inline-flex h-11 items-center gap-2 rounded-xl bg-brand-600 px-5 text-[14px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700"
+  1425→                >
+  1426→                  <Plus className="h-4 w-4" aria-hidden="true" />
+  1427→                  New run
+  1428→                </button>
+  1429→              </div>
+  1430→            </div>
+  1431→
+  1432→            {/* Stats */}
+  1433→            <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+  1434→              <StatCard
+  1435→                label="ACTIVE RUNS"
+  1436→                value={activeRuns}
+  1437→                sub={activeRuns > 0 ? "AGENT IN THE FILE" : "AGENT IDLE — QUEUE A RUN"}
+  1438→                spark={SPARK_A}
+  1439→                delay={0.05}
+  1440→              />
+  1441→              <StatCard
+  1442→                label="FINDINGS FLAGGED"
+  1443→                value={findingsTotal}
+  1444→                sub="EVERY ONE CITED · ACROSS OPEN RUNS"
+  1445→                spark={SPARK_B}
+  1446→                delay={0.12}
+  1447→              />
+  1448→              <StatCard
+  1449→                label="CITATIONS VERIFIED"
+  1450→                value={citationPct}
+  1451→                suffix="%"
+  1452→                sub="0 UNSOURCED CLAIMS · PAGE-LEVEL"
+  1453→                spark={SPARK_A}
+  1454→                delay={0.19}
+  1455→              />
+  1456→              <StatCard
+  1457→                label="GATES PENDING"
+  1458→                value={queue.length}
+  1459→                sub={queue.length > 0 ? "THE COMMITTEE HOLDS THE GAVEL" : "NOTHING WAITS ON A HUMAN"}
+  1460→                spark={SPARK_B}
+  1461→                featured
+  1462→                pulse={queue.length > 0}
+  1463→                delay={0.26}
+  1464→              />
+  1465→            </div>
+  1466→          </section>
+  1467→
+  1468→          {/* Runs + gates */}
+  1469→          <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+  1470→            <div className="min-w-0 lg:col-span-2">
+  1471→              <RunRegister
+  1472→                runs={runs}
+  1473→                query={query}
+  1474→                onQuery={setQuery}
+  1475→                filter={filter}
+  1476→                onFilter={setFilter}
+  1477→                onToast={onToast}
+  1478→              />
+  1479→            </div>
+  1480→            <GateQueue
+  1481→              queue={queue}
+  1482→              ledger={ledger}
+  1483→              firstName={firstName}
+  1484→              onSign={signGate}
+  1485→              onReturn={returnGate}
+  1486→            />
+  1487→          </div>
+  1488→
+  1489→          {/* Feed + portals */}
+  1490→          <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+  1491→            <div id="mc-activity" className="min-w-0 scroll-mt-24 lg:col-span-2">
+  1492→              <AgentFeed />
+  1493→            </div>
+  1494→            <div className="grid content-start gap-4 sm:gap-6">
+  1495→              <PortalSync onToast={onToast} />
+  1496→              <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
+  1497→                <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+  1498→                <div className="relative">
+  1499→                <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">The standing rule</h3>
+  1500→                <p className="mt-3 font-code text-[9px] leading-[2] tracking-[0.16em] text-ink-300">
+  1501→                  QUORUM PREPARES THE FILE.
+  1502→                  <br />
+  1503→                  IT NEVER AWARDS THE TENDER.
+  1504→                  <br />
+  1505→                  <span className="text-brand-400">THE COMMITTEE SIGNS — THE AGENT NEVER DOES.</span>
+  1506→                </p>
+  1507→                <button
+  1508→                  type="button"
+  1509→                  onClick={() => onToast("STANDING RULES — 3 CLAUSES · UNEDITABLE BY DESIGN")}
+  1510→                  className="mt-4 inline-flex items-center gap-1.5 font-code text-[8.5px] font-bold tracking-[0.2em] text-ink-300 transition-colors hover:text-white"
+  1511→                >
+  1512→                  READ THE RULES
+  1513→                  <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+  1514→                </button>
+  1515→                </div>
+  1516→              </div>
+  1517→            </div>
+  1518→          </div>
+  1519→
+  1520→          {/* Bottom strip */}
+  1521→          <p className="mt-10 border-t border-ink-100 pt-5 text-center font-code text-[8px] tracking-[0.24em] text-ink-400">
+  1522→            QUORUM · MISSION CONTROL · SESSION {initialsOf(user?.name ?? "Q")} · AUDIT-GRADE LOGS · NO TRACKERS
+  1523→          </p>
+  1524→        </main>
+  1525→      </div>
+  1526→
+  1527→      <NewRunModal open={modalOpen} onClose={() => setModalOpen(false)} onLaunch={launchRun} />
+  1528→    </div>
+  1529→  );
+  1530→}
+  1531→

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
@@ -10,9 +10,13 @@ import {
   CircleAlert,
   CircleCheck,
   Copy,
+  Database,
   Download,
+  Files,
   Gavel,
   Gauge,
+  ListChecks,
+  Lock,
   LogOut,
   Menu,
   Plus,
@@ -22,7 +26,9 @@ import {
   ShieldCheck,
   Stamp,
   Terminal,
+  Users,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { QuorumLogo } from "@/components/quorum/logo";
 import type { AuthUser } from "@/lib/auth-types";
@@ -105,14 +111,60 @@ const PORTALS = [
 const SPARK_A = [40, 62, 34, 78, 52, 70, 44, 88, 58, 74, 48, 84];
 const SPARK_B = [55, 40, 70, 46, 82, 60, 38, 74, 50, 66, 42, 90];
 
-const SECTION_NAV = [
-  { id: "mc-overview", label: "OVERVIEW", icon: Gauge },
-  { id: "mc-runs", label: "RUN REGISTER", icon: Terminal },
-  { id: "mc-gates", label: "HUMAN GATES", icon: Stamp },
-  { id: "mc-activity", label: "AGENT FEED", icon: Radio },
-] as const;
+/* Grouped navigation — the options that fit an agentic procurement
+   workspace: command the mission, inspect the evidence, sit as the
+   committee, govern the system. */
+type SectionId =
+  | "mc-overview"
+  | "mc-runs"
+  | "mc-gates"
+  | "mc-activity"
+  | "mc-findings"
+  | "mc-reports"
+  | "mc-sources"
+  | "mc-ledger"
+  | "mc-committee"
+  | "mc-rules";
 
-type SectionId = (typeof SECTION_NAV)[number]["id"];
+type NavBadge = "runs" | "gates" | "findings";
+
+const NAV_GROUPS: {
+  group: string;
+  items: { id: SectionId; label: string; icon: LucideIcon; badge?: NavBadge }[];
+}[] = [
+  {
+    group: "COMMAND",
+    items: [
+      { id: "mc-overview", label: "OVERVIEW", icon: Gauge },
+      { id: "mc-runs", label: "RUN REGISTER", icon: Terminal, badge: "runs" },
+      { id: "mc-gates", label: "HUMAN GATES", icon: Stamp, badge: "gates" },
+      { id: "mc-activity", label: "AGENT FEED", icon: Radio },
+    ],
+  },
+  {
+    group: "EVIDENCE",
+    items: [
+      { id: "mc-findings", label: "FINDINGS LEDGER", icon: ListChecks, badge: "findings" },
+      { id: "mc-reports", label: "REPORT PACKS", icon: Files },
+      { id: "mc-sources", label: "SOURCES & PORTALS", icon: Database },
+    ],
+  },
+  {
+    group: "COMMITTEE",
+    items: [
+      { id: "mc-ledger", label: "AWARD LEDGER", icon: Gavel },
+      { id: "mc-committee", label: "COMMITTEE", icon: Users },
+    ],
+  },
+  {
+    group: "SYSTEM",
+    items: [{ id: "mc-rules", label: "RULES & GUARDS", icon: ShieldCheck }],
+  },
+];
+
+const SECTION_LABEL = Object.fromEntries(
+  NAV_GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label] as const))
+) as Record<SectionId, string>;
 
 function firstNameOf(user: AuthUser | null): string {
   return user?.name.trim().split(/\s+/)[0] ?? "Officer";
@@ -411,7 +463,7 @@ function NewRunModal({
               <div>
                 <p className="flex items-center gap-2.5 font-code text-[9px] font-semibold uppercase tracking-[0.28em] text-ink-500">
                   <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
-                  FIG. 05 — Launch a run
+                  LAUNCH A RUN
                 </p>
                 <h2 id="new-run-title" className="mt-3 font-display text-[26px] font-black tracking-[-0.02em] text-ink-950">
                   New run<span className="text-brand-600">.</span>
@@ -508,8 +560,7 @@ function NewRunModal({
 function SidebarContent({
   active,
   user,
-  runsCount,
-  gatesCount,
+  counts,
   onNavigate,
   onNewRun,
   onSignOut,
@@ -517,8 +568,7 @@ function SidebarContent({
 }: {
   active: SectionId;
   user: AuthUser | null;
-  runsCount: number;
-  gatesCount: number;
+  counts: { runs: number; gates: number; findings: number };
   onNavigate: (id: SectionId) => void;
   onNewRun: () => void;
   onSignOut: () => void;
@@ -533,58 +583,67 @@ function SidebarContent({
         </p>
       </div>
 
-      <nav aria-label="Mission control sections" className="flex-1 px-3">
-        <p className="px-3 pb-2 font-code text-[8px] font-semibold tracking-[0.3em] text-ink-600">COMMAND</p>
-        <ul className="space-y-1">
-          {SECTION_NAV.map((item) => {
-            const Icon = item.icon;
-            const isActive = active === item.id;
-            const badge = item.id === "mc-gates" ? gatesCount : item.id === "mc-runs" ? runsCount : null;
-            return (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => onNavigate(item.id)}
-                  aria-current={isActive ? "true" : undefined}
-                  className={cn(
-                    "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
-                    isActive ? "bg-white/10 text-white" : "text-ink-400 hover:bg-white/5 hover:text-ink-100"
-                  )}
-                >
-                  {isActive && (
-                    <motion.span
-                      layoutId="mc-nav-rail"
-                      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-brand-500"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span className="flex-1 font-code text-[10px] font-semibold tracking-[0.18em]">{item.label}</span>
-                  {badge !== null && badge > 0 && (
-                    <span
+      <nav
+        aria-label="Mission control sections"
+        className="min-h-0 flex-1 overflow-y-auto px-3 pb-1 [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1"
+      >
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={group.group} className={cn(gi > 0 && "mt-6", gi === 0 && "pt-1")}>
+            <p className="px-3 pb-2 font-code text-[8px] font-semibold tracking-[0.3em] text-ink-600">{group.group}</p>
+            <ul className="space-y-1">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = active === item.id;
+                const badge = item.badge ? counts[item.badge] : null;
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(item.id)}
+                      aria-current={isActive ? "true" : undefined}
                       className={cn(
-                        "grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-code text-[9px] font-bold",
-                        item.id === "mc-gates" ? "bg-brand-600 text-white" : "bg-white/10 text-ink-200"
+                        "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+                        isActive ? "bg-white/10 text-white" : "text-ink-400 hover:bg-white/5 hover:text-ink-100"
                       )}
                     >
-                      {badge}
-                    </span>
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                      {isActive && (
+                        <motion.span
+                          layoutId="mc-nav-rail"
+                          className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-brand-500"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="flex-1 font-code text-[10px] font-semibold tracking-[0.18em]">{item.label}</span>
+                      {badge !== null && badge > 0 && (
+                        <span
+                          className={cn(
+                            "grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-code text-[9px] font-bold",
+                            item.id === "mc-gates" ? "bg-brand-600 text-white" : "bg-white/10 text-ink-200"
+                          )}
+                        >
+                          {badge}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
 
+      <div className="px-3 pb-1">
         <button
           type="button"
           onClick={onNewRun}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-3 text-[13px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-3 text-[13px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           New run
         </button>
-      </nav>
+      </div>
 
       <div className="px-3 pb-5 pt-4">
         <div className="rounded-xl border border-white/10 bg-night-2 px-3.5 py-3">
@@ -1108,6 +1167,1139 @@ function PortalSync({ onToast }: { onToast: (m: string) => void }) {
   );
 }
 
+/* ── Shared view furniture ───────────────────────────────────────────────── */
+
+function ViewShell({
+  fig,
+  title,
+  sub,
+  action,
+  children,
+}: {
+  fig: string;
+  title: string;
+  sub: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2.5 font-code text-[10px] font-semibold uppercase tracking-[0.3em] text-ink-500">
+            <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
+            FIG. {fig}
+          </p>
+          <h1 className="mt-4 font-display text-[30px] font-black leading-[1.05] tracking-[-0.02em] text-ink-950 sm:text-[38px]">
+            {title}
+            <span className="text-brand-600">.</span>
+          </h1>
+          <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-ink-600">{sub}</p>
+        </div>
+        {action}
+      </div>
+      <div className="mt-8">{children}</div>
+    </div>
+  );
+}
+
+function StandingRuleCard({ onToast }: { onToast: (m: string) => void }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
+      <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+      <div className="relative">
+        <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">The standing rule</h3>
+        <p className="mt-3 font-code text-[9px] leading-[2] tracking-[0.16em] text-ink-300">
+          QUORUM PREPARES THE FILE.
+          <br />
+          IT NEVER AWARDS THE TENDER.
+          <br />
+          <span className="text-brand-400">THE COMMITTEE SIGNS — THE AGENT NEVER DOES.</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => onToast("STANDING RULES — 3 CLAUSES · UNEDITABLE BY DESIGN")}
+          className="mt-4 inline-flex items-center gap-1.5 font-code text-[8.5px] font-bold tracking-[0.2em] text-ink-300 transition-colors hover:text-white"
+        >
+          READ THE RULES
+          <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function NewRunCard({ onNewRun }: { onNewRun: () => void }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
+      <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+      <div className="relative">
+        <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">Put the agent in a file</h3>
+        <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-300">
+          Point Quorum at a tender — OCDS, a PDF pack or the email bag. The first finding lands in about twenty minutes.
+        </p>
+        <button
+          type="button"
+          onClick={onNewRun}
+          className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-600 px-4 font-code text-[9px] font-bold tracking-[0.18em] text-white transition-colors hover:bg-brand-700"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          QUEUE A RUN
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GavelProtocolCard() {
+  return (
+    <div className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+      <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">The gavel protocol</h3>
+      <ol className="mt-4 space-y-3">
+        {[
+          "THE AGENT QUEUES THE FILE AT THE GATE",
+          "THE COMMITTEE READS THE CITED FLAGS",
+          "AWARD OR RETURN — BY NAMED HUMANS",
+          "THE LEDGER LOGS IT, PERMANENTLY",
+        ].map((step, i) => (
+          <li key={step} className="flex gap-3 font-code text-[8.5px] tracking-[0.16em] text-ink-600">
+            <span className="shrink-0 font-bold text-brand-600">0{i + 1}</span>
+            {step}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/* ── Findings ledger ─────────────────────────────────────────────────────── */
+
+type FindingClass =
+  | "DOCUMENT"
+  | "COMPLIANCE"
+  | "PRICING"
+  | "REGISTRY"
+  | "ARITHMETIC"
+  | "DISCLOSURE"
+  | "LOGISTICS";
+type FindingStatus = "OPEN" | "CLEARED" | "RE-CHECK";
+type SeedFinding = { run: string; note: string; cls: FindingClass; src: string };
+type FindingRow = SeedFinding & { id: string; tender: string; status: FindingStatus };
+
+const SEED_FINDINGS: SeedFinding[] = [
+  { run: "KE-NCB-104293", note: "Bank statement anomaly", cls: "DOCUMENT", src: "P.114" },
+  { run: "KE-NCB-104293", note: "Bid bond expires before award", cls: "COMPLIANCE", src: "BOND CERT · P.88" },
+  { run: "KE-NCB-104293", note: "Registry match — related bidders", cls: "REGISTRY", src: "REGISTRY · P.78" },
+  { run: "ZM-PPA-8841", note: "Unit price 38% above framework median", cls: "PRICING", src: "BOQ · P.22" },
+  { run: "RW-RPPA-0552", note: "Missing tax clearance — bid 3", cls: "COMPLIANCE", src: "BID 3 · P.9" },
+  { run: "RW-RPPA-0552", note: "Arithmetic variance in the BOQ", cls: "ARITHMETIC", src: "BOQ · P.22" },
+  { run: "RW-RPPA-0552", note: "Subcontractor undisclosed", cls: "DISCLOSURE", src: "FORM 12 · P.51" },
+  { run: "KE-NCB-104277", note: "Two bids share one IP address", cls: "REGISTRY", src: "AUDIT LOG · P.130" },
+  { run: "KE-NCB-104277", note: "Deposit source undocumented", cls: "DOCUMENT", src: "P.77" },
+  { run: "KE-NCB-104277", note: "Delivery window infeasible", cls: "LOGISTICS", src: "SCHEDULE · P.64" },
+  { run: "ZM-PPA-8830", note: "Quotation date mismatch", cls: "DOCUMENT", src: "P.12" },
+];
+
+/* Findings the agent raises when a freshly launched run completes. */
+const LAUNCHED_FINDINGS: SeedFinding[] = [
+  { run: "", note: "Price variance above the framework median", cls: "PRICING", src: "BOQ · P.18" },
+  { run: "", note: "Two mandatory certificates missing", cls: "COMPLIANCE", src: "CHECKLIST" },
+  { run: "", note: "Award criteria weighting left unstated", cls: "DISCLOSURE", src: "CRITERIA · P.3" },
+  { run: "", note: "Bid validity shorter than the tender window", cls: "COMPLIANCE", src: "BID · P.2" },
+];
+
+function buildFindingRows(
+  seed: SeedFinding[],
+  runs: McRun[],
+  verdicts: Record<string, "AWARDED" | "RETURNED">
+): FindingRow[] {
+  return seed.flatMap((f, i) => {
+    const run = runs.find((r) => r.id === f.run);
+    if (!run) return [];
+    /* A run still in flight has no findings yet — except one the committee
+       has returned, whose flags re-open as RE-CHECK while the agent re-verifies. */
+    if (run.status === "queued") return [];
+    if (run.status === "running" && verdicts[f.run] !== "RETURNED") return [];
+    const status: FindingStatus =
+      verdicts[f.run] === "AWARDED" ? "CLEARED" : verdicts[f.run] === "RETURNED" ? "RE-CHECK" : "OPEN";
+    return [{ ...f, id: `${f.run}-f${i}`, tender: run.title, status }];
+  });
+}
+
+function FindingStatusChip({ status }: { status: FindingStatus }) {
+  if (status === "OPEN")
+    return (
+      <span className="inline-flex items-center rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em] text-brand-800">
+        OPEN
+      </span>
+    );
+  if (status === "RE-CHECK")
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em] text-white">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-white" aria-hidden="true" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" aria-hidden="true" />
+        </span>
+        RE-CHECK
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-ink-950 px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em] text-white">
+      <CircleCheck className="h-2.5 w-2.5" aria-hidden="true" />
+      CLEARED
+    </span>
+  );
+}
+
+function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () => void }) {
+  const [f, setF] = useState<"ALL" | FindingStatus>("ALL");
+  const filtered = f === "ALL" ? rows : rows.filter((r) => r.status === f);
+  const open = rows.filter((r) => r.status === "OPEN").length;
+  const classCounts = rows.reduce<Record<string, number>>((acc, r) => {
+    acc[r.cls] = (acc[r.cls] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <ViewShell
+      fig="08"
+      title="Findings ledger"
+      sub="Every flag the agent has raised — classed, cited, and traceable to the page it came from. When the committee clears a gate, its flags clear with it."
+    >
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
+              <div>
+                <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">Ledger</h2>
+                <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
+                  {rows.length} FLAGS · {open} OPEN · 0 UNSOURCED
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5" role="group" aria-label="Filter findings by status">
+                {(["ALL", "OPEN", "CLEARED", "RE-CHECK"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setF(k)}
+                    aria-pressed={f === k}
+                    className={cn(
+                      "h-7 rounded-full border px-3 font-code text-[8.5px] font-bold tracking-[0.14em] transition-all",
+                      f === k
+                        ? "border-ink-950 bg-ink-950 text-white"
+                        : "border-ink-200 bg-white text-ink-500 hover:border-ink-400"
+                    )}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </header>
+            <div className="max-h-[520px] overflow-y-auto [scrollbar-width:thin]">
+              <table className="w-full min-w-[620px] border-collapse text-left">
+                <caption className="sr-only">Findings ledger — every flag with its class, status and source</caption>
+                <thead className="sticky top-0 z-10 bg-paper/95 backdrop-blur">
+                  <tr className="border-b border-ink-100">
+                    {["FINDING", "CLASS", "STATUS", "SOURCE", "RUN"].map((h) => (
+                      <th
+                        key={h}
+                        scope="col"
+                        className="px-4 py-2.5 font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((row) => (
+                    <tr
+                      key={row.id}
+                      tabIndex={0}
+                      onClick={onOpenRun}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onOpenRun();
+                        }
+                      }}
+                      aria-label={`Open the run register at ${row.run}`}
+                      className="cursor-pointer border-b border-ink-50 transition-colors hover:bg-paper"
+                    >
+                      <td className="max-w-[280px] py-3.5 pl-5 pr-4">
+                        <p className="text-[13px] font-semibold text-ink-900">{row.note}</p>
+                        <p className="mt-0.5 truncate text-[11.5px] text-ink-400">{row.tender}</p>
+                      </td>
+                      <td className="px-4">
+                        <span className="inline-flex rounded-md border border-ink-200 bg-white px-2 py-1 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-600">
+                          {row.cls}
+                        </span>
+                      </td>
+                      <td className="px-4">
+                        <FindingStatusChip status={row.status} />
+                      </td>
+                      <td className="px-4 font-code text-[8.5px] tracking-[0.1em] text-ink-500">{row.src}</td>
+                      <td className="py-3.5 pr-5 font-code text-[9.5px] font-bold tracking-[0.06em] text-ink-950">{row.run}</td>
+                    </tr>
+                  ))}
+                  {filtered.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-10 text-center font-code text-[10px] tracking-[0.18em] text-ink-400">
+                        NO FINDINGS IN THIS VIEW
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div className="grid content-start gap-4 sm:gap-6">
+          <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
+            <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+            <div className="relative">
+              <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">The invariant</h3>
+              <p className="mt-3 font-code text-[9px] leading-[2] tracking-[0.16em] text-ink-300">
+                0 UNSOURCED CLAIMS.
+                <br />
+                EVERY FLAG CARRIES A PAGE,
+                <br />
+                A CLAUSE OR A REGISTRY ID —
+                <br />
+                <span className="text-brand-400">BY CONSTRUCTION, NOT BY PROMISE.</span>
+              </p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+            <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Class map</h3>
+            <ul className="mt-4 space-y-2.5">
+              {Object.entries(classCounts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([cls, n]) => (
+                  <li key={cls} className="flex items-center gap-3">
+                    <span className="w-[96px] shrink-0 font-code text-[8px] font-bold tracking-[0.16em] text-ink-600">{cls}</span>
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-100">
+                      <span
+                        className="block h-full rounded-full bg-brand-500"
+                        style={{ width: `${rows.length > 0 ? (n / rows.length) * 100 : 0}%` }}
+                      />
+                    </span>
+                    <span className="w-6 text-right font-code text-[9px] font-bold text-ink-800 tabular">{n}</span>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </ViewShell>
+  );
+}
+
+/* ── Report packs ────────────────────────────────────────────────────────── */
+
+function shaTag(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  const a = h.toString(16).padStart(8, "0").slice(0, 4);
+  const b = (h >>> 7).toString(16).padStart(4, "0").slice(-4);
+  return `${a}…${b}`;
+}
+
+function ReportPacksView({
+  runs,
+  verdicts,
+  onToast,
+}: {
+  runs: McRun[];
+  verdicts: Record<string, "AWARDED" | "RETURNED">;
+  onToast: (m: string) => void;
+}) {
+  const packs = runs.filter((r) => r.findings > 0 && (r.status === "gate" || r.status === "complete"));
+
+  return (
+    <ViewShell
+      fig="09"
+      title="Report packs"
+      sub="The sourced report is the deliverable — findings, citations and the audit hash, bound per run. A pack seals the moment the committee signs; after that it is evidence, not a document."
+    >
+      <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)] sm:p-6">
+        <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">The committee pack</h3>
+            <p className="mt-2 max-w-md text-[12.5px] leading-relaxed text-ink-300">
+              Every sealed report for the sitting, bound into one cited file with a shared audit hash — the pack the
+              committee actually reads.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onToast("COMMITTEE PACK BINDING QUEUED — READY BEFORE THE SITTING")}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-4 font-code text-[9px] font-bold tracking-[0.18em] text-white transition-colors hover:bg-brand-700"
+          >
+            <Files className="h-3.5 w-3.5" aria-hidden="true" />
+            QUEUE BINDING
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:grid-cols-2">
+        {packs.map((run, i) => {
+          const assembling = run.status === "gate";
+          const v = verdicts[run.id];
+          const decision =
+            v === "AWARDED"
+              ? "AWARDED — SIGNED AT THE GATE"
+              : v === "RETURNED"
+                ? "RETURNED — RE-FILED AFTER CLARIFICATION"
+                : null;
+          const pages = 58 + run.citations * 9;
+          const size = (2.4 + run.findings * 1.6).toFixed(1);
+          return (
+            <motion.article
+              key={run.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
+              className="flex flex-col rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-code text-[10px] font-bold tracking-[0.08em] text-ink-950">{run.id}</p>
+                {assembling ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em] text-brand-700">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+                    </span>
+                    ASSEMBLING
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-ink-950 px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em] text-white">
+                    <CircleCheck className="h-2.5 w-2.5" aria-hidden="true" />
+                    SEALED
+                  </span>
+                )}
+              </div>
+              <p className="mt-1.5 truncate text-[13.5px] font-semibold text-ink-700">{run.title}</p>
+              <dl className="mt-4 grid grid-cols-3 gap-2 border-y border-ink-50 py-3 font-code text-[8px] tracking-[0.14em]">
+                <div>
+                  <dt className="text-ink-300">FINDINGS</dt>
+                  <dd className="mt-1 text-[13px] font-bold text-ink-950 tabular">{run.findings}</dd>
+                </div>
+                <div>
+                  <dt className="text-ink-300">CITED</dt>
+                  <dd className="mt-1 text-[13px] font-bold text-ink-950 tabular">{run.citations}</dd>
+                </div>
+                <div>
+                  <dt className="text-ink-300">UNSOURCED</dt>
+                  <dd className="mt-1 text-[13px] font-bold text-brand-700 tabular">0</dd>
+                </div>
+              </dl>
+              <p className="mt-3 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
+                PAGES ~{pages} · SIZE {size} MB · sha256 {shaTag(run.id)}
+                {decision && (
+                  <>
+                    <br />
+                    DECISION · {decision}
+                  </>
+                )}
+              </p>
+              <div className="mt-4 flex items-center gap-2 pt-1">
+                {assembling ? (
+                  <button
+                    type="button"
+                    onClick={() => onToast(`${run.id} SEALS AT THE GATE — EXPORT UNLOCKS ON SIGNATURE`)}
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-200 px-3 font-code text-[8.5px] font-bold tracking-[0.14em] text-ink-500 transition-colors hover:border-ink-400 hover:text-ink-800"
+                  >
+                    <Lock className="h-3 w-3" aria-hidden="true" />
+                    PREVIEW ONLY
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onToast(`EXPORT QUEUED — ${run.id} · PDF + OCDS · ${size} MB`)}
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-ink-950 px-3 font-code text-[8.5px] font-bold tracking-[0.14em] text-white transition-colors hover:bg-brand-600"
+                  >
+                    <Download className="h-3 w-3" aria-hidden="true" />
+                    DOWNLOAD PACK
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (navigator.clipboard?.writeText)
+                      navigator.clipboard.writeText(`quorum audit — ${run.id} — sha256 ${shaTag(run.id)}`).catch(() => undefined);
+                    onToast("AUDIT TRAIL COPIED TO CLIPBOARD");
+                  }}
+                  aria-label={`Copy audit trail for ${run.id}`}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-ink-200 text-ink-500 transition-colors hover:border-ink-400 hover:text-ink-900"
+                >
+                  <Copy className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </div>
+            </motion.article>
+          );
+        })}
+      </div>
+    </ViewShell>
+  );
+}
+
+/* ── Sources & portals ───────────────────────────────────────────────────── */
+
+const PORTAL_KINDS: Record<string, string> = {
+  "OCDS EXPLORER": "OPEN DATA · OCDS 1.1",
+  "PPA · KENYA": "NATIONAL PORTAL",
+  "PRAZ · ZIMBABWE": "NATIONAL PORTAL",
+  "GGPPBD · GHANA": "NATIONAL PORTAL",
+};
+
+function SourcesView({ onToast }: { onToast: (m: string) => void }) {
+  const standards = ["OCDS 1.1", "MCP TOOLS", "OPEN WEIGHTS", "PAGE CITATIONS"];
+  const degraded = PORTALS.filter((p) => !p.ok).length;
+
+  return (
+    <ViewShell
+      fig="10"
+      title="Sources & portals"
+      sub="A finding is only as lawful as its source. Every bid is read against national portals, supplier registries and the OCDS record — and each finding cites which."
+      action={
+        <button
+          type="button"
+          onClick={() => onToast("SOURCE REQUESTS ARE ADMIN-LOCKED IN v0.9")}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.18em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          REQUEST A SOURCE
+        </button>
+      }
+    >
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+        {standards.map((s, i) => (
+          <motion.div
+            key={s}
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
+            className="rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+          >
+            <p className="font-code text-[9.5px] font-bold tracking-[0.18em] text-ink-900">{s}</p>
+            <p className="mt-1.5 font-code text-[7px] tracking-[0.18em] text-ink-400">STANDARD {String(i + 1).padStart(2, "0")}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+            <header className="flex items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
+              <div>
+                <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">Connected portals</h2>
+                <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
+                  {PORTALS.length} SOURCES · {degraded} DEGRADED
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1.5 font-code text-[8px] font-semibold tracking-[0.18em] text-ink-600">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+                </span>
+                POLLING
+              </span>
+            </header>
+            <ul>
+              {PORTALS.map((p) => (
+                <li
+                  key={p.name}
+                  className="flex flex-wrap items-center gap-3 border-b border-ink-50 px-5 py-4 last:border-b-0"
+                >
+                  <span
+                    className={cn("relative flex h-2 w-2 shrink-0", !p.ok && "text-brand-600")}
+                    aria-hidden="true"
+                  >
+                    {p.ok ? (
+                      <span className="h-2 w-2 rounded-full bg-ink-950" />
+                    ) : (
+                      <>
+                        <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-600" />
+                      </>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-code text-[10px] font-bold tracking-[0.12em] text-ink-950">
+                      {p.name}
+                    </span>
+                    <span className="mt-0.5 block font-code text-[7.5px] tracking-[0.18em] text-ink-400">
+                      {PORTAL_KINDS[p.name] ?? "DATA SOURCE"}
+                    </span>
+                  </span>
+                  <span className="font-code text-[8px] tracking-[0.14em] text-ink-400">SYNCED {p.at}</span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em]",
+                      p.ok ? "bg-ink-950 text-white" : "bg-brand-600 text-white"
+                    )}
+                  >
+                    {p.ok ? "SYNCED" : "DEGRADED"}
+                  </span>
+                  {!p.ok && (
+                    <button
+                      type="button"
+                      onClick={() => onToast("RETRY QUEUED — GGPPBD SYNC · ATTEMPT 2 IN 60S")}
+                      aria-label={`Retry sync for ${p.name}`}
+                      className="grid h-7 w-7 place-items-center rounded-md border border-ink-200 text-ink-500 transition-colors hover:border-brand-400 hover:text-brand-700"
+                    >
+                      <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div className="grid content-start gap-4 sm:gap-6">
+          <div className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+            <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Why sources matter</h3>
+            <p className="mt-3 text-[12.5px] leading-relaxed text-ink-600">
+              A price is not “high” until the framework median says so. A bidder is not “related” until the registry says
+              so. Quorum cites the source — or it does not speak.
+            </p>
+          </div>
+          <div className="flex items-start gap-3 rounded-2xl border border-ink-100 bg-sand p-5">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-brand-700" aria-hidden="true" />
+            <p className="font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-600">
+              AUDIT LOGS sha256-SEALED · ON-PREM READY · NO TRACKERS
+            </p>
+          </div>
+        </div>
+      </div>
+    </ViewShell>
+  );
+}
+
+/* ── Award ledger ────────────────────────────────────────────────────────── */
+
+function AwardLedgerView({
+  ledger,
+  awaiting,
+  onToast,
+}: {
+  ledger: LedgerRow[];
+  awaiting: number;
+  onToast: (m: string) => void;
+}) {
+  const awarded = ledger.filter((l) => l.action === "AWARDED").length;
+  const returned = ledger.filter((l) => l.action === "RETURNED").length;
+
+  return (
+    <ViewShell
+      fig="11"
+      title="Award ledger"
+      sub="Every decision made at a gate — who signed, what they signed, and when. The agent writes everything else; only this page carries the gavel."
+    >
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-2">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+            {[
+              { label: "DECISIONS LOGGED", value: ledger.length },
+              { label: "AWARDED", value: awarded },
+              { label: "RETURNED", value: returned },
+              { label: "AWAITING GATE", value: awaiting },
+            ].map((s, i) => (
+              <motion.div
+                key={s.label}
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
+                className="rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+              >
+                <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">{s.label}</p>
+                <p className="mt-2 font-display text-[28px] font-black leading-none tracking-[-0.02em] tabular">{s.value}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] border-collapse text-left">
+                <caption className="sr-only">Award ledger — decisions signed at the human gate</caption>
+                <thead>
+                  <tr className="border-b border-ink-100 bg-paper/60">
+                    {["TENDER", "DECISION", "SIGNED BY", "LOGGED"].map((h) => (
+                      <th
+                        key={h}
+                        scope="col"
+                        className="px-4 py-2.5 font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledger.map((row) => (
+                    <tr
+                      key={`${row.tender}-${row.at}-${row.action}`}
+                      className="border-b border-ink-50 transition-colors last:border-b-0 hover:bg-paper"
+                    >
+                      <td className="py-3.5 pl-5 pr-4 font-code text-[10px] font-bold tracking-[0.08em] text-ink-950">
+                        {row.tender}
+                      </td>
+                      <td className="px-4">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em]",
+                            row.action === "AWARDED"
+                              ? "bg-ink-950 text-white"
+                              : "border border-brand-200 bg-brand-50 text-brand-800"
+                          )}
+                        >
+                          {row.action === "AWARDED" ? (
+                            <CircleCheck className="h-2.5 w-2.5" aria-hidden="true" />
+                          ) : (
+                            <CircleAlert className="h-2.5 w-2.5" aria-hidden="true" />
+                          )}
+                          {row.action}
+                        </span>
+                      </td>
+                      <td className="px-4 text-[13px] font-semibold text-ink-700">{row.by}</td>
+                      <td className="py-3.5 pr-5 font-code text-[8.5px] tracking-[0.12em] text-ink-400">{row.at}</td>
+                    </tr>
+                  ))}
+                  {ledger.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-10 text-center font-code text-[10px] tracking-[0.18em] text-ink-400">
+                        THE LEDGER IS BLANK — DECISIONS APPEAR THE MOMENT A GATE SIGNS
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid content-start gap-4 sm:gap-6">
+          <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
+            <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+            <div className="relative">
+              <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">The gavel has no autoplay</h3>
+              <p className="mt-3 font-code text-[9px] leading-[2] tracking-[0.16em] text-ink-300">
+                EVERY LINE CARRIES A NAME
+                <br />
+                AND A TIMESTAMP.
+                <br />
+                <span className="text-brand-400">THE AGENT PREPARES, FLAGS AND CITES — IT CAN NEVER SIGN.</span>
+              </p>
+            </div>
+          </div>
+          <StandingRuleCard onToast={onToast} />
+        </div>
+      </div>
+    </ViewShell>
+  );
+}
+
+/* ── Committee ───────────────────────────────────────────────────────────── */
+
+function CommitteeView({ firstName, onToast }: { firstName: string; onToast: (m: string) => void }) {
+  const present: { initials: string; name: string; role: string; you?: boolean }[] = [
+    { initials: "CM", name: "C. Mwangi", role: "CHAIR OF THE COMMITTEE" },
+    { initials: initialsOf(firstName), name: `${firstName} — you`, role: "PROCUREMENT OFFICER · HOLDS THE GAVEL", you: true },
+    { initials: "AB", name: "A. Banda", role: "FINANCE OFFICER" },
+    { initials: "JO", name: "J. Otieno", role: "TECHNICAL ADVISOR" },
+    { initials: "MC", name: "M. Chirwa", role: "LEGAL COUNSEL" },
+  ];
+  const openSeats = 4;
+
+  return (
+    <ViewShell
+      fig="12"
+      title="The committee"
+      sub="Nine seats, five present — the quorum the law asks for before an award counts. The agent attends every sitting; it holds no seat and no gavel."
+    >
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+            {present.map((m, i) => (
+              <motion.div
+                key={m.name}
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
+                className={cn(
+                  "rounded-2xl border bg-white p-4 shadow-[0_1px_2px_rgba(11,12,15,0.04)]",
+                  m.you ? "border-brand-300 ring-2 ring-brand-600/15" : "border-ink-100"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={cn(
+                      "grid h-10 w-10 shrink-0 place-items-center rounded-full font-code text-[10px] font-bold text-white",
+                      m.you ? "bg-brand-600" : "bg-ink-950"
+                    )}
+                    aria-hidden="true"
+                  >
+                    {m.initials}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13.5px] font-semibold text-ink-950">{m.name}</p>
+                    <p className="mt-0.5 font-code text-[7px] tracking-[0.18em] text-ink-400">{m.role}</p>
+                  </div>
+                </div>
+                <span
+                  className={cn(
+                    "mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em]",
+                    m.you ? "bg-brand-600 text-white" : "bg-ink-50 text-ink-700"
+                  )}
+                >
+                  {m.you ? (
+                    <>
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-white" aria-hidden="true" />
+                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" aria-hidden="true" />
+                      </span>
+                      YOU · GAVEL
+                    </>
+                  ) : (
+                    "PRESENT"
+                  )}
+                </span>
+              </motion.div>
+            ))}
+            {Array.from({ length: openSeats }).map((_, i) => (
+              <motion.div
+                key={`open-${i}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.3 + 0.05 * i, ease: EASE }}
+                className="grid place-items-center rounded-2xl border border-dashed border-ink-200 p-4 text-center"
+              >
+                <div>
+                  <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">SEAT OPEN</p>
+                  <p className="mt-1 font-code text-[7px] tracking-[0.18em] text-ink-300">QUORUM CALL PENDING</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid content-start gap-4 sm:gap-6">
+          <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
+            <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+            <div className="relative">
+              <div className="flex items-center justify-between gap-4">
+                <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">Quorum</h3>
+                <div className="grid grid-cols-3 gap-1" aria-hidden="true">
+                  {Array.from({ length: 9 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        "h-2 w-2 rounded-[2px]",
+                        i === 4 ? "bg-brand-500" : [0, 2, 6, 8].includes(i) ? "bg-white" : "border border-white/25"
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
+              <p className="mt-4 font-display text-[40px] font-black leading-none tracking-[-0.02em]">
+                5<span className="text-brand-400">/</span>9
+              </p>
+              <p className="mt-3 text-[12.5px] leading-relaxed text-ink-300">
+                The minimum of members a committee needs before an award becomes lawful — the mark on the door is that
+                threshold, drawn.
+              </p>
+              <p className="mt-4 font-code text-[8px] tracking-[0.18em] text-ink-400">
+                PRESENT TODAY 5 · OPEN {openSeats} · A SITTING REQUIRES 5
+              </p>
+            </div>
+          </div>
+          <GavelProtocolCard />
+          <button
+            type="button"
+            onClick={() => onToast("SITTING SUMMONS QUEUED — 4 SEATS PENDING QUORUM CALL")}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.18em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950"
+          >
+            SUMMON THE SITTING
+          </button>
+        </div>
+      </div>
+    </ViewShell>
+  );
+}
+
+/* ── Rules & guards ──────────────────────────────────────────────────────── */
+
+function GuardPills<T extends string>({
+  value,
+  options,
+  onChange,
+  groupLabel,
+}: {
+  value: T;
+  options: readonly T[];
+  onChange: (v: T) => void;
+  groupLabel: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={groupLabel}>
+      {options.map((o) => (
+        <button
+          key={o}
+          type="button"
+          onClick={() => onChange(o)}
+          aria-pressed={value === o}
+          className={cn(
+            "h-8 rounded-full border px-3.5 font-code text-[8.5px] font-bold tracking-[0.14em] transition-all",
+            value === o
+              ? "border-ink-950 bg-ink-950 text-white"
+              : "border-ink-200 bg-white text-ink-500 hover:border-ink-400"
+          )}
+        >
+          {o}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RulesView({ onToast }: { onToast: (m: string) => void }) {
+  const [variance, setVariance] = useState<"15%" | "25%" | "40%">("25%");
+  const [checklist, setChecklist] = useState<"STANDARD · 12/16" | "STRICT · 16/16">("STANDARD · 12/16");
+  const [registry, setRegistry] = useState(true);
+
+  const guards: { no: string; title: string; desc: string; control: ReactNode }[] = [
+    {
+      no: "01",
+      title: "Price variance flag",
+      desc: "Flag any bid priced above the framework median by more than —",
+      control: (
+        <GuardPills
+          value={variance}
+          options={["15%", "25%", "40%"] as const}
+          onChange={(v) => {
+            setVariance(v);
+            onToast(`GUARD UPDATED — PRICE VARIANCE NOW ${v} · WRITTEN TO THE AUDIT TRAIL`);
+          }}
+          groupLabel="Price variance threshold"
+        />
+      ),
+    },
+    {
+      no: "02",
+      title: "Document checklist",
+      desc: "Minimum documents present before a run may complete —",
+      control: (
+        <GuardPills
+          value={checklist}
+          options={["STANDARD · 12/16", "STRICT · 16/16"] as const}
+          onChange={(v) => {
+            setChecklist(v);
+            onToast(`GUARD UPDATED — CHECKLIST MODE ${v} · WRITTEN TO THE AUDIT TRAIL`);
+          }}
+          groupLabel="Document checklist mode"
+        />
+      ),
+    },
+    {
+      no: "03",
+      title: "Registry cross-check",
+      desc: "Match every bidder against the open registry before a finding is raised —",
+      control: (
+        <GuardPills
+          value={registry ? "ON" : "OFF"}
+          options={["ON", "OFF"] as const}
+          onChange={(v) => {
+            setRegistry(v === "ON");
+            onToast(`GUARD UPDATED — REGISTRY CROSS-CHECK ${v} · WRITTEN TO THE AUDIT TRAIL`);
+          }}
+          groupLabel="Registry cross-check"
+        />
+      ),
+    },
+  ];
+
+  return (
+    <ViewShell
+      fig="13"
+      title="Rules & guards"
+      sub="The thresholds the agent must obey inside a run. Three clauses are carved; the guards below are tunable — and every change is written to the audit trail with your name on it."
+    >
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-2">
+          {guards.map((g, i) => (
+            <motion.div
+              key={g.no}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.05 * i, ease: EASE }}
+              className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+            >
+              <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">GUARD {g.no}</p>
+              <h3 className="mt-1.5 font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">{g.title}</h3>
+              <p className="mt-1 text-[12.5px] text-ink-500">{g.desc}</p>
+              <div className="mt-4">{g.control}</div>
+            </motion.div>
+          ))}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2, ease: EASE }}
+            className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400">GUARD 04</p>
+                <h3 className="mt-1.5 font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Citation policy</h3>
+                <p className="mt-1 max-w-md text-[12.5px] text-ink-500">
+                  Page-level citations on every claim. Zero unsourced tolerated — not a setting, a design constraint.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 font-code text-[8px] font-bold tracking-[0.16em] text-brand-800">
+                <Lock className="h-3 w-3" aria-hidden="true" />
+                LOCKED BY DESIGN
+              </span>
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="grid content-start gap-4 sm:gap-6">
+          <StandingRuleCard onToast={onToast} />
+          <div className="flex items-start gap-3 rounded-2xl border border-ink-100 bg-sand p-5">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-brand-700" aria-hidden="true" />
+            <p className="font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-600">
+              EVERY GUARD CHANGE IS LOGGED — NAME, TIMESTAMP, BEFORE &amp; AFTER VALUES.
+            </p>
+          </div>
+        </div>
+      </div>
+    </ViewShell>
+  );
+}
+
+/* ── Dedicated COMMAND views ─────────────────────────────────────────────── */
+
+function RunsView({
+  runs,
+  query,
+  onQuery,
+  filter,
+  onFilter,
+  onToast,
+  onNewRun,
+}: {
+  runs: McRun[];
+  query: string;
+  onQuery: (v: string) => void;
+  filter: RunFilter;
+  onFilter: (f: RunFilter) => void;
+  onToast: (m: string) => void;
+  onNewRun: () => void;
+}) {
+  return (
+    <ViewShell
+      fig="05"
+      title="Run register"
+      sub="Every file the agent has opened — live, queued, at a gate or decided. Expand a run for its top findings and its audit trail."
+    >
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <RunRegister runs={runs} query={query} onQuery={onQuery} filter={filter} onFilter={onFilter} onToast={onToast} />
+        </div>
+        <div className="grid content-start gap-4 sm:gap-6">
+          <NewRunCard onNewRun={onNewRun} />
+          <StandingRuleCard onToast={onToast} />
+        </div>
+      </div>
+    </ViewShell>
+  );
+}
+
+function GatesView({
+  queue,
+  ledger,
+  firstName,
+  onSign,
+  onReturn,
+  onGoCommittee,
+  onToast,
+}: {
+  queue: GateItem[];
+  ledger: LedgerRow[];
+  firstName: string;
+  onSign: (g: GateItem) => void;
+  onReturn: (g: GateItem) => void;
+  onGoCommittee: () => void;
+  onToast: (m: string) => void;
+}) {
+  return (
+    <ViewShell
+      fig="06"
+      title="Human gates"
+      sub="The stop only a human can pass. The agent assembles the file and halts; the committee reads the cited flags and decides — by name, on the record."
+    >
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <GateQueue queue={queue} ledger={ledger} firstName={firstName} onSign={onSign} onReturn={onReturn} />
+        </div>
+        <div className="grid content-start gap-4 sm:gap-6">
+          <GavelProtocolCard />
+          <button
+            type="button"
+            onClick={onGoCommittee}
+            className="group relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-left text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)] transition-transform hover:-translate-y-0.5"
+          >
+            <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+            <div className="relative">
+              <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">Who signs? The committee.</h3>
+              <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-300">
+                Five of nine seats present before an award counts. Meet the roster and the quorum rule.
+              </p>
+              <span className="mt-4 inline-flex items-center gap-1.5 font-code text-[8.5px] font-bold tracking-[0.2em] text-brand-400">
+                OPEN THE ROSTER
+                <ArrowUpRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
+              </span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </ViewShell>
+  );
+}
+
+function FeedView({ onToast }: { onToast: (m: string) => void }) {
+  return (
+    <ViewShell
+      fig="07"
+      title="Agent feed"
+      sub="The work, streaming. Ingest, checklist, registry, flags, citations — watch a run the way the committee will read it: line by line, every claim sourced."
+    >
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <AgentFeed />
+        </div>
+        <div className="grid content-start gap-4 sm:gap-6">
+          <PortalSync onToast={onToast} />
+          <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
+            <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+            <div className="relative">
+              <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">Citation policy</h3>
+              <p className="mt-3 font-code text-[9px] leading-[2] tracking-[0.16em] text-ink-300">
+                IF THE AGENT CANNOT CITE IT,
+                <br />
+                IT CANNOT SAY IT.
+                <br />
+                <span className="text-brand-400">PAGE, CLAUSE OR REGISTRY ID — EVERY TIME.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ViewShell>
+  );
+}
+
 /* ── The screen ──────────────────────────────────────────────────────────── */
 
 export function Dashboard({
@@ -1130,6 +2322,10 @@ export function Dashboard({
   const [navOpen, setNavOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
+  const [verdicts, setVerdicts] = useState<Record<string, "AWARDED" | "RETURNED">>(() =>
+    Object.fromEntries(SEED_LEDGER.map((row) => [row.tender, row.action]))
+  );
+  const [extraFindings, setExtraFindings] = useState<SeedFinding[]>([]);
   const completionTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   /* Clock + date */
@@ -1140,24 +2336,6 @@ export function Dashboard({
       cancelAnimationFrame(first);
       clearInterval(id);
     };
-  }, []);
-
-  /* Scrollspy */
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) setActive(visible[0].target.id as SectionId);
-      },
-      { rootMargin: "-30% 0px -55% 0px", threshold: 0 }
-    );
-    SECTION_NAV.forEach(({ id }) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
   }, []);
 
   /* Body scroll lock for the mobile drawer */
@@ -1187,9 +2365,16 @@ export function Dashboard({
     .reduce((sum, r) => sum + r.citations, 0);
   const citationPct = findingsTotal > 0 ? Math.round((citedTotal / findingsTotal) * 100) : 100;
 
-  const navigate = (id: SectionId) => {
+  const findingRows = useMemo(
+    () => buildFindingRows([...SEED_FINDINGS, ...extraFindings], runs, verdicts),
+    [extraFindings, runs, verdicts]
+  );
+  const openFindings = findingRows.filter((r) => r.status === "OPEN").length;
+
+  const switchTo = (id: SectionId) => {
     setNavOpen(false);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActive(id);
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   };
 
   const launchRun = (ref: string, title: string, format: string) => {
@@ -1216,6 +2401,7 @@ export function Dashboard({
             : r
         )
       );
+      setExtraFindings((prev) => [...prev, ...LAUNCHED_FINDINGS.map((f) => ({ ...f, run: ref }))]);
       onToast(`RUN COMPLETE — ${ref.toUpperCase()} · 4 FINDINGS · 4 CITATIONS · 0 UNSOURCED`);
     }, 12_000);
     completionTimers.current.push(t);
@@ -1223,6 +2409,7 @@ export function Dashboard({
 
   const signGate = (g: GateItem) => {
     setQueue((prev) => prev.filter((item) => item.id !== g.id));
+    setVerdicts((prev) => ({ ...prev, [g.tender]: "AWARDED" }));
     setLedger((prev) => [
       { tender: g.tender, action: "AWARDED", by: firstName, at: "JUST NOW" },
       ...prev,
@@ -1236,6 +2423,7 @@ export function Dashboard({
 
   const returnGate = (g: GateItem) => {
     setQueue((prev) => prev.filter((item) => item.id !== g.id));
+    setVerdicts((prev) => ({ ...prev, [g.tender]: "RETURNED" }));
     setLedger((prev) => [
       { tender: g.tender, action: "RETURNED", by: firstName, at: "JUST NOW" },
       ...prev,
@@ -1245,6 +2433,51 @@ export function Dashboard({
       prev.map((r) => (r.id === g.tender ? { ...r, status: "running", duration: "LIVE", startedAt: "RE-RUN" } : r))
     );
     onToast(`${g.tender} RETURNED — AGENT TASKED WITH CLARIFICATION`);
+  };
+
+  const renderView = () => {
+    switch (active) {
+      case "mc-runs":
+        return (
+          <RunsView
+            runs={runs}
+            query={query}
+            onQuery={setQuery}
+            filter={filter}
+            onFilter={setFilter}
+            onToast={onToast}
+            onNewRun={() => setModalOpen(true)}
+          />
+        );
+      case "mc-gates":
+        return (
+          <GatesView
+            queue={queue}
+            ledger={ledger}
+            firstName={firstName}
+            onSign={signGate}
+            onReturn={returnGate}
+            onGoCommittee={() => switchTo("mc-committee")}
+            onToast={onToast}
+          />
+        );
+      case "mc-activity":
+        return <FeedView onToast={onToast} />;
+      case "mc-findings":
+        return <FindingsView rows={findingRows} onOpenRun={() => switchTo("mc-runs")} />;
+      case "mc-reports":
+        return <ReportPacksView runs={runs} verdicts={verdicts} onToast={onToast} />;
+      case "mc-sources":
+        return <SourcesView onToast={onToast} />;
+      case "mc-ledger":
+        return <AwardLedgerView ledger={ledger} awaiting={queue.length} onToast={onToast} />;
+      case "mc-committee":
+        return <CommitteeView firstName={firstName} onToast={onToast} />;
+      case "mc-rules":
+        return <RulesView onToast={onToast} />;
+      default:
+        return null;
+    }
   };
 
   return (
@@ -1266,9 +2499,8 @@ export function Dashboard({
           <SidebarContent
             active={active}
             user={user}
-            runsCount={runs.length}
-            gatesCount={queue.length}
-            onNavigate={navigate}
+            counts={{ runs: runs.length, gates: queue.length, findings: openFindings }}
+            onNavigate={switchTo}
             onNewRun={() => setModalOpen(true)}
             onSignOut={onSignOut}
             onExit={onExit}
@@ -1333,9 +2565,8 @@ export function Dashboard({
                 <SidebarContent
                   active={active}
                   user={user}
-                  runsCount={runs.length}
-                  gatesCount={queue.length}
-                  onNavigate={navigate}
+                  counts={{ runs: runs.length, gates: queue.length, findings: openFindings }}
+                  onNavigate={switchTo}
                   onNewRun={() => {
                     setNavOpen(false);
                     setModalOpen(true);
@@ -1357,7 +2588,7 @@ export function Dashboard({
             <p className="truncate font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
               MISSION CONTROL <span className="text-ink-200">/</span>{" "}
               <span className="text-ink-900">
-                {SECTION_NAV.find((s) => s.id === active)?.label ?? "OVERVIEW"}
+                {SECTION_LABEL[active] ?? "OVERVIEW"}
               </span>
             </p>
             <div className="flex items-center gap-3 sm:gap-4">
@@ -1394,6 +2625,9 @@ export function Dashboard({
         </div>
 
         <main id="mc-main" className="mx-auto w-full max-w-[1200px] px-4 pb-14 pt-8 sm:px-6 lg:px-8">
+          <AnimatePresence mode="wait" initial={false}>
+            {active === "mc-overview" ? (
+              <motion.div key="mc-board" exit={{ opacity: 0, transition: { duration: 0.15 } }}>
           {/* Greeting */}
           <section id="mc-overview" aria-labelledby="mc-greeting" className="scroll-mt-20">
             <div className="flex flex-wrap items-end justify-between gap-5">
@@ -1493,27 +2727,7 @@ export function Dashboard({
             </div>
             <div className="grid content-start gap-4 sm:gap-6">
               <PortalSync onToast={onToast} />
-              <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
-                <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
-                <div className="relative">
-                <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">The standing rule</h3>
-                <p className="mt-3 font-code text-[9px] leading-[2] tracking-[0.16em] text-ink-300">
-                  QUORUM PREPARES THE FILE.
-                  <br />
-                  IT NEVER AWARDS THE TENDER.
-                  <br />
-                  <span className="text-brand-400">THE COMMITTEE SIGNS — THE AGENT NEVER DOES.</span>
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onToast("STANDING RULES — 3 CLAUSES · UNEDITABLE BY DESIGN")}
-                  className="mt-4 inline-flex items-center gap-1.5 font-code text-[8.5px] font-bold tracking-[0.2em] text-ink-300 transition-colors hover:text-white"
-                >
-                  READ THE RULES
-                  <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
-                </button>
-                </div>
-              </div>
+              <StandingRuleCard onToast={onToast} />
             </div>
           </div>
 
@@ -1521,6 +2735,19 @@ export function Dashboard({
           <p className="mt-10 border-t border-ink-100 pt-5 text-center font-code text-[8px] tracking-[0.24em] text-ink-400">
             QUORUM · MISSION CONTROL · SESSION {initialsOf(user?.name ?? "Q")} · AUDIT-GRADE LOGS · NO TRACKERS
           </p>
+              </motion.div>
+            ) : (
+              <motion.div
+                key={active}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                transition={{ duration: 0.4, ease: EASE }}
+              >
+                {renderView()}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </main>
       </div>
 
