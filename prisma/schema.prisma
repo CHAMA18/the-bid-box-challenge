@@ -1,6 +1,5 @@
-// Bid Box — agentic tender review for public procurement.
-// Domain models below are legacy demo data; User/Session back the
-// authentication screens (#/register, #/login).
+// Quorum — agentic tender review for public procurement.
+// User/Session back the authentication screens (#/register, #/login).
 
 generator client {
   provider = "prisma-client-js"
@@ -9,58 +8,6 @@ generator client {
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
-}
-
-model Shipment {
-  id             String          @id @default(cuid())
-  code           String          @unique // e.g. GXL-4821-BGD
-  origin         String
-  originCode     String
-  destination    String
-  destinationCode String
-  service        String // EXPRESS_AIR | STANDARD_ROAD | ECONOMY_SEA
-  status         String // BOOKED | PICKED_UP | IN_TRANSIT | CUSTOMS | OUT_FOR_DELIVERY | DELIVERED
-  weightKg       Float
-  pieces         Int
-  shipper        String
-  consignee      String
-  etaLabel       String
-  createdAt      DateTime        @default(now())
-  events         ShipmentEvent[]
-}
-
-model ShipmentEvent {
-  id         String   @id @default(cuid())
-  shipmentId String
-  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  title      String
-  location   String
-  note       String?
-  timestamp  DateTime
-  done       Boolean  @default(true)
-  sortOrder  Int
-}
-
-model QuoteRequest {
-  id          String   @id @default(cuid())
-  origin      String
-  destination String
-  weightKg    Float
-  service     String
-  insurance   Boolean  @default(false)
-  priceMin    Float
-  priceMax    Float
-  transitDays Int
-  createdAt   DateTime @default(now())
-}
-
-model ContactMessage {
-  id        String   @id @default(cuid())
-  name      String
-  email     String
-  company   String?
-  message   String
-  createdAt DateTime @default(now())
 }
 
 // ── Authentication ──────────────────────────────────────────────────────────

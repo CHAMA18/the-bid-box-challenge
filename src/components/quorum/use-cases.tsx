@@ -1,5 +1,5 @@
 import { Globe, HeartPulse, Landmark, Users } from "lucide-react";
-import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 
 const USE_CASES = [
   {
@@ -38,7 +38,7 @@ export function UseCases() {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <Reveal>
-              <Eyebrow>Where Bid Box works</Eyebrow>
+              <Eyebrow>Where Quorum works</Eyebrow>
             </Reveal>
             <Reveal delay={0.06}>
               <h2 className="mt-4 max-w-2xl font-display text-[34px] font-black leading-[1.06] tracking-[-0.025em] text-ink-950 sm:text-[44px]">

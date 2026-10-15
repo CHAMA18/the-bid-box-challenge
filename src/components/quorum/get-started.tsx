@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ArrowRight, Check, Gauge, Send } from "lucide-react";
-import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 import type { AuthUser } from "@/lib/auth-types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";

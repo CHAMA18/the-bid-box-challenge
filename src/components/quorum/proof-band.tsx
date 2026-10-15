@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
-import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 
 const STATS = [
   { value: 1284, format: (n: number) => Math.round(n).toLocaleString("en-US"), label: "tenders read end to end" },

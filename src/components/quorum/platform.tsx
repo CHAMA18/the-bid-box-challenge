@@ -1,11 +1,11 @@
 import { Database } from "lucide-react";
-import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 
 const CONCEPTS = [
   {
     term: "MCP",
     full: "Model Context Protocol",
-    body: "The open standard Bid Box's tools speak. Logged, inspectable, swappable.",
+    body: "The open standard Quorum's tools speak. Logged, inspectable, swappable.",
   },
   {
     term: "OCDS",
@@ -87,7 +87,7 @@ export function Platform() {
                 </p>
                 <p className="mt-1.5 max-w-md text-[13.5px] leading-relaxed text-ink-600">
                   National e-procurement portals, open by default. Notices, awards and contracts —
-                  the JSON Bid Box reads.
+                  the JSON Quorum reads.
                 </p>
               </div>
             </div>

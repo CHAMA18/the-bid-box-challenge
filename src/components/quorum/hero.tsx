@@ -2,8 +2,8 @@
 
 import { motion } from "framer-motion";
 import { ArrowRight, CirclePause, FileCheck2, Landmark } from "lucide-react";
-import { AgentRun } from "@/components/bidbox/agent-run";
-import { Eyebrow } from "@/components/bidbox/reveal";
+import { AgentRun } from "@/components/quorum/agent-run";
+import { Eyebrow } from "@/components/quorum/reveal";
 
 const STATS = [
   { value: "20", suffix: " min", label: "from tender notices to a decision-ready file" },
@@ -58,7 +58,7 @@ export function Hero({ onGetStarted }: { onGetStarted: () => void }) {
               transition={{ duration: 0.7, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
               className="mt-6 max-w-xl text-[17px] leading-relaxed text-ink-600"
             >
-              Bid Box reads a public tender end to end — sorts the bids, ticks off the
+              Quorum reads a public tender end to end — sorts the bids, ticks off the
               documents, checks each bidder, compares prices and writes the report. Every
               finding cited. Then it stops and hands over:{" "}
               <span className="font-semibold text-ink-900">the committee decides.</span>

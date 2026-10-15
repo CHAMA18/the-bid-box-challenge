@@ -1,5 +1,5 @@
 import { CirclePause, ScrollText } from "lucide-react";
-import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 
 const TASKS = [
   "Sorting bids",
@@ -11,7 +11,7 @@ const TASKS = [
 
 /**
  * Overview — the job in numbers: 26 days of committee work vs ~20 minutes
- * of Bid Box work, ending at a hard human gate.
+ * of Quorum work, ending at a hard human gate.
  */
 export function Overview() {
   return (
@@ -33,7 +33,7 @@ export function Overview() {
                 Sorting bids, ticking off documents, checking each bidder, comparing prices and
                 writing the report is{" "}
                 <span className="font-semibold text-ink-900">26 days of committee work today</span>.
-                Bid Box does the same work in about twenty minutes — and then stops.
+                Quorum does the same work in about twenty minutes — and then stops.
               </p>
             </Reveal>
             <Reveal delay={0.18}>
@@ -68,7 +68,7 @@ export function Overview() {
                 {/* Callout flag above the sliver */}
                 <div className="absolute -top-12 right-0 flex flex-col items-end" aria-hidden="true">
                   <span className="rounded-md bg-brand-600 px-2.5 py-1 font-code text-[9.5px] font-bold tracking-[0.12em] text-white shadow-[0_6px_16px_rgba(217,38,22,0.35)]">
-                    BID BOX · ~20 MIN
+                    QUORUM · ~20 MIN
                   </span>
                   <span className="mr-px h-4 w-px bg-brand-600/70" />
                 </div>
@@ -100,7 +100,7 @@ export function Overview() {
                 ))}
               </div>
               <p className="mt-2.5 font-code text-[10px] tracking-[0.14em] text-ink-400">
-                ↑ WHAT THE COMMITTEE DOES BY HAND · THE RED SLICE — BID BOX&apos;S SHARE, DRAWN TO SCALE ↑
+                ↑ WHAT THE COMMITTEE DOES BY HAND · THE RED SLICE — QUORUM&apos;S SHARE, DRAWN TO SCALE ↑
               </p>
 
               {/* Human gate */}
@@ -113,7 +113,7 @@ export function Overview() {
                     COMMITTEE DECIDES
                   </p>
                   <p className="mt-1 text-[14.5px] font-medium leading-snug text-ink-800">
-                    Bid Box stops here and hands over a sourced report.
+                    Quorum stops here and hands over a sourced report.
                   </p>
                 </div>
               </div>

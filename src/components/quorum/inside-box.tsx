@@ -1,5 +1,5 @@
-import { Box, ShieldCheck } from "lucide-react";
-import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import { Workflow, ShieldCheck } from "lucide-react";
+import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 
 const DOES = [
   {
@@ -52,16 +52,16 @@ const GETS = [
 ];
 
 /**
- * Inside the box — what Bid Box does on every run, and what you get out of it.
+ * Inside the run — what Quorum does on every run, and what you get out of it.
  */
-export function InsideBox() {
+export function InsideRun() {
   return (
     <section id="inside" className="scroll-mt-20 bg-paper">
       <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <Reveal>
-              <Eyebrow>Inside the box</Eyebrow>
+              <Eyebrow>Inside the run</Eyebrow>
             </Reveal>
             <Reveal delay={0.06}>
               <h2 className="mt-4 max-w-2xl font-display text-[34px] font-black leading-[1.06] tracking-[-0.025em] text-ink-950 sm:text-[44px]">
@@ -83,14 +83,14 @@ export function InsideBox() {
             <article className="flex h-full flex-col rounded-3xl border border-ink-100 bg-white p-6 shadow-[0_20px_50px_rgba(11,12,15,0.06)] sm:p-8">
               <header className="flex items-center gap-4 border-b border-ink-100 pb-5">
                 <span className="grid h-12 w-12 place-items-center rounded-2xl bg-ink-950">
-                  <Box className="h-5.5 w-5.5 text-brand-400" aria-hidden="true" />
+                  <Workflow className="h-5.5 w-5.5 text-brand-400" aria-hidden="true" />
                 </span>
                 <div>
                   <p className="font-code text-[10px] font-semibold tracking-[0.26em] text-ink-500">
                     LIST 01
                   </p>
                   <h3 className="font-display text-[22px] font-extrabold tracking-tight text-ink-950">
-                    What Bid Box does
+                    What Quorum does
                   </h3>
                 </div>
                 <span className="ml-auto font-code text-[11px] font-semibold text-ink-400 tabular">

@@ -24,11 +24,11 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bid Box — Agentic tender review for public procurement",
+  title: "Quorum — Agentic tender review for public procurement",
   description:
-    "Bid Box reads a public tender end to end — sorts the bids, ticks off the documents, checks each bidder, compares prices and writes the report, every finding cited. Then it stops: the committee decides.",
+    "Quorum reads a public tender end to end — sorts the bids, ticks off the documents, checks each bidder, compares prices and writes the report, every finding cited. Then it stops: the committee decides.",
   keywords: [
-    "Bid Box",
+    "Quorum",
     "agentic AI",
     "public procurement",
     "tender review",
@@ -38,17 +38,17 @@ export const metadata: Metadata = {
     "OCDS",
     "human in the loop",
   ],
-  authors: [{ name: "Bid Box" }],
+  authors: [{ name: "Quorum" }],
   openGraph: {
-    title: "Bid Box — Agentic tender review for public procurement",
+    title: "Quorum — Agentic tender review for public procurement",
     description:
       "Twenty-six days of committee work in twenty minutes of agent work — with every finding cited, and a hard stop before the award.",
-    siteName: "Bid Box",
+    siteName: "Quorum",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Bid Box — Agentic tender review for public procurement",
+    title: "Quorum — Agentic tender review for public procurement",
     description:
       "Agents prepare the file, committees award the tender. Agentic procurement software, built for Africa.",
   },

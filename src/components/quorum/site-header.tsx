@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUpRight, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
-import { BidBoxLogo } from "@/components/bidbox/logo";
+import { QuorumLogo } from "@/components/quorum/logo";
 import type { AuthUser } from "@/lib/auth-types";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ const NAV = [
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "BB";
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "Q";
 }
 
 export function SiteHeader({
@@ -61,8 +61,8 @@ export function SiteHeader({
       )}
     >
       <div className="mx-auto flex h-[72px] w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Link href="/" aria-label="Bid Box home" onClick={() => setOpen(false)}>
-          <BidBoxLogo />
+        <Link href="/" aria-label="Quorum home" onClick={() => setOpen(false)}>
+          <QuorumLogo />
         </Link>
 
         <nav aria-label="Primary" className="hidden items-center gap-1 lg:flex">

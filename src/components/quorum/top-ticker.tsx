@@ -14,7 +14,7 @@ const ITEMS = [
 export function TopTicker() {
   const row = [...ITEMS, ...ITEMS];
   return (
-    <div className="relative overflow-hidden bg-ink-950 py-2" aria-label="Bid Box announcements">
+    <div className="relative overflow-hidden bg-ink-950 py-2" aria-label="Quorum announcements">
       <div className="flex w-max animate-marquee items-center gap-10 pr-10">
         {row.map((item, i) => (
           <span

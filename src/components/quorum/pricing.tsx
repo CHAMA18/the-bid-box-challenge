@@ -1,5 +1,5 @@
 import { ArrowRight, Check } from "lucide-react";
-import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 import { cn } from "@/lib/utils";
 
 const TIERS = [

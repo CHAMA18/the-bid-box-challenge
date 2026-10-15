@@ -15,12 +15,12 @@ interface Line {
 }
 
 /**
- * One faithful pass of a Bid Box run:
+ * One faithful pass of a Quorum run:
  * OCDS in, logged MCP tool calls, every finding carrying a citation,
  * and a hard stop at the human gate.
  */
 const SCRIPT: Line[] = [
-  { kind: "sys", text: "bidbox-agent run --tender KE-NCB-104293 --format ocds" },
+  { kind: "sys", text: "quorum-agent run --tender KE-NCB-104293 --format ocds" },
   { kind: "tool", time: "00:00.4", label: "fetch-notices", text: "portal reachable · 4 bids parsed from OCDS" },
   { kind: "tool", time: "00:03.1", label: "check-documents", text: "16 required · bid 03 missing tax clearance" },
   { kind: "cite", text: "bid-03/checklist.pdf — page 4" },
@@ -161,7 +161,7 @@ export function AgentRun() {
             <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />
           </span>
           <span className="font-code text-[10.5px] font-semibold tracking-[0.16em] text-ink-400">
-            bidbox-agent — sample run
+            quorum-agent — sample run
           </span>
         </div>
         <span className="hidden font-code text-[9px] tracking-[0.22em] text-ink-600 sm:block">MCP · LOGGED · OCDS</span>

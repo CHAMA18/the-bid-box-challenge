@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
 import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff, Lock } from "lucide-react";
-import { BidBoxLogo } from "@/components/bidbox/logo";
-import { Eyebrow } from "@/components/bidbox/reveal";
+import { QuorumLogo } from "@/components/quorum/logo";
+import { Eyebrow } from "@/components/quorum/reveal";
 import type { AuthMode, AuthUser } from "@/lib/auth-types";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +38,7 @@ function deriveName(email: string): string {
 
 type LineKind = "cmd" | "step" | "ok" | "gate";
 const SCRIPT: { text: string; kind: LineKind }[] = [
-  { text: "bidbox-agent run --tender KE-NCB-104293 --format ocds", kind: "cmd" },
+  { text: "quorum-agent run --tender KE-NCB-104293 --format ocds", kind: "cmd" },
   { text: "▸ ingesting 214 pages · 4 bids parsed", kind: "step" },
   { text: "▸ document checklist — 16/16 present", kind: "step" },
   { text: "▸ cross-checking the supplier registry", kind: "step" },
@@ -69,13 +69,13 @@ function AccessTerminal({ grantedFirstName }: { grantedFirstName: string | null 
           <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
         </div>
         <p className="font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
-          BIDBOX-AGENT · LIVE
+          QUORUM-AGENT · LIVE
         </p>
       </div>
       <div
         className="min-h-[178px] px-4 py-4 font-code text-[10.5px] leading-[1.95] sm:text-[11.5px]"
         role="img"
-        aria-label="Animated terminal: a Bid Box agent run ingesting a tender, checking documents, citing findings and stopping at the human gate"
+        aria-label="Animated terminal: a Quorum agent run ingesting a tender, checking documents, citing findings and stopping at the human gate"
       >
         {SCRIPT.slice(0, step).map((line) => (
           <p
@@ -150,7 +150,7 @@ function BrandPanel({ grantedFirstName }: { grantedFirstName: string | null }) {
       </div>
 
       <div className="relative p-10 pt-0 xl:p-14 xl:pt-0">
-        <ul className="flex flex-wrap gap-2.5" aria-label="What a Bid Box run guarantees">
+        <ul className="flex flex-wrap gap-2.5" aria-label="What a Quorum run guarantees">
           {FACTS.map((fact) => (
             <li
               key={fact}
@@ -162,7 +162,7 @@ function BrandPanel({ grantedFirstName }: { grantedFirstName: string | null }) {
         </ul>
         <div className="mt-6 border-l-2 border-brand-600 pl-4">
           <p className="max-w-md font-code text-[10px] leading-[1.9] tracking-[0.16em] text-ink-400">
-            BID BOX PREPARES THE FILE.
+            QUORUM PREPARES THE FILE.
             <br />
             IT NEVER AWARDS THE TENDER.
           </p>
@@ -186,7 +186,7 @@ function BrandStrip() {
         <p className="mt-3 font-display text-[21px] font-black leading-[1.12] tracking-[-0.015em] text-white">
           The agent reads. <span className="text-brand-500">You</span> award.
         </p>
-        <ul className="mt-4 flex flex-wrap gap-2" aria-label="What a Bid Box run guarantees">
+        <ul className="mt-4 flex flex-wrap gap-2" aria-label="What a Quorum run guarantees">
           {FACTS.map((fact) => (
             <li
               key={fact}
@@ -552,10 +552,10 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
         <button
           type="button"
           onClick={onClose}
-          aria-label="Back to the Bid Box site"
+          aria-label="Back to the Quorum site"
           className="rounded-lg outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-brand-500"
         >
-          <BidBoxLogo variant="light" />
+          <QuorumLogo variant="light" />
         </button>
         <div className="flex items-center gap-4 sm:gap-6">
           <p className="hidden items-center gap-2.5 font-code text-[9px] tracking-[0.22em] text-ink-400 md:flex">
@@ -622,7 +622,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                     <p className="mt-3 text-[15px] leading-relaxed text-ink-600">
                       {mode === "register"
                         ? "One account for your procurement team. The agent prepares the file — you keep the gavel."
-                        : "Sign in to your Bid Box workspace. The file is waiting, every finding cited."}
+                        : "Sign in to your Quorum workspace. The file is waiting, every finding cited."}
                     </p>
 
                     {/* Mode switch */}
@@ -997,7 +997,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
 
                     {/* Switch mode */}
                     <p className="mt-5 text-center text-[13.5px] text-ink-500">
-                      {mode === "register" ? "Already have access?" : "New to Bid Box?"}{" "}
+                      {mode === "register" ? "Already have access?" : "New to Quorum?"}{" "}
                       <button
                         type="button"
                         onClick={() => onModeChange(mode === "register" ? "login" : "register")}
@@ -1019,7 +1019,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
           {/* Right column footer */}
           <div className="border-t border-ink-100 px-4 py-4 text-center sm:px-10">
             <p className="font-code text-[8.5px] tracking-[0.24em] text-ink-400">
-              THE BID BOX · AGENTIC PROCUREMENT · THE COMMITTEE SIGNS — THE AGENT NEVER DOES
+              QUORUM · AGENTIC PROCUREMENT · THE COMMITTEE SIGNS — THE AGENT NEVER DOES
             </p>
           </div>
         </main>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ArrowRight, CirclePause, Download, FileText, PenLine } from "lucide-react";
-import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 import { cn } from "@/lib/utils";
 
 type TabId = "report" | "flags" | "audit";
@@ -121,7 +121,7 @@ function Annotation({ children, className }: { children: React.ReactNode; classN
 
 /**
  * The output — an annotated, interactive mock of the sourced report
- * Bid Box hands to the committee: report, flag register and audit log.
+ * Quorum hands to the committee: report, flag register and audit log.
  */
 export function ReportMock() {
   const [tab, setTab] = useState<TabId>("report");
@@ -163,7 +163,7 @@ export function ReportMock() {
                 href="#inside"
                 className="group mt-8 inline-flex items-center gap-2 text-[15px] font-semibold text-brand-700 transition-colors hover:text-brand-800"
               >
-                See everything inside the box
+                See everything inside the run
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
               </a>
             </Reveal>
@@ -309,7 +309,7 @@ export function ReportMock() {
                 {/* Doc footer */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 px-5 py-3 sm:px-7">
                   <p className="font-code text-[9px] tracking-[0.18em] text-ink-400">
-                    PAGE 1 OF 1 · GENERATED 00:20:14 · BID BOX
+                    PAGE 1 OF 1 · GENERATED 00:20:14 · QUORUM
                   </p>
                   <p className="font-code text-[9px] tracking-[0.18em] text-brand-600">
                     THE COMMITTEE SIGNS — THE AGENT NEVER DOES

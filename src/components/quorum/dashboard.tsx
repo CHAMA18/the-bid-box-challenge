@@ -24,12 +24,12 @@ import {
   Terminal,
   X,
 } from "lucide-react";
-import { BidBoxLogo } from "@/components/bidbox/logo";
+import { QuorumLogo } from "@/components/quorum/logo";
 import type { AuthUser } from "@/lib/auth-types";
 import { cn } from "@/lib/utils";
 
 /**
- * Bid Box — Mission Control.
+ * Quorum — Mission Control.
  * The signed-in workspace: a living picture of every run, every finding
  * and every gate waiting on a named human. The agent prepares the file;
  * the committee awards the tender — so the gavel sits in the UI, not in
@@ -120,7 +120,7 @@ function firstNameOf(user: AuthUser | null): string {
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "BB";
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "Q";
 }
 
 function clockNow(d: Date): string {
@@ -177,7 +177,7 @@ function LiveClock() {
 
 type FeedKind = "cmd" | "step" | "ok" | "gate";
 const FEED_SCRIPT: { text: string; kind: FeedKind }[] = [
-  { text: "bidbox-agent run --tender KE-NCB-104318 --format ocds", kind: "cmd" },
+  { text: "quorum-agent run --tender KE-NCB-104318 --format ocds", kind: "cmd" },
   { text: "▸ ingesting 96 pages · 7 bids parsed", kind: "step" },
   { text: "▸ document checklist — 12/16 present", kind: "step" },
   { text: "▸ cross-checking the supplier registry", kind: "step" },
@@ -212,7 +212,7 @@ function AgentFeed() {
             <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
           </span>
-          BIDBOX-AGENT · LIVE
+          QUORUM-AGENT · LIVE
         </p>
       </div>
       <div
@@ -527,7 +527,7 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col">
       <div className="px-6 pb-6 pt-7">
-        <BidBoxLogo variant="light" />
+        <QuorumLogo variant="light" />
         <p className="mt-3 font-code text-[8.5px] font-semibold tracking-[0.3em] text-ink-400">
           MISSION CONTROL · v0.9
         </p>
@@ -607,12 +607,12 @@ function SidebarContent({
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 font-code text-[10px] font-bold text-white"
             aria-hidden="true"
           >
-            {initialsOf(user?.name ?? "Bid Box")}
+            {initialsOf(user?.name ?? "Quorum")}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-semibold text-white">{user?.name ?? "Guest officer"}</span>
             <span className="block truncate font-code text-[8px] tracking-[0.14em] text-ink-500">
-              {(user?.email ?? "demo@bidbox.africa").toUpperCase()}
+              {(user?.email ?? "demo@quorum.africa").toUpperCase()}
             </span>
           </span>
           <button
@@ -722,7 +722,7 @@ function RunRegister({
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[660px] border-collapse text-left">
-            <caption className="sr-only">Bid Box run register — recent agent runs with status, findings and citations</caption>
+            <caption className="sr-only">Quorum run register — recent agent runs with status, findings and citations</caption>
             <thead>
               <tr className="border-b border-ink-100 bg-paper/60">
                 {["RUN", "BIDS", "FINDINGS", "CITED", "STATUS", "DURATION", ""].map((h, i) => (
@@ -845,7 +845,7 @@ function RunRegister({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const log = `bidbox audit — ${run.id} — ${run.findings} findings · ${run.citations} citations · 0 unsourced · sha256 4f2a…9c31`;
+                                  const log = `quorum audit — ${run.id} — ${run.findings} findings · ${run.citations} citations · 0 unsourced · sha256 4f2a…9c31`;
                                   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(log).catch(() => undefined);
                                   onToast("AUDIT TRAIL COPIED TO CLIPBOARD");
                                 }}
@@ -1207,7 +1207,7 @@ export function Dashboard({
       duration: "LIVE",
     };
     setRuns((prev) => [run, ...prev]);
-    onToast(`RUN QUEUED — BIDBOX-AGENT PICKING UP ${ref.toUpperCase()} · ${format}`);
+    onToast(`RUN QUEUED — QUORUM-AGENT PICKING UP ${ref.toUpperCase()} · ${format}`);
     const t = setTimeout(() => {
       setRuns((prev) =>
         prev.map((r) =>
@@ -1278,7 +1278,7 @@ export function Dashboard({
 
       {/* Mobile top bar */}
       <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/10 bg-night px-4 py-3 lg:hidden">
-        <BidBoxLogo variant="light" />
+        <QuorumLogo variant="light" />
         <div className="flex items-center gap-2.5">
           <span className="hidden items-center gap-2 font-code text-[8.5px] tracking-[0.2em] text-ink-300 sm:flex">
             <span className="relative flex h-1.5 w-1.5">
@@ -1498,7 +1498,7 @@ export function Dashboard({
                 <div className="relative">
                 <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">The standing rule</h3>
                 <p className="mt-3 font-code text-[9px] leading-[2] tracking-[0.16em] text-ink-300">
-                  BID BOX PREPARES THE FILE.
+                  QUORUM PREPARES THE FILE.
                   <br />
                   IT NEVER AWARDS THE TENDER.
                   <br />
@@ -1519,7 +1519,7 @@ export function Dashboard({
 
           {/* Bottom strip */}
           <p className="mt-10 border-t border-ink-100 pt-5 text-center font-code text-[8px] tracking-[0.24em] text-ink-400">
-            THE BID BOX · MISSION CONTROL · SESSION {initialsOf(user?.name ?? "BB")} · AUDIT-GRADE LOGS · NO TRACKERS
+            QUORUM · MISSION CONTROL · SESSION {initialsOf(user?.name ?? "Q")} · AUDIT-GRADE LOGS · NO TRACKERS
           </p>
         </main>
       </div>
