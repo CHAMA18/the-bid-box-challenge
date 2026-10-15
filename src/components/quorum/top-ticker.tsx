@@ -1,9 +1,10 @@
-import { Braces, Crosshair, FileSearch, Globe, Scale, Ticket, Timer } from "lucide-react";
+import { Braces, Crosshair, FileSearch, Globe, Scale, Stethoscope, Ticket, Timer } from "lucide-react";
 
 const ITEMS = [
-  { icon: Globe, text: "BUILT FOR PUBLIC PROCUREMENT ACROSS AFRICA" },
+  { icon: Globe, text: "BUILT FOR PUBLIC HEALTH PROCUREMENT ACROSS AFRICA" },
   { icon: Scale, text: "AGENTS PREPARE THE FILE — COMMITTEES AWARD THE TENDER" },
   { icon: FileSearch, text: "EVERY FINDING CITED, OR IT DOESN'T COUNT" },
+  { icon: Stethoscope, text: "SPECS VS CLINICAL NEED · QUANTITIES VS CONSUMPTION · PRICES VS OTHER BUYERS" },
   { icon: Timer, text: "26 DAYS OF COMMITTEE WORK · ~20 MINUTES OF AGENT WORK" },
   { icon: Braces, text: "OCDS IN · SOURCED REPORT OUT" },
   { icon: Ticket, text: "PILOT TIER — FREE FOR YOUR FIRST THREE TENDERS" },

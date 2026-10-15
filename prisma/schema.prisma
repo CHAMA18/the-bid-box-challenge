@@ -1,5 +1,6 @@
 // Quorum — agentic tender review for public procurement.
-// User/Session back the authentication screens (#/register, #/login).
+// User/Session back the authentication screens (#/register, #/login);
+// ContactMessage stores pilot requests from the landing page.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,6 +9,15 @@ generator client {
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  company   String?
+  message   String
+  createdAt DateTime @default(now())
 }
 
 // ── Authentication ──────────────────────────────────────────────────────────

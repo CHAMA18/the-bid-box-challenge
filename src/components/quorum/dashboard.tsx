@@ -69,17 +69,17 @@ type LedgerRow = { tender: string; action: "AWARDED" | "RETURNED"; by: string; a
 
 const SEED_RUNS: McRun[] = [
   { id: "KE-NCB-104293", title: "Supply & delivery of MRI scanners", buyer: "Ministry of Health · Kenya", bids: 4, findings: 6, citations: 6, unsourced: 0, status: "gate", startedAt: "08:12", duration: "20 MIN" },
-  { id: "KE-NCB-104318", title: "County fleet telemetry system", buyer: "Transport Authority · Kenya", bids: 7, findings: 0, citations: 0, unsourced: 0, status: "running", startedAt: "JUST NOW", duration: "LIVE" },
-  { id: "ZM-PPA-8841", title: "School furniture framework — Lusaka", buyer: "Provincial Education · Zambia", bids: 11, findings: 4, citations: 4, unsourced: 0, status: "gate", startedAt: "YESTERDAY", duration: "23 MIN" },
-  { id: "RW-RPPA-0552", title: "Regional road maintenance — lot 2", buyer: "Roads Fund · Rwanda", bids: 9, findings: 5, citations: 5, unsourced: 0, status: "complete", startedAt: "YESTERDAY", duration: "24 MIN" },
-  { id: "KE-NCB-104277", title: "Border post solar kits", buyer: "Energy Ministry · Kenya", bids: 6, findings: 6, citations: 6, unsourced: 0, status: "complete", startedAt: "MON", duration: "18 MIN" },
+  { id: "KE-NCB-104318", title: "County vaccine cold-chain — phase 2", buyer: "Public Health Institute · Kenya", bids: 7, findings: 0, citations: 0, unsourced: 0, status: "running", startedAt: "JUST NOW", duration: "LIVE" },
+  { id: "ZM-PPA-8841", title: "Clinic refurbishment framework — Lusaka", buyer: "Provincial Health · Zambia", bids: 11, findings: 4, citations: 4, unsourced: 0, status: "gate", startedAt: "YESTERDAY", duration: "23 MIN" },
+  { id: "RW-RPPA-0552", title: "Essential medicines framework — lot 2", buyer: "Medical Stores · Rwanda", bids: 9, findings: 5, citations: 5, unsourced: 0, status: "complete", startedAt: "YESTERDAY", duration: "24 MIN" },
+  { id: "KE-NCB-104277", title: "Oxygen plant consumables — 6 counties", buyer: "Health Infrastructure · Kenya", bids: 6, findings: 6, citations: 6, unsourced: 0, status: "complete", startedAt: "MON", duration: "18 MIN" },
   { id: "ZM-PPA-8830", title: "Clinic laboratory reagents", buyer: "Health Procurement · Zambia", bids: 8, findings: 3, citations: 3, unsourced: 0, status: "complete", startedAt: "MON", duration: "15 MIN" },
   { id: "GH-PPA-3107", title: "District pharmaceuticals frame", buyer: "Health Commodities · Ghana", bids: null, findings: 0, citations: 0, unsourced: 0, status: "queued", startedAt: "QUEUED", duration: "—" },
 ];
 
 const SEED_GATES: GateItem[] = [
   { id: "g-1", tender: "KE-NCB-104293", title: "Supply & delivery of MRI scanners", supplier: "MedEquip East Africa Ltd", value: "KES 412.6M", flags: 3, ago: "18 MIN AGO" },
-  { id: "g-2", tender: "ZM-PPA-8841", title: "School furniture framework — Lusaka", supplier: "Copperbelt Joinery Co-op", value: "ZMW 38.4M", flags: 1, ago: "2 H AGO" },
+  { id: "g-2", tender: "ZM-PPA-8841", title: "Clinic refurbishment framework — Lusaka", supplier: "Copperbelt Joinery Co-op", value: "ZMW 38.4M", flags: 1, ago: "2 H AGO" },
 ];
 
 const SEED_LEDGER: LedgerRow[] = [
@@ -354,7 +354,7 @@ function StatCard({
 
 const SAMPLE_TITLES = [
   "Supply & installation of laboratory equipment",
-  "Upgrade of the provincial data centre",
+  "Essential health commodities framework — lot 3",
   "Electronic medical records rollout — phase 2",
 ];
 

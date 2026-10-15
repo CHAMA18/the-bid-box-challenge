@@ -22,8 +22,8 @@ interface Line {
 const SCRIPT: Line[] = [
   { kind: "sys", text: "quorum-agent run --tender KE-NCB-104293 --format ocds" },
   { kind: "tool", time: "00:00.4", label: "fetch-notices", text: "portal reachable · 4 bids parsed from OCDS" },
-  { kind: "tool", time: "00:03.1", label: "check-documents", text: "16 required · bid 03 missing tax clearance" },
-  { kind: "cite", text: "bid-03/checklist.pdf — page 4" },
+  { kind: "tool", time: "00:03.1", label: "check-documents", text: "16 required · bid 03 missing batch validity" },
+  { kind: "cite", text: "bid-03/batch-certificates.pdf — page 4" },
   { kind: "tool", time: "00:07.9", label: "verify-bidder", text: "registration expired 12 Mar 2025" },
   { kind: "cite", text: "bid-03/registration.pdf — page 2" },
   { kind: "tool", time: "00:12.6", label: "compare-prices", text: "item 3 median $18.40 · bid 03 at $26.10 (+41.8%)" },

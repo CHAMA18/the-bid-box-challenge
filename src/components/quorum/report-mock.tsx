@@ -17,7 +17,7 @@ const FINDINGS = [
   {
     severity: "red" as const,
     tag: "MISSING DOC",
-    text: "Bid 03 is missing the tax clearance certificate required by line 12 of the checklist.",
+    text: "Bid 03 is missing the batch validity certificates required by line 12 of the checklist.",
     cite: "bid-03/checklist.pdf — p.4",
     note: "← cited to the page",
   },
@@ -55,7 +55,7 @@ const FLAGS = [
   {
     code: "FLAG-01",
     level: "DISQUALIFYING",
-    text: "Bid 03 — missing tax clearance certificate.",
+    text: "Bid 03 — missing batch validity certificates.",
     action: "Committee may reject under clause 14.2.",
   },
   {
