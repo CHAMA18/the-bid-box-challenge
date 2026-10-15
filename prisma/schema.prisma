@@ -1,4 +1,6 @@
-// Galina Express — cross-border logistics platform schema.
+// Bid Box — agentic tender review for public procurement.
+// Domain models below are legacy demo data; User/Session back the
+// authentication screens (#/register, #/login).
 
 generator client {
   provider = "prisma-client-js"
@@ -58,5 +60,27 @@ model ContactMessage {
   email     String
   company   String?
   message   String
+  createdAt DateTime @default(now())
+}
+
+// ── Authentication ──────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  password     String // scrypt:salt:hash
+  organization String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
   createdAt DateTime @default(now())
 }

@@ -42,7 +42,7 @@ export function BidBoxLogo({ variant = "dark" }: { variant?: "dark" | "light" })
         </span>
         <span
           className={cn(
-            "mt-1 block font-code text-[8.5px] font-semibold tracking-[0.32em]",
+            "mt-1 block whitespace-nowrap font-code text-[8.5px] font-semibold tracking-[0.32em]",
             variant === "dark" ? "text-ink-500" : "text-ink-400"
           )}
         >
