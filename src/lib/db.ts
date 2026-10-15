@@ -177,6 +177,16 @@ export function markUserVerified(id: string): UserRow | null {
   return user;
 }
 
+/** Replace the stored password hash (self-service reset reconciliation). */
+export function updateUserPassword(id: string, passwordHash: string): UserRow | null {
+  const user = findUserById(id);
+  if (!user) return null;
+  user.password = passwordHash;
+  user.updatedAt = now();
+  persist();
+  return user;
+}
+
 /* ── Sessions ───────────────────────────────────────────────────────────── */
 
 export function createSession(userId: string, expiresAt: Date, token: string): SessionRow {

@@ -7,14 +7,38 @@ import { QuorumLogo } from "@/components/quorum/logo";
 import { Eyebrow } from "@/components/quorum/reveal";
 import type { AuthMode, AuthUser } from "@/lib/auth-types";
 import {
+  completeGoogleRedirect,
   getVerifiedIdToken,
   signInWithGooglePopup,
   startEmailVerification,
   syncFirebaseIdentity,
+  type GoogleSignInDenial,
 } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/*
+ * Google sign-in denials, spelled out. The Firebase popup can fail for very
+ * different reasons — the deployment's origin not being on the project's
+ * authorised-domain list (the usual case for fresh deployments), the Google
+ * provider being switched off in the console, a browser blocking the popup,
+ * or plain cancellations — and each deserves its own honest message instead
+ * of one generic "unavailable".
+ */
+const GOOGLE_DENIALS: Record<GoogleSignInDenial, string> = {
+  "unauthorized-domain":
+    "Google sign-in can't run from this address yet — this deployment's domain isn't on the Firebase project's authorised list. It's a one-step console fix (Authentication → Settings → Authorised domains — see README); locally and after that, it works. Until then, sign in with your email and passphrase.",
+  "provider-disabled":
+    "Google sign-in is switched off in the Firebase console (Authentication → Sign-in method). Use your email and passphrase.",
+  "popup-blocked":
+    "Your browser blocked the sign-in window. Allow popups for this site and try again, or use your email and passphrase.",
+  "popup-closed": "Google sign-in was cancelled before it finished. Try again when ready.",
+  timeout: "Google sign-in didn't finish in time. Try again, or use your email and passphrase.",
+  network:
+    "Google sign-in couldn't reach the network. Check your connection, or use your email and passphrase.",
+  unknown: "Google sign-in is unavailable right now. Use your email and passphrase.",
+};
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -482,6 +506,10 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
   const [granted, setGranted] = useState<AuthUser | null>(null);
   const [googleFlow, setGoogleFlow] = useState(false);
   const [memoOpen, setMemoOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetStatus, setResetStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const redirectHandled = useRef(false);
   const shake = useAnimationControls();
 
   const pwScore = PW_CHECKS.filter((c) => c.test(values.password)).length;
@@ -518,6 +546,47 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
     setStatus("success");
     onSuccess(u);
   }
+
+  /* Exchange a Google identity (popup or redirect) for a product session. */
+  async function exchangeGoogleIdentity(idToken: string): Promise<boolean> {
+    try {
+      const res = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { user?: AuthUser; error?: string }
+        | null;
+      if (res.ok && data?.user) {
+        grant(data.user);
+        return true;
+      }
+      setFormError(
+        data?.error ?? "Google sign-in could not be confirmed. Try again or use your email."
+      );
+    } catch {
+      setFormError("Cannot reach the server. Check your connection and try again.");
+    }
+    return false;
+  }
+
+  /* A Google sign-in that completed via the redirect flow (popup blocked,
+   * then redirected) lands here after Google bounces back and the page
+   * reloads. Nothing to consume on every normal load. */
+  useEffect(() => {
+    if (redirectHandled.current) return;
+    redirectHandled.current = true;
+    void (async () => {
+      const result = await completeGoogleRedirect();
+      if (!result || result.status !== "ok") return;
+      setGoogleFlow(true);
+      setStatus("sending");
+      const ok = await exchangeGoogleIdentity(result.identity.idToken);
+      setGoogleFlow(false);
+      if (!ok) setStatus("form");
+    })();
+  }, []);
 
   /* Send (or re-send) the Firebase verification email, then show the verify step. */
   async function beginVerification(creds: { name: string; email: string; password: string }) {
@@ -673,9 +742,9 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
   /*
    * Google sign-in — the real Firebase popup first (project "public-tender").
    * A successful popup grants the Google identity and mirrors it into the
-   * product's own account stack; if the Google provider isn't enabled in the
-   * console yet (or the popup is blocked / closed / times out), the flow
-   * fails with an explicit message — no fallback identity is ever granted.
+   * product's own account stack. When Google denies, the message says
+   * precisely why (unauthorised origin / provider off / popup blocked) —
+   * no fallback identity is ever granted.
    */
   async function signInWithGoogle() {
     if (status !== "form") return;
@@ -683,30 +752,51 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
     setGoogleFlow(true);
     setStatus("sending");
 
-    const fb = await signInWithGooglePopup();
-    if (fb?.idToken) {
-      try {
-        const res = await fetch("/api/auth/google", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken: fb.idToken }),
-        });
-        const data = (await res.json().catch(() => null)) as { user?: AuthUser; error?: string } | null;
-        if (res.ok && data?.user) {
-          grant(data.user);
-          return;
-        }
-        setFormError(data?.error ?? "Google sign-in could not be confirmed. Try again or use your email.");
-      } catch {
-        setFormError("Cannot reach the server. Check your connection and try again.");
-      }
+    const result = await signInWithGooglePopup();
+    if (result.status === "ok") {
+      const ok = await exchangeGoogleIdentity(result.identity.idToken);
+      if (ok) return;
+      setGoogleFlow(false);
       setStatus("form");
       return;
     }
 
-    /* Google unavailable — no fallback identity. Ask for the credentials instead. */
-    setFormError("Google sign-in is unavailable. Use your email and passphrase.");
+    /* Google denied — say exactly why; no fallback identity is ever granted. */
+    setGoogleFlow(false);
+    setFormError(GOOGLE_DENIALS[result.reason]);
     setStatus("form");
+  }
+
+  /* Self-service passphrase reset — Firebase emails the link itself. */
+  async function requestPasswordReset() {
+    const email = resetEmail.trim();
+    if (!EMAIL_RE.test(email)) {
+      setResetError("Enter a valid work email first.");
+      return;
+    }
+    setResetError(null);
+    setResetStatus("sending");
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { sent?: boolean; error?: string }
+        | null;
+      if (res.ok && data?.sent) {
+        setResetStatus("sent");
+        return;
+      }
+      setResetError(
+        data?.error ?? "The reset service is unavailable right now. Try again shortly."
+      );
+      setResetStatus("idle");
+    } catch {
+      setResetError("Cannot reach the server. Check your connection and try again.");
+      setResetStatus("idle");
+    }
   }
 
   return (
@@ -1156,7 +1246,11 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                               </label>
                               <button
                                 type="button"
-                                onClick={() => setMemoOpen((v) => !v)}
+                                onClick={() => {
+                                  setResetEmail((cur) => cur || values.email);
+                                  setResetError(null);
+                                  setMemoOpen((v) => !v);
+                                }}
                                 aria-expanded={memoOpen}
                                 className="text-[13px] font-semibold text-ink-600 underline decoration-ink-300 underline-offset-4 transition-colors hover:text-brand-700 hover:decoration-brand-400"
                               >
@@ -1174,13 +1268,81 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                                 >
                                   <div className="mt-3 rounded-xl border border-ink-200 bg-sand px-4 py-3.5" role="note">
                                     <p className="font-code text-[9px] font-semibold tracking-[0.2em] text-ink-500">
-                                      MEMO — ACCESS RESET
+                                      ACCESS RESET
                                     </p>
-                                    <p className="mt-1.5 text-[13px] leading-relaxed text-ink-700">
-                                      Password resets are issued by your organisation’s gate
-                                      administrator — include your work email in the request. Pilot
-                                      users: reply to your onboarding mail.
-                                    </p>
+
+                                    {resetStatus === "sent" ? (
+                                      <div aria-live="polite">
+                                        <p className="mt-1.5 text-[13px] leading-relaxed text-ink-700">
+                                          If an account exists for{" "}
+                                          <span className="font-semibold text-ink-900">
+                                            {resetEmail.trim()}
+                                          </span>
+                                          , a reset link is on its way. Open it, choose a new
+                                          passphrase, then come back and sign in — the link expires
+                                          in one hour.
+                                        </p>
+                                        <button
+                                          type="button"
+                                          onClick={requestPasswordReset}
+                                          className="mt-2 text-[12.5px] font-semibold text-brand-700 underline decoration-brand-300 underline-offset-4 transition-colors hover:text-brand-800"
+                                        >
+                                          Send it again
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <p className="mt-1.5 text-[13px] leading-relaxed text-ink-700">
+                                          Enter your work email and we&apos;ll send a self-service
+                                          reset link. Pilot users can also reply to their onboarding
+                                          mail to reach the gate administrator.
+                                        </p>
+                                        <div className="mt-3 flex items-stretch gap-2">
+                                          <input
+                                            type="email"
+                                            value={resetEmail}
+                                            onChange={(e) => {
+                                              setResetEmail(e.target.value);
+                                              setResetError(null);
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                void requestPasswordReset();
+                                              }
+                                            }}
+                                            placeholder="you@agency.gov"
+                                            autoComplete="email"
+                                            aria-label="Work email for the reset link"
+                                            aria-invalid={!!resetError}
+                                            className={cn(inputCls(!!resetError), "h-11 min-w-0 flex-1 text-[13.5px]")}
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={requestPasswordReset}
+                                            disabled={resetStatus === "sending"}
+                                            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-ink-950 bg-ink-950 px-4 text-[13px] font-semibold text-white transition-all hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-70"
+                                          >
+                                            {resetStatus === "sending" ? (
+                                              <span
+                                                className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                                                aria-hidden="true"
+                                              />
+                                            ) : null}
+                                            Email link
+                                          </button>
+                                        </div>
+                                        {resetError && (
+                                          <p
+                                            role="alert"
+                                            className="mt-2 flex items-center gap-1.5 text-[12px] font-semibold text-brand-700"
+                                          >
+                                            <CircleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                            {resetError}
+                                          </p>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
                                 </motion.div>
                               )}

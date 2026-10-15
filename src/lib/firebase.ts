@@ -218,45 +218,123 @@ export interface GoogleIdentity {
   email: string;
 }
 
+export type GoogleSignInDenial =
+  | "unauthorized-domain" /* this origin is not on the project's authorised-domain list */
+  | "provider-disabled" /* Google provider off in the Firebase console */
+  | "popup-blocked" /* browser/iframe blocked the popup */
+  | "popup-closed" /* user closed the popup before finishing */
+  | "timeout" /* popup never resolved within the budget */
+  | "network" /* Firebase unreachable */
+  | "unknown";
+
+export type GoogleSignInResult =
+  | { status: "ok"; identity: GoogleIdentity }
+  | { status: "denied"; reason: GoogleSignInDenial };
+
+function mapAuthError(scope: string, err: unknown): GoogleSignInDenial {
+  const code =
+    typeof err === "object" && err && "code" in err ? String((err as { code: unknown }).code) : "";
+  debugLog(scope, err);
+  switch (code) {
+    case "auth/unauthorized-domain":
+      return "unauthorized-domain";
+    case "auth/operation-not-allowed":
+    case "auth/admin-restricted-operation":
+      return "provider-disabled";
+    case "auth/popup-blocked":
+      return "popup-blocked";
+    case "auth/popup-closed-by-user":
+    case "auth/cancelled-popup-request":
+      return "popup-closed";
+    case "auth/network-request-failed":
+      return "network";
+    default:
+      return "unknown";
+  }
+}
+
 /**
  * Open the Firebase Google sign-in popup for the "public-tender" project.
- * Resolves to the signed-in Google identity, or null when anything goes
- * wrong (Google provider not yet enabled in the console, popup blocked or
- * closed, network down, 15s budget exceeded) — callers decide how to carry
- * on; no fallback identity is ever granted.
+ * Resolves `{ status: "ok" }` with the signed-in Google identity, or
+ * `{ status: "denied" }` with the precise reason — unauthorised origin,
+ * provider switched off, popup blocked/closed, timeout — so the UI can say
+ * exactly what happened instead of a generic failure. No fallback identity
+ * is ever granted.
  */
-export async function signInWithGooglePopup(): Promise<GoogleIdentity | null> {
+export async function signInWithGooglePopup(): Promise<GoogleSignInResult> {
   try {
     const pair = await getAuthLazy();
-    if (!pair) return null;
+    if (!pair) return { status: "denied", reason: "unknown" };
     const { mod, auth } = pair;
     const provider = new mod.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
 
-    const popup = mod.signInWithPopup(auth, provider).then(
-      async (cred) => {
-        const user = cred.user;
-        if (!user.email) return null;
-        const idToken = await user.getIdToken();
-        return { idToken, uid: user.uid, name: user.displayName ?? "", email: user.email };
-      },
-      (err) => {
-        debugLog("google-signin", err);
-        return null;
-      }
-    );
+    const popup = mod
+      .signInWithPopup(auth, provider, mod.browserPopupRedirectResolver)
+      .then(
+        async (cred) => {
+          if (!cred.user?.email) return { status: "denied" as const, reason: "unknown" as const };
+          const idToken = await cred.user.getIdToken();
+          return {
+            status: "ok" as const,
+            identity: {
+              idToken,
+              uid: cred.user.uid,
+              name: cred.user.displayName ?? "",
+              email: cred.user.email,
+            },
+          };
+        },
+        (err) => ({ status: "denied" as const, reason: mapAuthError("google-signin", err) })
+      );
 
     /* Hard budget: a never-resolving popup must not hang the flow. */
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const budget = new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), 15_000);
+    const budget = new Promise<GoogleSignInResult>((resolve) => {
+      timer = setTimeout(() => resolve({ status: "denied", reason: "timeout" }), 15_000);
     });
     const result = await Promise.race([popup, budget]);
     if (timer) clearTimeout(timer);
+
+    /* A blocked popup is retried with the redirect flow: it survives
+     * restrictive iframes once this origin is authorised. When the
+     * redirect itself is refused we still report the precise reason. */
+    if (result.status === "denied" && result.reason === "popup-blocked") {
+      try {
+        await mod.signInWithRedirect(auth, provider, mod.browserPopupRedirectResolver);
+        /* Navigation is starting — keep the pending state until unload. */
+        await new Promise(() => {});
+      } catch (err) {
+        return { status: "denied", reason: mapAuthError("google-redirect", err) };
+      }
+    }
     return result;
   } catch (err) {
-    debugLog("google-signin", err);
-    return null;
+    return { status: "denied", reason: mapAuthError("google-signin", err) };
+  }
+}
+
+/**
+ * Consume a Google sign-in that completed via the redirect flow (the page
+ * reloads after Google returns). Resolves null when there is nothing to
+ * consume — the common case on every normal page load.
+ */
+export async function completeGoogleRedirect(): Promise<GoogleSignInResult | null> {
+  try {
+    const pair = await getAuthLazy();
+    if (!pair) return null;
+    const { mod, auth } = pair;
+    const cred = await mod.getRedirectResult(auth, mod.browserPopupRedirectResolver);
+    if (!cred?.user?.email) return null;
+    const identity = {
+      idToken: await cred.user.getIdToken(),
+      uid: cred.user.uid,
+      name: cred.user.displayName ?? "",
+      email: cred.user.email,
+    };
+    return { status: "ok", identity };
+  } catch (err) {
+    return { status: "denied", reason: mapAuthError("google-redirect-result", err) };
   }
 }
 
