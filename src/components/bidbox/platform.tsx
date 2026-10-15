@@ -1,11 +1,11 @@
 import { Database } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
 
-const TERMS = [
+const CONCEPTS = [
   {
     term: "MCP",
     full: "Model Context Protocol",
-    body: "An open standard for exposing tools to an AI model. You write a small server; any agent can call its tools.",
+    body: "An open standard for exposing tools to an AI model. Bid Box runs a small server; any agent can call its tools.",
   },
   {
     term: "AGENTIC",
@@ -42,17 +42,17 @@ const PORTALS = [
 ];
 
 /**
- * Jargon, defined up front — shared vocabulary plus the OCDS portals
- * the challenge data lives in.
+ * Platform — the concepts under the hood, plus the OCDS portals
+ * the data comes from.
  */
-export function Jargon() {
+export function Platform() {
   return (
-    <section id="jargon" className="scroll-mt-20 border-y border-ink-100 bg-sand/60">
+    <section id="platform" className="scroll-mt-20 border-y border-ink-100 bg-sand/60">
       <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <Reveal>
-              <Eyebrow>Jargon, defined up front</Eyebrow>
+              <Eyebrow>Under the hood</Eyebrow>
             </Reveal>
             <Reveal delay={0.06}>
               <h2 className="mt-4 max-w-2xl font-display text-[34px] font-black leading-[1.06] tracking-[-0.025em] text-ink-950 sm:text-[44px]">
@@ -62,13 +62,14 @@ export function Jargon() {
           </div>
           <Reveal delay={0.12}>
             <p className="max-w-sm text-[15px] leading-relaxed text-ink-500">
-              No buzzword soup: if you use these words in your submission, use them like this.
+              No buzzword soup: these are the words behind every finding, so the report reads the
+              same to auditors, suppliers and citizens.
             </p>
           </Reveal>
         </div>
 
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {TERMS.map((t, i) => (
+          {CONCEPTS.map((t, i) => (
             <Reveal key={t.term} delay={0.06 * (i % 3)} className="h-full">
               <article className="flex h-full flex-col rounded-2xl border border-ink-100 bg-white p-6 transition-all duration-300 hover:border-brand-300 hover:shadow-[0_16px_36px_rgba(11,12,15,0.08)]">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -96,7 +97,7 @@ export function Jargon() {
                 </p>
                 <p className="mt-1.5 max-w-md text-[13.5px] leading-relaxed text-ink-600">
                   National e-procurement portals, open by default. Notices, awards and contracts —
-                  the JSON your agent reads.
+                  the JSON Bid Box reads.
                 </p>
               </div>
             </div>

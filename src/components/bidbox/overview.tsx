@@ -1,4 +1,4 @@
-import { CirclePause, Ticket } from "lucide-react";
+import { CirclePause, ScrollText } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
 
 const TASKS = [
@@ -11,7 +11,7 @@ const TASKS = [
 
 /**
  * Overview — the job in numbers: 26 days of committee work vs ~20 minutes
- * of agent work, ending at a hard human gate.
+ * of Bid Box work, ending at a hard human gate.
  */
 export function Overview() {
   return (
@@ -33,20 +33,20 @@ export function Overview() {
                 Sorting bids, ticking off documents, checking each bidder, comparing prices and
                 writing the report is{" "}
                 <span className="font-semibold text-ink-900">26 days of committee work today</span>.
-                Your agent should do the same work in about twenty minutes — and then stop.
+                Bid Box does the same work in about twenty minutes — and then stops.
               </p>
             </Reveal>
             <Reveal delay={0.18}>
               <div className="mt-8 flex items-start gap-4 rounded-2xl border border-brand-200 bg-white p-5 shadow-sm">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 ring-1 ring-brand-200">
-                  <Ticket className="h-5 w-5 text-brand-600" aria-hidden="true" />
+                  <ScrollText className="h-5 w-5 text-brand-600" aria-hidden="true" />
                 </span>
                 <div>
                   <p className="font-code text-[10px] font-semibold tracking-[0.22em] text-brand-700">
-                    PRIZE POOL
+                    AUDIT TRAIL
                   </p>
                   <p className="mt-1 text-[15.5px] font-semibold leading-snug text-ink-900">
-                    A ticket to the MCP Conference in Nairobi.
+                    Every tool call logged — inputs, outputs, timestamps.
                   </p>
                 </div>
               </div>
@@ -93,7 +93,7 @@ export function Overview() {
                 ))}
               </div>
               <p className="mt-2.5 font-code text-[10px] tracking-[0.14em] text-ink-400">
-                ↑ WHAT THE COMMITTEE DOES BY HAND · WHAT YOUR AGENT SHOULD TAKE: THE RED SLICE ↑
+                ↑ WHAT THE COMMITTEE DOES BY HAND · WHAT BID BOX TAKES: THE RED SLICE ↑
               </p>
 
               {/* Human gate */}
@@ -106,7 +106,7 @@ export function Overview() {
                     COMMITTEE DECIDES
                   </p>
                   <p className="mt-1 text-[14.5px] font-medium leading-snug text-ink-800">
-                    Your agent stops here and hands over a sourced report.
+                    Bid Box stops here and hands over a sourced report.
                   </p>
                 </div>
               </div>

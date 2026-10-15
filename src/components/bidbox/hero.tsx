@@ -1,13 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, CirclePause, FileCheck2, Ticket } from "lucide-react";
+import { ArrowRight, CirclePause, FileCheck2, Landmark } from "lucide-react";
 import { AgentRun } from "@/components/bidbox/agent-run";
 import { Eyebrow } from "@/components/bidbox/reveal";
 
 const STATS = [
-  { value: "20", suffix: " min", label: "for the agent to do the committee's work" },
-  { value: "3", suffix: "+", label: "different tools on your own MCP server" },
+  { value: "20", suffix: " min", label: "from tender notices to a decision-ready file" },
+  { value: "3", suffix: "+", label: "checks on every bid — documents, bidder, price" },
   { value: "100", suffix: "%", label: "of findings cited to a source document" },
   { value: "1", suffix: "", label: "human gate before anything irreversible" },
 ];
@@ -28,7 +28,7 @@ export function Hero() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
             >
-              <Eyebrow>Agentic AI for Africa — Innovation Challenge</Eyebrow>
+              <Eyebrow>Agentic tender review for public procurement</Eyebrow>
             </motion.div>
 
             <motion.h1
@@ -58,13 +58,13 @@ export function Hero() {
               transition={{ duration: 0.7, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
               className="mt-6 max-w-xl text-[17px] leading-relaxed text-ink-600"
             >
-              Build an agent that reads a public tender end to end — sorts the bids, ticks off the
-              documents, checks each bidder, compares prices and writes the report. Every finding
-              cited. Then it stops and hands over:{" "}
+              Bid Box reads a public tender end to end — sorts the bids, ticks off the
+              documents, checks each bidder, compares prices and writes the report. Every
+              finding cited. Then it stops and hands over:{" "}
               <span className="font-semibold text-ink-900">the committee decides.</span>
             </motion.p>
 
-            {/* Prize chip */}
+            {/* Trust chip */}
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
@@ -72,8 +72,8 @@ export function Hero() {
               className="mt-6"
             >
               <span className="inline-flex items-center gap-2.5 rounded-full border border-brand-200 bg-brand-50 px-4 py-2 text-[13.5px] font-semibold text-brand-700">
-                <Ticket className="h-4 w-4" aria-hidden="true" />
-                Prize — a ticket to the MCP Conference, Nairobi
+                <Landmark className="h-4 w-4" aria-hidden="true" />
+                Built for procurement teams &amp; oversight bodies
               </span>
             </motion.div>
 
@@ -84,17 +84,17 @@ export function Hero() {
               className="mt-8 flex flex-wrap items-center gap-3.5"
             >
               <a
-                href="#submit"
+                href="#get-started"
                 className="group inline-flex h-[52px] items-center gap-2 rounded-full bg-brand-600 px-7 text-[15px] font-semibold text-white shadow-[0_12px_30px_rgba(217,38,22,0.32)] transition-all hover:bg-brand-700 hover:shadow-[0_14px_36px_rgba(217,38,22,0.4)]"
               >
-                Submit your build
+                Start your first run
                 <ArrowRight className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
               </a>
               <a
-                href="#requirements"
+                href="#overview"
                 className="inline-flex h-[52px] items-center gap-2.5 rounded-full border border-ink-200 bg-white px-7 text-[15px] font-semibold text-ink-900 transition-all hover:border-ink-300 hover:shadow-md"
               >
-                Read the brief
+                See how it works
               </a>
             </motion.div>
 

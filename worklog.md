@@ -71,3 +71,27 @@ Work Log:
 
 Stage Summary:
 - Site fully recovered from the sandbox reset and running on port 3000; local repo = GitHub e858338 with clean upstream. Nothing to re-push.
+
+---
+Task ID: 5
+Agent: Z.ai Code (main)
+Task: Remove all hackathon references from the landing page — present Bid Box as the product itself.
+
+Work Log:
+- Audited src/ for hackathon framing (grep: challenge, prize, judging, eligibility, submission, themes, requirements, "the brief").
+- Repositioned copy from challenge-brief voice ("Build an agent…", "Your agent should…") to product voice ("Bid Box reads…", "Bid Box does…") across all sections.
+- Hero: eyebrow "Agentic AI for Africa — Innovation Challenge" → "Agentic tender review for public procurement"; prize chip (MCP Conference ticket) → trust chip "Built for procurement teams & oversight bodies"; CTAs "Submit your build"/"Read the brief" → "Start your first run"/"See how it works"; stats rewritten in product terms.
+- Overview: PRIZE POOL card → AUDIT TRAIL card; "What your agent should take" → "What Bid Box takes"; "Your agent stops here" → "Bid Box stops here".
+- RuleBand: "Your agent prepares the file" → "Bid Box prepares the file. It never awards the tender."
+- themes.tsx → use-cases.tsx (UseCases): "Choose one theme / judging room" framing → "Where Bid Box works / One workflow. Every sector that buys in public." (anchor #use-cases).
+- jargon.tsx → platform.tsx (Platform): "use these words in your submission" → "the words behind every finding… auditors, suppliers and citizens" (anchor #platform).
+- requirements.tsx → inside-box.tsx (InsideBox): eligibility lists replaced entirely with "What Bid Box does" (6 items) + "What you get" (sourced report, flag register, audit log, architecture brief, eval harness); ineligibility warning → "Nothing below is an enterprise upsell — it ships in every run" (anchor #inside).
+- closing.tsx → get-started.tsx (GetStarted): submission checklist (repo/video/ARCHITECTURE.md/EVALS.md) → onboarding checklist (connect portal, map checklist, pilot tender, review findings, sign the gate); "Submission readiness" → "First-run readiness" (anchor #get-started).
+- Header/footer nav: Themes/Jargon/Requirements → Use cases/Platform/Inside the box; "Submit your build"/"The brief" → "Get started"/"Inside the box"; footer column "THE CHALLENGE" → "PRODUCT", ORCHESTRATION → STANDARDS (MCP, OCDS, Open weights, Human-in-the-loop), prize line → "Open weights · on-prem ready · audit-grade logs".
+- Ticker: PRIZE item → "BUILT FOR PUBLIC PROCUREMENT ACROSS AFRICA"; logo subline "CHALLENGE · AFRICA" → "AGENTIC PROCUREMENT"; terminal header "evaluation run" → "sample run".
+- layout.tsx metadata (title/description/keywords/OG/Twitter) rewritten for the product; globals.css comment updated; old section files deleted.
+- Verification (agent-browser): title correct; full-page text scan shows zero hackathon terms (only "eligibility" as a procurement-data item in Open Contracting use case); hero renders with product copy; terminal auto-plays + RE-RUN replays to RUN COMPLETE; checklist 40% → 100% with "FIVE FOR FIVE — READY FOR YOUR FIRST RUN"; anchors navigate; mobile 390px no horizontal scroll, hamburger menu works; footer flush at viewport bottom (gap 0); 0 console/page errors; lint clean; dev.log all GET / 200.
+
+Stage Summary:
+- / is now a pure product landing page for Bid Box (agentic tender review for public procurement) — no challenge/prize/submission/eligibility framing anywhere.
+- Sections renamed: #use-cases, #platform, #inside, #get-started (old #themes/#jargon/#requirements/#submit gone); layout metadata matches product.

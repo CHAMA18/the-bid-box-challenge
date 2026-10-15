@@ -3,18 +3,19 @@ import { SiteHeader } from "@/components/bidbox/site-header";
 import { Hero } from "@/components/bidbox/hero";
 import { Overview } from "@/components/bidbox/overview";
 import { RuleBand } from "@/components/bidbox/rule-band";
-import { Themes } from "@/components/bidbox/themes";
-import { Jargon } from "@/components/bidbox/jargon";
-import { Requirements } from "@/components/bidbox/requirements";
-import { Closing } from "@/components/bidbox/closing";
+import { UseCases } from "@/components/bidbox/use-cases";
+import { Platform } from "@/components/bidbox/platform";
+import { InsideBox } from "@/components/bidbox/inside-box";
+import { GetStarted } from "@/components/bidbox/get-started";
 import { SiteFooter } from "@/components/bidbox/site-footer";
 
 /**
- * The Bid Box Challenge — Agentic AI for Africa Innovation Challenge.
+ * Bid Box — agentic tender review for public procurement.
  * A world-class, fully native Next.js experience: an animated MCP agent-run
- * terminal, the 26-days-vs-20-minutes clock, four challenge themes, the
- * shared jargon, and both eligibility lists — with the non-negotiable rule
- * front and centre: agents prepare the file, committees award the tender.
+ * terminal, the 26-days-vs-20-minutes clock, four sector use cases, the
+ * platform concepts, and everything inside the box — with the non-negotiable
+ * rule front and centre: Bid Box prepares the file, the committee awards
+ * the tender.
  */
 export default function Home() {
   return (
@@ -25,10 +26,10 @@ export default function Home() {
         <Hero />
         <Overview />
         <RuleBand />
-        <Themes />
-        <Jargon />
-        <Requirements />
-        <Closing />
+        <UseCases />
+        <Platform />
+        <InsideBox />
+        <GetStarted />
       </main>
       <SiteFooter />
     </div>

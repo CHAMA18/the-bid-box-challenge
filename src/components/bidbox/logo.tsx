@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The Bid Box Challenge wordmark — an ink bid-box with a red "flag" dot,
+ * The Bid Box wordmark — an ink bid-box with a red "flag" dot,
  * stacked against a two-line editorial lockup.
  */
 export function BidBoxLogo({ variant = "dark" }: { variant?: "dark" | "light" }) {
@@ -46,7 +46,7 @@ export function BidBoxLogo({ variant = "dark" }: { variant?: "dark" | "light" })
             variant === "dark" ? "text-ink-500" : "text-ink-400"
           )}
         >
-          CHALLENGE · AFRICA
+          AGENTIC PROCUREMENT
         </span>
       </span>
     </span>
