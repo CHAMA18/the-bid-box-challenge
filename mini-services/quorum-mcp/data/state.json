@@ -1,6 +1,57 @@
 {
   "gates": [
     {
+      "id": "gate_ifols9",
+      "runId": "run_8dcfddf6",
+      "tenderId": "KE-MSA-2026-090",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "BAHARI MEDICAL",
+        "value": "KES 109,800,000",
+        "attachments": 5,
+        "findings": [
+          "F-01",
+          "F-02"
+        ],
+        "drafts": [
+          "draft_8vwf05",
+          "draft_qn679w"
+        ]
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-16T14:31:22.864Z"
+    },
+    {
+      "id": "gate_v6f23v",
+      "runId": "run_93d37470",
+      "tenderId": "KRERER--RERER",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "bidder",
+        "value": "NOT STATED IN BID",
+        "attachments": 1,
+        "findings": [],
+        "drafts": []
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-16T14:30:29.348Z"
+    },
+    {
+      "id": "gate_rraymk",
+      "runId": "run_62efc410",
+      "tenderId": "KRERER--RERER",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "bidder",
+        "value": "NOT STATED IN BID",
+        "attachments": 1,
+        "findings": [],
+        "drafts": []
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-16T14:30:28.565Z"
+    },
+    {
       "id": "gate_7b9kcn",
       "runId": "run_9160fb8e",
       "tenderId": "KE-NCB-104293",
@@ -327,6 +378,231 @@
     }
   ],
   "runs": [
+    {
+      "id": "run_8dcfddf6",
+      "tenderId": "KE-MSA-2026-090",
+      "status": "AWAITING_GATE",
+      "startedAt": "2026-10-16T14:31:22.802Z",
+      "updatedAt": "2026-10-16T14:31:22.866Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KE-MSA-2026-090",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 3 documents read · 2 bids · 0 awards · 0 OCDS records",
+        "▸ plan_review — heuristic · value parsing DEEP (markdown + OCDS) · focus OVER-BUDGET > VALUE-OUTLIER > PRICE-OUTLIER > DOC-MISSING > SUPPLIER-ID > BUYER-MISSING > SPEC-DEVIATION · maxDrafts 2",
+        "▸ extract_requirements — 7 SHALL/must clauses pinned",
+        "▸ flag_finding — 2 findings flagged, each cited",
+        "▸ verify_findings — 2/2 confirmed in their cited document",
+        "▸ draft_redline — template (no model configured) for R-SUPPLIER-ID",
+        "▸ draft_redline — template (no model configured) for R-BUYER-MISSING",
+        "▸ 2 redline draft(s) ready for committee (plan: maxDrafts 2, focus OVER-BUDGET, VALUE-OUTLIER, PRICE-OUTLIER) · 0 from the model, 2 template · 0 tokens",
+        "⏸ human gate raised (gate_ifols9) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate"
+      ],
+      "requirements": [
+        {
+          "id": "REQ-01",
+          "clause": "SHALL deliver portable water-testing kits conforming to WHO field-testing guidance in Annex B",
+          "page": 1
+        },
+        {
+          "id": "REQ-02",
+          "clause": "SHALL supply reagent refill packs with a minimum shelf life of eighteen (18) months on delivery",
+          "page": 1
+        },
+        {
+          "id": "REQ-03",
+          "clause": "SHALL commission each laboratory kit within thirty (30) days of delivery and train at least four (4) county laboratory technicians per depot",
+          "page": 1
+        },
+        {
+          "id": "REQ-04",
+          "clause": "SHALL calibrate every incubator against a traceable reference standard before handover",
+          "page": 1
+        },
+        {
+          "id": "REQ-05",
+          "clause": "SHALL state the country of manufacture for every line item",
+          "page": 1
+        },
+        {
+          "id": "REQ-06",
+          "clause": "must hold a valid tax compliance certificate at submission",
+          "page": 1
+        },
+        {
+          "id": "REQ-07",
+          "clause": "must hold current ISO/IEC 17025 accreditation for the assays quoted",
+          "page": 1
+        }
+      ],
+      "findings": [
+        {
+          "id": "F-01",
+          "rule": "R-BUYER-MISSING",
+          "severity": "MEDIUM",
+          "item": "Tender KE-MSA-2026-090 — buyer name",
+          "evidence": "Tender notice KE-MSA-2026-090 names no buyer — the pack never says who the contracting entity is.",
+          "citation": "01-tender-notice.md, tender reference line"
+        },
+        {
+          "id": "F-02",
+          "rule": "R-SUPPLIER-ID",
+          "severity": "HIGH",
+          "item": "MOMBASA MARINE — Kenya KRA PIN",
+          "evidence": "Supplier identifier \"P0518472\" does not conform to its scheme — a Kenya KRA PIN is letter P or C, then nine digits, then one letter — 11 characters.",
+          "citation": "03-bid-mombasa-marine.md, supplier identifier line"
+        }
+      ],
+      "drafts": [
+        {
+          "id": "draft_8vwf05",
+          "findingId": "F-02",
+          "original": "Supplier identifier \"P0518472\" does not conform to its scheme — a Kenya KRA PIN is letter P or C, then nine digits, then one letter — 11 characters.",
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-SUPPLIER-ID on MOMBASA MARINE — Kenya KRA PIN prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (LLM_BASE_URL and LLM_MODEL are not set); template guard applied so the run never stalls.",
+          "model": "template (no model configured)",
+          "source": "template",
+          "usage": {
+            "promptTokens": 0,
+            "completionTokens": 0
+          },
+          "latencyMs": 0
+        },
+        {
+          "id": "draft_qn679w",
+          "findingId": "F-01",
+          "original": "Tender notice KE-MSA-2026-090 names no buyer — the pack never says who the contracting entity is.",
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-BUYER-MISSING on Tender KE-MSA-2026-090 — buyer name prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (LLM_BASE_URL and LLM_MODEL are not set); template guard applied so the run never stalls.",
+          "model": "template (no model configured)",
+          "source": "template",
+          "usage": {
+            "promptTokens": 0,
+            "completionTokens": 0
+          },
+          "latencyMs": 0
+        }
+      ],
+      "usage": {
+        "drafts": 2,
+        "llmDrafts": 0,
+        "promptTokens": 0,
+        "completionTokens": 0
+      },
+      "plan": {
+        "pack": {
+          "files": 3,
+          "bids": 2,
+          "ocdsRecords": 0,
+          "markdownValueBids": 2,
+          "ocdsValueBids": 0
+        },
+        "parseMarkdownValues": true,
+        "focusRules": [
+          "OVER-BUDGET",
+          "VALUE-OUTLIER",
+          "PRICE-OUTLIER",
+          "DOC-MISSING",
+          "SUPPLIER-ID",
+          "BUYER-MISSING",
+          "SPEC-DEVIATION"
+        ],
+        "maxDrafts": 2,
+        "note": "heuristic: 2 markdown bid value(s) + published ceiling — deep-value parsing on",
+        "source": "heuristic"
+      },
+      "gateId": "gate_ifols9"
+    },
+    {
+      "id": "run_93d37470",
+      "tenderId": "KRERER--RERER",
+      "status": "AWAITING_GATE",
+      "startedAt": "2026-10-16T14:30:29.335Z",
+      "updatedAt": "2026-10-16T14:30:29.350Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KRERER--RERER",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 0 documents read · 0 bids · 0 awards · 0 OCDS records",
+        "▸ plan_review — heuristic · value parsing OCDS only · focus SPEC-DEVIATION · maxDrafts 2",
+        "▸ extract_requirements — 0 SHALL/must clauses pinned",
+        "▸ flag_finding — 0 findings flagged, each cited",
+        "▸ verify_findings — 0/0 confirmed in their cited document",
+        "▸ 0 redline draft(s) ready for committee (plan: maxDrafts 2, focus SPEC-DEVIATION) · 0 from the model, 0 template · 0 tokens",
+        "⏸ human gate raised (gate_v6f23v) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate"
+      ],
+      "requirements": [],
+      "findings": [],
+      "drafts": [],
+      "usage": {
+        "drafts": 0,
+        "llmDrafts": 0,
+        "promptTokens": 0,
+        "completionTokens": 0
+      },
+      "plan": {
+        "pack": {
+          "files": 0,
+          "bids": 0,
+          "ocdsRecords": 0,
+          "markdownValueBids": 0,
+          "ocdsValueBids": 0
+        },
+        "parseMarkdownValues": false,
+        "focusRules": [
+          "SPEC-DEVIATION"
+        ],
+        "maxDrafts": 2,
+        "note": "heuristic: 0 markdown bid value(s) — deep-value parsing off (nothing to parse)",
+        "source": "heuristic"
+      },
+      "gateId": "gate_v6f23v"
+    },
+    {
+      "id": "run_62efc410",
+      "tenderId": "KRERER--RERER",
+      "status": "AWAITING_GATE",
+      "startedAt": "2026-10-16T14:30:28.546Z",
+      "updatedAt": "2026-10-16T14:30:28.566Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KRERER--RERER",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 0 documents read · 0 bids · 0 awards · 0 OCDS records",
+        "▸ plan_review — heuristic · value parsing OCDS only · focus SPEC-DEVIATION · maxDrafts 2",
+        "▸ extract_requirements — 0 SHALL/must clauses pinned",
+        "▸ flag_finding — 0 findings flagged, each cited",
+        "▸ verify_findings — 0/0 confirmed in their cited document",
+        "▸ 0 redline draft(s) ready for committee (plan: maxDrafts 2, focus SPEC-DEVIATION) · 0 from the model, 0 template · 0 tokens",
+        "⏸ human gate raised (gate_rraymk) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate"
+      ],
+      "requirements": [],
+      "findings": [],
+      "drafts": [],
+      "usage": {
+        "drafts": 0,
+        "llmDrafts": 0,
+        "promptTokens": 0,
+        "completionTokens": 0
+      },
+      "plan": {
+        "pack": {
+          "files": 0,
+          "bids": 0,
+          "ocdsRecords": 0,
+          "markdownValueBids": 0,
+          "ocdsValueBids": 0
+        },
+        "parseMarkdownValues": false,
+        "focusRules": [
+          "SPEC-DEVIATION"
+        ],
+        "maxDrafts": 2,
+        "note": "heuristic: 0 markdown bid value(s) — deep-value parsing off (nothing to parse)",
+        "source": "heuristic"
+      },
+      "gateId": "gate_rraymk"
+    },
     {
       "id": "run_9160fb8e",
       "tenderId": "KE-NCB-104293",
@@ -1634,5 +1910,5 @@
       "status": "PENDING"
     }
   ],
-  "seq": 161
+  "seq": 179
 }

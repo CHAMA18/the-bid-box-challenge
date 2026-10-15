@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   approverAllowed,
+  bidStatesIdentifier,
   buildPack,
+  buyerMissingFindings,
   callLlama,
   citesKnownDocument,
   fetchRoster,
@@ -17,6 +19,7 @@ import {
   repairFinding,
   runAwardRules,
   runRules,
+  supplierIdFindings,
   verifyFinding,
   verifyFindingReason,
   type BidDoc,
@@ -384,5 +387,110 @@ describe("bounded reason-and-retry", () => {
     const f: Finding = { id: "", rule: "R-SPEC-DEVIATION", severity: "HIGH", item: "X", evidence: "absent line", citation: "03-bid-coastline.md, specifications matrix" };
     expect(verifyFindingReason(f, sources)).toContain("not found");
     expect(verifyFindingReason(f, { "99.md": "x" })).toContain("not in this tender");
+  });
+});
+
+describe("publisher-mess rules — supplier identifiers and missing buyers", () => {
+  const bids = (bodies: string[]): BidDoc[] =>
+    bodies.map((text, i) => ({ bidder: `BIDDER ${i + 1}`, text, source: `0${i + 2}-bid-x.md` }));
+
+  test("flags a KRA PIN that breaks its own scheme, cited to the exact bid", () => {
+    const f = supplierIdFindings(bids(["**KRA PIN:** P0518472\n**Bid value:** KES 1,000,000"]));
+    expect(f).toHaveLength(1);
+    expect(f[0].rule).toBe("R-SUPPLIER-ID");
+    expect(f[0].severity).toBe("HIGH");
+    expect(f[0].citation).toContain("02-bid-x.md");
+    expect(f[0].evidence).toContain("P0518472");
+  });
+
+  test("keeps a well-formed KRA PIN and a well-formed Rwanda TIN silent", () => {
+    expect(supplierIdFindings(bids(["**KRA PIN:** C004829173K"]))).toHaveLength(0);
+    expect(supplierIdFindings(bids(["- TIN: 100000009"]))).toHaveLength(0);
+  });
+
+  test("flags a broken TIN under the Rwanda scheme", () => {
+    const f = supplierIdFindings(bids(["**TIN:** 2051AB"]));
+    expect(f).toHaveLength(1);
+    expect(f[0].evidence).toContain("2051AB");
+  });
+
+  test("flags an identifier line that states nothing (blank, dash, N/A)", () => {
+    const f = supplierIdFindings(bids(["**KRA PIN:** —", "- TIN: N/A"]));
+    expect(f).toHaveLength(2);
+    expect(f.every((x) => x.rule === "R-SUPPLIER-ID")).toBe(true);
+  });
+
+  test("leaves identifiers alone when the line names no known scheme", () => {
+    expect(supplierIdFindings(bids(["**VAT Number:** GB123456789"]))).toHaveLength(0);
+  });
+
+  test("flags a structured notice that never names the buyer", () => {
+    const notice = "# TENDER NOTICE\n\n**Reference:** KE-X-2026-001\n**Subject:** Kits\n";
+    const f = buyerMissingFindings(notice, "01-tender-notice.md");
+    expect(f).toHaveLength(1);
+    expect(f[0].rule).toBe("R-BUYER-MISSING");
+    expect(f[0].severity).toBe("MEDIUM");
+    expect(f[0].evidence).toContain("KE-X-2026-001");
+  });
+
+  test("a placeholder buyer line counts as no buyer", () => {
+    const notice = "**Reference:** KE-X-2026-002\n**Buyer:** —\n";
+    expect(buyerMissingFindings(notice, "01.md")).toHaveLength(1);
+    const named = "**Reference:** KE-X-2026-003\n**Buyer:** Coast Water Works\n";
+    expect(buyerMissingFindings(named, "01.md")).toHaveLength(0);
+  });
+
+  test("unstructured text without a reference line is not judged", () => {
+    expect(buyerMissingFindings("just some prose", "01.md")).toHaveLength(0);
+  });
+
+  test("both findings survive the self-check against their cited documents", () => {
+    const sources = {
+      "01-tender-notice.md": "**Reference:** KE-X-2026-004\n",
+      "02-bid-x.md": "**KRA PIN:** P0518472\n",
+    };
+    const [idF] = supplierIdFindings(bids(["**KRA PIN:** P0518472"]));
+    const [bF] = buyerMissingFindings(sources["01-tender-notice.md"], "01-tender-notice.md");
+    expect(verifyFinding(idF, sources)).toBe(true);
+    expect(verifyFinding(bF, sources)).toBe(true);
+  });
+
+  test("the plan focuses the new families only when the pack carries the mess", () => {
+    const messy = planFromPack(
+      ["01-tender-notice.md", "02-bid-x.md"],
+      {
+        bids: bids(["**KRA PIN:** P0518472"]),
+        records: [],
+        notices: [{ file: "01-tender-notice.md", text: "**Reference:** KE-X-2026-005\n" }],
+      },
+    );
+    expect(messy.focusRules).toContain("SUPPLIER-ID");
+    expect(messy.focusRules).toContain("BUYER-MISSING");
+    const clean = planFromPack(
+      ["01-tender-notice.md", "02-bid-x.md"],
+      {
+        bids: bids(["no identifiers here"]),
+        records: [],
+        notices: [{ file: "01-tender-notice.md", text: "**Reference:** KE-X-2026-006\n**Buyer:** Ministry\n" }],
+      },
+    );
+    expect(clean.focusRules).not.toContain("SUPPLIER-ID");
+    expect(clean.focusRules).not.toContain("BUYER-MISSING");
+  });
+
+  test("flagPack keeps both mess findings end-to-end on the shipped KE-MSA pack shape", () => {
+    const files = ["01-tender-notice.md", "02-bid-bahari.md", "03-bid-mombasa.md"];
+    const sources = {
+      "01-tender-notice.md": "# TENDER NOTICE\n\n**Reference:** KE-MSA-2026-090\n**Budget ceiling:** KES 240,000,000\n",
+      "02-bid-bahari.md": "**Bidder:** BAHARI\n**KRA PIN:** C004829173K\n**Bid value:** KES 109,800,000\n",
+      "03-bid-mombasa.md": "**Bidder:** MOMBASA\n**KRA PIN:** P0518472\n**Bid value:** KES 113,200,000\n",
+    };
+    const pack = buildPack(files, sources);
+    const { kept, rejected } = flagPack(pack, files);
+    const rules = kept.map((f) => f.rule);
+    expect(rules).toContain("R-SUPPLIER-ID");
+    expect(rules).toContain("R-BUYER-MISSING");
+    expect(rejected).toHaveLength(0);
+    expect(kept.every((f) => verifyFinding(f, sources))).toBe(true);
   });
 });

@@ -172,6 +172,8 @@ export const RULE_FAMILIES = [
   "AWARD-OVER-BUDGET",
   "DOC-MISSING",
   "SPEC-DEVIATION",
+  "SUPPLIER-ID",
+  "BUYER-MISSING",
 ] as const;
 export type RuleFamily = (typeof RULE_FAMILIES)[number];
 
@@ -212,6 +214,8 @@ export function planFromPack(
   if (hasPriceTable && pack.bids.length >= 2) focus.push("PRICE-OUTLIER");
   if (hasAwards) focus.push("AWARD-OVER-BUDGET");
   if (requiredDocs) focus.push("DOC-MISSING");
+  if (pack.bids.some((b) => bidStatesIdentifier(b.text))) focus.push("SUPPLIER-ID");
+  if (pack.notices.some((n) => n.file.endsWith(".md") && noticeLacksBuyer(n.text))) focus.push("BUYER-MISSING");
   focus.push("SPEC-DEVIATION");
   return {
     pack: { files: files.length, bids: pack.bids.length, ocdsRecords: pack.records.length, markdownValueBids, ocdsValueBids },
@@ -239,7 +243,7 @@ export async function llmPlanFromPack(
       {
         role: "system",
         content:
-          'You are a public-procurement review planner. Given a tender pack inventory, output STRICT JSON only: {"parseMarkdownValues":boolean,"focusRules":string[],"maxDrafts":number,"note":"one sentence"}. focusRules entries must come from: PRICE-OUTLIER, VALUE-OUTLIER, OVER-BUDGET, AWARD-OVER-BUDGET, DOC-MISSING, SPEC-DEVIATION. maxDrafts is 1-4.',
+          'You are a public-procurement review planner. Given a tender pack inventory, output STRICT JSON only: {"parseMarkdownValues":boolean,"focusRules":string[],"maxDrafts":number,"note":"one sentence"}. focusRules entries must come from: PRICE-OUTLIER, VALUE-OUTLIER, OVER-BUDGET, AWARD-OVER-BUDGET, DOC-MISSING, SPEC-DEVIATION, SUPPLIER-ID, BUYER-MISSING. maxDrafts is 1-4.',
       },
       { role: "user", content: `PACK INVENTORY:\n${JSON.stringify(base.pack)}\n\nDraft the review plan now.` },
     ], fetchImpl);
@@ -591,6 +595,14 @@ export function verifyFindingReason(f: Finding, sources: Record<string, string>)
       const req = f.evidence.match(/"(.+?)" as REQUIRED/)?.[1]?.toLowerCase();
       return !!req && lower.includes(req) ? null : "required document not named in cited notice";
     }
+    case "R-SUPPLIER-ID": {
+      const id = f.evidence.match(/Supplier identifier "([^"]+)"/)?.[1];
+      return !!id && text.includes(id) ? null : "stated identifier not found in cited bid";
+    }
+    case "R-BUYER-MISSING": {
+      const ref = f.evidence.match(/Tender notice (\S+) names no buyer/)?.[1];
+      return !!ref && text.includes(ref) ? null : "tender reference not found in cited notice";
+    }
     default:
       return `rule "${f.rule}" has no self-check`;
   }
@@ -650,6 +662,86 @@ export function docMissingFindings(bids: BidDoc[], notice: string, noticeFile: s
     }
   }
   return findings;
+}
+
+/* ── Publisher-mess rules ──────────────────────────────────────────────────
+   The portals document suppliers whose identifiers break their own national
+   scheme, and notices that never name the buyer. A committee should see both
+   before an award — deterministic, cited to the exact line. */
+
+/* Identifier schemes for the countries the packs come from. The LABEL on the
+   bid line decides which scheme applies: "PIN" is Kenya's KRA identifier,
+   "TIN" is Rwanda's. Only schemes the engine actually knows are validated —
+   nothing is invented about the rest. */
+export const ID_SCHEMES: Record<string, { label: string; pattern: RegExp; hint: string }> = {
+  PIN: { label: "Kenya KRA PIN", pattern: /^[PC]\d{9}[A-Z]$/, hint: "a Kenya KRA PIN is letter P or C, then nine digits, then one letter — 11 characters" },
+  TIN: { label: "Rwanda RRA TIN", pattern: /^1\d{8}$/, hint: "a Rwanda RRA TIN is nine digits starting with 1" },
+};
+
+/* A bid line that states a supplier identifier: "**KRA PIN:** P051…", "- TIN: 1…". */
+const ID_LINE = /^\s*(?:[-*]\s*)?\**\s*((?:(?:KRA|TAX)\s+)?PIN(?:\s*(?:No\.?|Number))?|TIN(?:\s*(?:No\.?|Number))?)\s*\**\s*[:\u2013\u2014]\s*\**\s*(.*?)\s*$/i;
+
+/* True when a bid states at least one identifier line (the plan's SUPPLIER-ID trigger). */
+export function bidStatesIdentifier(text: string): boolean {
+  return text.split("\n").some((line) => ID_LINE.test(line));
+}
+
+const ID_BLANK = /^(?:[-\u2013\u2014.*]+|n\/?a|tbd|tba|not\s+stated|none|\.\s*)$/i;
+
+/* Supplier identifiers that break their own scheme — cited to the exact bid line. */
+export function supplierIdFindings(bids: BidDoc[]): Finding[] {
+  const findings: Finding[] = [];
+  for (const bid of bids) {
+    for (const line of bid.text.split("\n")) {
+      const m = line.match(ID_LINE);
+      if (!m) continue;
+      const label = m[1].toUpperCase().includes("PIN") ? "PIN" : "TIN";
+      const raw = m[2].trim();
+      const scheme = ID_SCHEMES[label];
+      const blank = raw.length === 0 || ID_BLANK.test(raw);
+      if (!blank && scheme.pattern.test(raw.toUpperCase())) continue;
+      const detail = blank
+        ? "the line states no identifier at all"
+        : scheme.hint;
+      findings.push({
+        id: "",
+        rule: "R-SUPPLIER-ID",
+        severity: "HIGH",
+        item: `${bid.bidder} — ${scheme.label}`,
+        evidence: `Supplier identifier "${raw.slice(0, 60)}" does not conform to its scheme — ${detail}.`,
+        citation: `${bid.source}, supplier identifier line`,
+      });
+    }
+  }
+  return findings;
+}
+
+/* A buyer-line placeholder that means the same as no line at all. */
+export const BUYER_PLACEHOLDER = /^(?:[-\u2013\u2014.]+|n\/?a|tbd|tba|not\s+stated|none|\[.+\]|\{\{.+\}\})$/i;
+
+/* True when a structured markdown notice states its reference but never names
+   the buyer (no **Buyer:** line, or a placeholder where one should be). */
+export function noticeLacksBuyer(text: string): boolean {
+  if (!/^\*\*Reference:\*\*\s*\S/m.test(text)) return false;
+  const buyer = text.match(/^\*\*Buyer:\*\*\s*(.*)$/m)?.[1]?.trim();
+  return !buyer || BUYER_PLACEHOLDER.test(buyer);
+}
+
+/* Notices that never name the contracting entity — cited to the reference line. */
+export function buyerMissingFindings(notice: string, noticeFile: string): Finding[] {
+  if (!noticeLacksBuyer(notice)) return [];
+  const ref = notice.match(/^\*\*Reference:\*\*\s*(\S+)/m)?.[1] ?? "";
+  if (!ref) return [];
+  return [
+    {
+      id: "",
+      rule: "R-BUYER-MISSING",
+      severity: "MEDIUM",
+      item: `Tender ${ref} — buyer name`,
+      evidence: `Tender notice ${ref} names no buyer — the pack never says who the contracting entity is.`,
+      citation: `${noticeFile}, tender reference line`,
+    },
+  ];
 }
 
 /* OCDS awards above the tender's published value are flagged, citing the record and path. */
@@ -856,6 +948,8 @@ export function flagPack(
   const all = [
     ...runRules(bids, "", ""),
     ...pack.notices.flatMap((n) => docMissingFindings(bids, n.text, n.file)),
+    ...pack.notices.filter((n) => n.file.endsWith(".md")).flatMap((n) => buyerMissingFindings(n.text, n.file)),
+    ...supplierIdFindings(bids),
     ...runAwardRules(pack.records),
     ...overBudget,
   ];

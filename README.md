@@ -44,18 +44,19 @@ clock) on the landing page.
 
 1. [Demo film](#demo-film)
 2. [Problem statement](#problem-statement)
-3. [Solution overview](#solution-overview)
-4. [Target users](#target-users)
-5. [Architecture](#architecture)
-6. [Agent architecture](#agent-architecture)
-7. [MCP implementation](#mcp-implementation)
-8. [The five MCP tools](#the-five-mcp-tools)
-9. [Human-in-the-loop workflow](#human-in-the-loop-workflow)
-10. [Technology stack](#technology-stack)
-11. [Setup / installation](#setup--installation)
-12. [Usage instructions](#usage-instructions)
-13. [Limitations](#limitations)
-14. [Future improvements](#future-improvements)
+3. [Which half we built on](#which-half-we-built-on)
+4. [Solution overview](#solution-overview)
+5. [Target users](#target-users)
+6. [Architecture](#architecture)
+7. [Agent architecture](#agent-architecture)
+8. [MCP implementation](#mcp-implementation)
+9. [The five MCP tools](#the-five-mcp-tools)
+10. [Human-in-the-loop workflow](#human-in-the-loop-workflow)
+11. [Technology stack](#technology-stack)
+12. [Setup / installation](#setup--installation)
+13. [Usage instructions](#usage-instructions)
+14. [Limitations](#limitations)
+15. [Future improvements](#future-improvements)
 
 ---
 
@@ -69,14 +70,29 @@ Quorum attacks the review bottleneck directly: an agent reads every document, ex
 
 ---
 
+## Which half we built on
+
+The public portals split the tender cycle in two, and this README states the split plainly, as the challenge brief asks:
+
+- **What the portals publish:** what was tendered and what was awarded — notices, awards, prices, supplier names. That half (price analysis, award history, supplier work) can run on **real OCDS data today** — Kenya, Rwanda and Tanzania update daily; Nigeria (federal + Anambra, Ebonyi, Osun, Plateau), South Africa and Liberia are current; Ghana, Zambia and Uganda publish monthly.
+- **What the portals never publish:** the bids themselves. Bid evaluation — the desk this product serves — needs documents **nobody publishes**.
+
+**Quorum is built on the bid-evaluation half.** The packs the agent reviews are the tender notice plus the bidders' response documents — the artifacts that only exist inside a procuring entity's office. Since no portal carries them, the repository ships six **authored sample packs** — five Kenyan (four distinct buyers) and one Rwanda Biomedical Centre pack — that model the publishers' documented mess on purpose: extreme value outliers, a supplier identifier that breaks its own national scheme, a missing buyer name, missing required documents, declared spec deviations. They are fiction — invented references, no real notice is mirrored, and no real personal data appears anywhere in the repository.
+
+**What is real today:** the review pipeline, the MCP tool boundary, the audit log, the receipts, the eval harness and its held-out tenders — all run on the shipped packs. **What is not:** no live OCDS feed is ingested yet (the notice in each pack carries an OCDS release reference the engine can parse; a live connector is listed under [Future improvements](#future-improvements)). A pilot drops the same real pack a committee is reading into the dossier and the identical code path reviews it — that is the intended first contact with live data, and the pilot intake is open ([SUBMISSION/09-fit.md](SUBMISSION/09-fit.md)).
+
+**Country scope:** built against Kenya (the eight-rule engine validates Kenyan supplier identifiers against the KRA PIN scheme), with one Rwanda pack proving the portability claim — the same engine reviews it unchanged.
+
+---
+
 ## Solution overview
 
 **The agent prepares the file; the committee awards the tender.** Concretely:
 
 - **Read everything.** The agent ingests the tender pack (notices, bids, OCDS records) through a sandboxed filesystem MCP server — path-jailed to the tender directory — so no document is skimmed or skipped.
 - **Pin the requirements.** SHALL/must clauses, budget ceilings and deadlines are extracted into structured, page-referenced requirements.
-- **Flag findings with citations.** Deterministic rules — price outliers (peer-median ×2), missing required documents, spec deviations — raise findings, each carrying its source file path and evidence excerpt. No citation, no finding: that rule is enforced by the test suite.
-- **Draft redlines.** For flagged clauses, an LLM drafts a `{proposed, rationale}` committee redline through any OpenAI-compatible endpoint set in `LLM_BASE_URL`/`LLM_MODEL`. The intended setup is an open-weights model served in-region; the endpoint in `.env.local` is not (see Honest status). A deterministic template fallback keeps runs alive if inference is unreachable, and every draft records its source.
+- **Flag findings with citations.** Deterministic rules — price outliers (peer-median ×2), missing required documents, spec deviations, over-ceiling bids, and the publishers' documented mess (supplier identifiers that break their own national scheme, notices that never name the buyer) — raise findings, each carrying its source file path and evidence excerpt. No citation, no finding: that rule is enforced by the test suite.
+- **Draft redlines.** For flagged clauses, an LLM drafts a `{proposed, rationale}` committee redline through any OpenAI-compatible endpoint set in `LLM_BASE_URL`/`LLM_MODEL`. The intended setup is an open-weights model served in-region; the endpoint in `.env.local` is not (see [Limitations](#limitations)). A deterministic template fallback keeps runs alive if inference is unreachable, and every draft records its source.
 - **Stop at the gate.** The review graph ends at `propose_gate`. The edge from the gate to filing does not exist in the graph — no prompt, tool misuse or model turn can file an award. Only a *named* human on the committee roster can release the sealed filing.
 - **Prove everything.** One append-only line per tool call lands in `tool-log.jsonl`, and each approved filing writes a sha-256-sealed receipt into `data/submissions/`.
 
@@ -213,7 +229,7 @@ Full workflow detail (incl. supporting capabilities): [`SUBMISSION/03-solution.m
 | Databases | One dependency-free JSON file for the web app (users, sessions, committee roster, settings, workspace invites, pilot requests), written atomically; file-backed state + append-only audit JSONL on the agent side | Small, inspectable, zero native dependencies; append-only where auditable |
 | Identity | Firebase Auth (email/passphrase + Google Sign-In) + Firebase Storage mirror | Real authentication without a homegrown password system |
 | Infra | nginx, systemd, EC2 `t4g.small` in `af-south-1`, Route 53 zone, Elastic IP | Small, boring, reproducible from the repo |
-| Tests | Bun test runner, `engine.test.ts` — 38 tests green | Safety rules enforced by tests, not just docs |
+| Tests | Bun test runner, `engine.test.ts` — 49 tests green | Safety rules enforced by tests, not just docs |
 
 ---
 
@@ -296,7 +312,7 @@ curl -s localhost:3031/mcp -X POST -H 'content-type: application/json' \
 
 - The agent cannot file an award by itself — by construction, not by policy. Everything irreversible is behind the named human gate.
 - Committee *roles* are stored and displayed but not yet enforced as permission levels: the workspace is currently flat (all members read the same runs/gates/ledger).
-- The compliance layer is deterministic rule-based (three rule families), not a general reasoning engine — it catches what the rules cover, and it is honest about that.
+- The compliance layer is deterministic rule-based (eight rule families), not a general reasoning engine — it catches what the rules cover, and it is honest about that.
 
 **Current state of the deployment:**
 

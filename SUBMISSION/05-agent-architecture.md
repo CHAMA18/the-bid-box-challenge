@@ -121,7 +121,7 @@ Three storage layers, each with a clear role:
 | Databases | One dependency-free JSON file for the web app (users/roster/settings) + file-backed state & append-only audit JSONL on the agent side | Small, inspectable store with no native dependencies; append-only text where it's auditable evidence |
 | Identity & storage | Firebase Auth (email/passphrase + Google) + Storage mirror | Real authentication without building a password system; documents mirrored both sides |
 | Infra | nginx (reverse proxy), systemd (process supervision), one `t4g.small` EC2 in `af-south-1`, Route 53 zone | Small, boring, cheap to run — everything reproducible from the repo |
-| Tests | Bun test runner (`engine.test.ts`, 38 tests: green) | The agent safety rules (roster fail-closed, citations required) are enforced by tests, not only by docs |
+| Tests | Bun test runner (`engine.test.ts`, 49 tests: green) | The agent safety rules (roster fail-closed, citations required) are enforced by tests, not only by docs |
 
 **Non-negotiables across the whole stack:**
 

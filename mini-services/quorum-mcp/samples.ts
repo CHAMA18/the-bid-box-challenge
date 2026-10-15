@@ -59,6 +59,17 @@ export const SAMPLE_TENDERS: SampleTender[] = [
     challenges: "Bid value 2.2× the peer median; a radiation-certification deviation; type approval pending at bid close; a REQUIRED reference letter missing.",
   },
   {
+    ref: "KE-MSA-2026-090",
+    title: "Water-quality laboratory kits and reagents — coast region depots",
+    buyer: "Not stated on the notice — the pack's own documented defect",
+    sector: "HEALTH",
+    currency: "KES",
+    budget: "KES 240M ceiling",
+    bids: 2,
+    format: "PDF PACK",
+    challenges: "The notice never names the buyer; one bidder's KRA PIN breaks the national scheme (8 characters).",
+  },
+  {
     ref: "RW-UMUCYO-2027-006",
     title: "Community health worker digital kits — solar tablets, diagnostics and connectivity (7,500 kits)",
     buyer: "Rwanda Biomedical Centre · Umucyo",

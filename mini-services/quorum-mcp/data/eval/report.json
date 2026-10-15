@@ -1,34 +1,34 @@
 {
-  "generatedAt": "2026-10-16T13:10:22.457Z",
+  "generatedAt": "2026-10-16T14:29:36.908Z",
   "labeller": "one human reviewer, one pass over the source documents, written before the engine was run on them. Not independently double-labelled.",
   "covered_means": "a rule in the engine is designed to raise this finding type. covered:false items measure what the rule set does not claim to catch. Coverage flags track the CURRENT rule set: when a rule lands (e.g. plan_review deep-value parsing of markdown bid values, 2026-10-16), the flags it covers flip to true — the labels themselves are never edited after their original single pass.",
   "summary": {
     "runsPerTender": 5,
-    "tenders": 6,
+    "tenders": 7,
     "original": {
-      "goldLabels": 40,
-      "coveredLabels": 37,
+      "goldLabels": 42,
+      "coveredLabels": 39,
       "recallCovered": 100,
-      "recallAll": 92.5,
-      "precision": 90.2,
-      "findingsTotal": 41,
+      "recallAll": 92.9,
+      "precision": 90.7,
+      "findingsTotal": 43,
       "findingsUnlabelled": 4
     },
     "adjudicated": {
-      "goldLabels": 40,
-      "coveredLabels": 37,
+      "goldLabels": 42,
+      "coveredLabels": 39,
       "recallCovered": 100,
-      "recallAll": 92.5,
-      "precision": 90.2,
-      "findingsTotal": 41,
+      "recallAll": 92.9,
+      "precision": 90.7,
+      "findingsTotal": 43,
       "findingsUnlabelled": 4
     },
-    "identicalAcrossRuns": "6/6 tenders",
+    "identicalAcrossRuns": "7/7 tenders",
     "llmCallsPerRun": 0,
     "mutation": {
       "repeatsPerMutation": 5,
-      "executed": 23,
-      "skipped": 1,
+      "executed": 26,
+      "skipped": 2,
       "overallDetectionRate": 100,
       "note": "Detection = the engine raises (or, for the removed-ceiling guard, drops) the expected finding. Skipped = the mutation's precondition did not hold for that tender; reported, never counted as a pass."
     },
@@ -77,10 +77,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.93,
+      "medianMs": 1.11,
       "msRange": [
-        0.76,
-        5.35
+        0.88,
+        6.18
       ],
       "mutations": [
         {
@@ -138,10 +138,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 1.02,
+      "medianMs": 0.99,
       "msRange": [
-        0.78,
-        1.25
+        0.93,
+        1.14
       ],
       "mutations": [
         {
@@ -167,6 +167,45 @@
       ]
     },
     {
+      "tender": "KE-MSA-2026-090",
+      "findings": 2,
+      "gold": 2,
+      "goldHit": 2,
+      "missed": [],
+      "unlabelled": [],
+      "rejectedUncited": 0,
+      "droppedBySelfCheck": 0,
+      "ruleCapHit": false,
+      "identicalAcrossRuns": true,
+      "medianMs": 0.47,
+      "msRange": [
+        0.41,
+        16.73
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": null,
+          "skipped": true
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
+    },
+    {
       "tender": "KE-NCB-104293",
       "findings": 4,
       "gold": 4,
@@ -177,10 +216,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.58,
+      "medianMs": 0.62,
       "msRange": [
-        0.45,
-        0.71
+        0.59,
+        0.69
       ],
       "mutations": [
         {
@@ -225,10 +264,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.66,
+      "medianMs": 0.67,
       "msRange": [
-        0.54,
-        8.62
+        0.57,
+        0.75
       ],
       "mutations": [
         {
@@ -271,10 +310,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.43,
+      "medianMs": 0.61,
       "msRange": [
-        0.38,
-        0.45
+        0.55,
+        0.65
       ],
       "mutations": [
         {
@@ -310,10 +349,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.4,
+      "medianMs": 0.47,
       "msRange": [
-        0.38,
-        0.42
+        0.45,
+        0.52
       ],
       "mutations": [
         {
@@ -341,6 +380,7 @@
   ],
   "data_quality_notes": [
     "RW-UMUCYO: bid price tables are labelled RWF in the header but the cell values carry a KES prefix. Rule evidence text hard-codes KES, so RWF tender evidence is mislabelled.",
-    "KE-NCB sample brief says a bidder is short two REQUIRED documents; the documents show one missing."
+    "KE-NCB sample brief says a bidder is short two REQUIRED documents; the documents show one missing.",
+    "KE-MSA-2026-090 (added 2026-10-16): pack authored to carry the publishers' documented mess — the notice omits the buyer name entirely, and one bidder's KRA PIN fails the national scheme. Labels written from the documents and the rule definitions before the engine ran on the pack."
   ]
 }
