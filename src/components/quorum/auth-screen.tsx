@@ -400,7 +400,7 @@ interface AuthScreenProps {
 }
 
 export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, onClose }: AuthScreenProps) {
-  const [values, setValues] = useState({ name: "", email: "", organization: "", password: "" });
+  const [values, setValues] = useState({ name: "", email: "", organization: "", inviteCode: "", password: "" });
   const [remember, setRemember] = useState(true);
   const [terms, setTerms] = useState(false);
   const [showPw, setShowPw] = useState(false);
@@ -503,6 +503,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
           email: values.email.trim(),
           password: values.password,
           organization: values.organization.trim() || undefined,
+          inviteCode: values.inviteCode.trim() || undefined,
         }),
       });
       const data = (await res.json().catch(() => null)) as
@@ -795,6 +796,38 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                                 className={inputCls(!!errors.organization)}
                               />
                               <FieldError id="auth-org-error" message={errors.organization} />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
+                        <AnimatePresence initial={false}>
+                          {mode === "register" && (
+                            <motion.div
+                              key="invite"
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.28, ease: EASE }}
+                              className="overflow-hidden"
+                            >
+                              <label
+                                htmlFor="auth-invite"
+                                className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500"
+                              >
+                                WORKSPACE INVITE CODE <span className="text-ink-300">· OPTIONAL</span>
+                              </label>
+                              <input
+                                id="auth-invite"
+                                type="text"
+                                value={values.inviteCode}
+                                onChange={(e) => set("inviteCode", e.target.value)}
+                                placeholder="Q-XXXX-XXXX"
+                                autoCapitalize="characters"
+                                className={inputCls(false)}
+                              />
+                              <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-400">
+                                Invited by a teammate? Paste the code they shared — it joins you to their workspace.
+                              </p>
                             </motion.div>
                           )}
                         </AnimatePresence>

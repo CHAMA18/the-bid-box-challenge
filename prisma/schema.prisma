@@ -63,3 +63,24 @@ model SystemSetting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+// ── Workspace access (inviting teammates) ─────────────────────────────────
+// One flat workspace: everyone with an account and a claimed seat reads the
+// same runs, gates and audit trail. Invites are code-based (no email provider
+// is configured), so an officer generates a code here and the invitee
+// pastes it during registration.
+
+model WorkspaceInvite {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  email     String?  // optional note of who the code was meant for
+  role      String   @default("OFFICER") // OFFICER | COMMITTEE — access level
+  createdBy String
+  inviterName  String
+  claimedBy String? // the user id of whoever accepted
+  claimedByEmail String?
+  status    String   @default("PENDING") // PENDING | CLAIMED | REVOKED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  claimedAt DateTime?
+}
