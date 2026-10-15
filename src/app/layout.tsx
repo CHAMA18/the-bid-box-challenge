@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Archivo, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { FirebaseAnalytics } from "@/components/quorum/firebase-analytics";
 
 // Self-hosted via next/font — zero runtime requests to Google, so the page
 // can never hang on external font CDNs.
@@ -72,6 +73,7 @@ export default function RootLayout({
         className={`${archivo.variable} ${inter.variable} ${jetbrains.variable} font-body antialiased bg-background text-foreground`}
       >
         {children}
+        <FirebaseAnalytics />
         <Toaster />
       </body>
     </html>
