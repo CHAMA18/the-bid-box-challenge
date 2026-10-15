@@ -170,6 +170,8 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
 
   const pull = useCallback(async () => {
     try {
+      /* Self-heal: if the sidecar died, the long-lived server respawns it. */
+      void fetch("/api/mcp-ensure").catch(() => null);
       const [h, t, a, r, g] = await Promise.all([
         fetch(`${SVC}/health?XTransformPort=3031`).then((x) => x.json()),
         fetch(`${SVC}/tools?XTransformPort=3031`).then((x) => x.json()),

@@ -36,6 +36,10 @@ bun run dev
 bun run mcp
 ```
 
+> The sidecar also **auto-boots with the Next server** (`src/instrumentation.ts`)
+> and self-heals via `GET /api/mcp-ensure` — terminal 2 is only needed for
+> development on the MCP service itself.
+
 Open `http://localhost:3000`. Any credentials open the demo workspace
 (demo officer: `n.mokoena@procurement.gov`). The frontend reaches the MCP
 service through the gateway as `/api/...?XTransformPort=3031` — same origin, no CORS.

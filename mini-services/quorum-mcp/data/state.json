@@ -1,6 +1,19 @@
 {
   "gates": [
     {
+      "id": "gate_5e0yph",
+      "runId": "mcp-direct",
+      "tenderId": "KE-NCB-104293",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "MedEquip East Africa Ltd",
+        "value": "KES 412,600,000",
+        "attachments": 7
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-15T10:48:49.455Z"
+    },
+    {
       "id": "gate_tswcmw",
       "runId": "run_bc2af496",
       "tenderId": "KE-NCB-104293",
@@ -287,5 +300,5 @@
       "gateId": "gate_ebi3zp"
     }
   ],
-  "seq": 29
+  "seq": 31
 }

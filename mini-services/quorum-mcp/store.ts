@@ -10,6 +10,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
+import { appendFileSync } from "node:fs";
 
 export type ToolKind = "READ" | "WRITES" | "IRREVERSIBLE" | "GATE_DECISION";
 
@@ -108,7 +109,8 @@ export function appendLog(e: Omit<LogEntry, "seq" | "id" | "ts">): LogEntry {
   toolLog.push(entry);
   if (toolLog.length > 600) toolLog.splice(0, toolLog.length - 600);
   try {
-    Bun.writeSync(Bun.file(DATA + "tool-log.jsonl").name, JSON.stringify(entry) + "\n", { append: true });
+    /* appendFileSync creates the file on first write — never lose the spine. */
+    appendFileSync(DATA + "tool-log.jsonl", JSON.stringify(entry) + "\n");
   } catch {
     /* append failures never break the tool itself */
   }
