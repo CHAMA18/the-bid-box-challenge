@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   approverAllowed,
+  bidLineNamingDocument,
+  bidNamesDocument,
+  budgetFindings,
+  docMissingFindings,
   callLlama,
+  draftClause,
+  expiredLicenceFindings,
+  markdownBidValue,
   citesKnownDocument,
   fetchRoster,
   llmConfigFromEnv,
@@ -134,6 +141,90 @@ describe("drafting model: OpenAI-compatible LLM endpoint", () => {
   });
 });
 
+describe("drafting falls back to the template and never stalls a run", () => {
+  const ANOMALY = "R-PRICE-OUTLIER on MRI 1.5T scanner — MEDIQUEAST";
+
+  /* Runs fn with LLM env and globalThis.fetch replaced, then restores both. */
+  async function withLlm<T>(
+    env: { LLM_BASE_URL?: string; LLM_MODEL?: string },
+    fetchStub: (input: string | URL | Request, init?: RequestInit) => Promise<Response>,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const saved = { base: process.env.LLM_BASE_URL, model: process.env.LLM_MODEL, fetch: globalThis.fetch };
+    delete process.env.LLM_BASE_URL;
+    delete process.env.LLM_MODEL;
+    if (env.LLM_BASE_URL) process.env.LLM_BASE_URL = env.LLM_BASE_URL;
+    if (env.LLM_MODEL) process.env.LLM_MODEL = env.LLM_MODEL;
+    globalThis.fetch = fetchStub as unknown as typeof fetch; // test stub; only the call shape matters
+    try {
+      return await fn();
+    } finally {
+      if (saved.base === undefined) delete process.env.LLM_BASE_URL;
+      else process.env.LLM_BASE_URL = saved.base;
+      if (saved.model === undefined) delete process.env.LLM_MODEL;
+      else process.env.LLM_MODEL = saved.model;
+      globalThis.fetch = saved.fetch;
+    }
+  }
+
+  test("no model configured: template clause, and no network call is made", async () => {
+    let calls = 0;
+    const out = await withLlm({}, (async () => {
+      calls++;
+      return new Response("{}");
+    }), () => draftClause("clause text", ANOMALY));
+    expect(calls).toBe(0);
+    expect(out.source).toBe("template");
+    expect(out.proposed).toContain(ANOMALY);
+    expect(out.model).toBe("template (no model configured)");
+  });
+
+  test("endpoint unreachable: template clause, with the failure recorded in the rationale", async () => {
+    const out = await withLlm(
+      { LLM_BASE_URL: "http://llama.internal:8000/v1", LLM_MODEL: "llama-3.1-70b-instruct" },
+      (async () => {
+        throw new TypeError("fetch failed");
+      }),
+      () => draftClause("clause text", ANOMALY),
+    );
+    expect(out.source).toBe("template");
+    expect(out.proposed).toContain(ANOMALY);
+    expect(out.rationale).toContain("fetch failed");
+    expect(out.model).toBe("llama-3.1-70b-instruct (llm) · failed — template used");
+  });
+
+  test("model reply with no JSON object: template clause, not a crash", async () => {
+    const out = await withLlm(
+      { LLM_BASE_URL: "http://llama.internal:8000/v1", LLM_MODEL: "llama-3.1-70b-instruct" },
+      (async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: "I cannot help with that." } }] }))),
+      () => draftClause("clause text", ANOMALY),
+    );
+    expect(out.source).toBe("template");
+    expect(out.rationale).toContain("no JSON object");
+  });
+
+  test("healthy endpoint: the model's clause is used and its source is recorded as llm", async () => {
+    const out = await withLlm(
+      { LLM_BASE_URL: "http://llama.internal:8000/v1", LLM_MODEL: "llama-3.1-70b-instruct" },
+      (async () =>
+        new Response(
+          JSON.stringify({
+            model: "llama-3.1-70b-instruct",
+            choices: [{ message: { content: '{"proposed":"Clause X","rationale":"Because Y"}' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+        )),
+      () => draftClause("clause text", ANOMALY),
+    );
+    expect(out.source).toBe("llm");
+    expect(out.proposed).toBe("Clause X");
+    expect(out.rationale).toBe("Because Y");
+    expect(out.model).toBe("llama-3.1-70b-instruct (llm)");
+    expect(out.usage).toEqual({ promptTokens: 10, completionTokens: 5 });
+  });
+});
+
 describe("approver check against the committee roster", () => {
   const roster: RosterMember[] = [
     { name: "Wanjiru Kamau", status: "PRESENT" },
@@ -240,5 +331,86 @@ describe("rules cite real sources only", () => {
     for (const f of findings) {
       expect(f.citation.trim().length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("markdown bid values and budget ceiling", () => {
+  const NOTICE = "# TENDER\n**Budget ceiling:** KES 1,000,000 (VAT inclusive)";
+  const bidText = (value: string) => `# BID\n**Bid value:** ${value}\n`;
+
+  test("reads the stated bid value from a markdown bid", () => {
+    expect(markdownBidValue(bidText("KES 3,940,000,000"))).toEqual({ currency: "KES", value: 3940000000 });
+    expect(markdownBidValue("no value here")).toBeUndefined();
+  });
+
+  test("flags a markdown bid above the ceiling and cites the bid file", () => {
+    const bids: BidDoc[] = [{ bidder: "Big", source: "02-bid-big.md", text: bidText("KES 1,200,000"), value: 1200000, currency: "KES" }];
+    const f = budgetFindings(bids, NOTICE, "01-tender-notice.md");
+    expect(f).toHaveLength(1);
+    expect(f[0].rule).toBe("R-OVER-BUDGET");
+    expect(f[0].citation).toBe("02-bid-big.md, bid value");
+    expect(verifyFinding(f[0], { "02-bid-big.md": bidText("KES 1,200,000") })).toBe(true);
+  });
+
+  test("does not flag a bid at or under the ceiling", () => {
+    const bids: BidDoc[] = [{ bidder: "Ok", source: "02-bid-ok.md", text: bidText("KES 1,000,000"), value: 1000000, currency: "KES" }];
+    expect(budgetFindings(bids, NOTICE, "01-tender-notice.md")).toHaveLength(0);
+  });
+
+  test("a markdown value outlier is flagged and passes the self-check against its bid", () => {
+    const text = (v: string) => bidText(v);
+    const bids: BidDoc[] = [
+      { bidder: "A", source: "02-bid-a.md", text: text("KES 500,000"), value: 500000, currency: "KES" },
+      { bidder: "B", source: "03-bid-b.md", text: text("KES 520,000"), value: 520000, currency: "KES" },
+      { bidder: "C", source: "04-bid-c.md", text: text("KES 1,400,000"), value: 1400000, currency: "KES" },
+    ];
+    const f = runRules(bids, "", "01-tender-notice.md").find((x) => x.rule === "R-VALUE-OUTLIER" && x.item === "C");
+    expect(f).toBeDefined();
+    expect(f?.citation).toBe("04-bid-c.md, bid value");
+    expect(verifyFinding(f!, { "04-bid-c.md": text("KES 1,400,000") })).toBe(true);
+  });
+});
+
+describe("licences and pending approvals", () => {
+  test("flags a bid line stating a licence as expired, and passes the self-check", () => {
+    const text = "# BID\n- PPB wholesaler licence \u2014 licence issued January 2025\u2013expired\n";
+    const bids: BidDoc[] = [{ bidder: "Eq", source: "03-bid-eq.md", text }];
+    const f = expiredLicenceFindings(bids);
+    expect(f).toHaveLength(1);
+    expect(f[0].rule).toBe("R-LICENCE-EXPIRED");
+    expect(verifyFinding(f[0], { "03-bid-eq.md": text })).toBe(true);
+  });
+
+  test("does not flag an expired line that is not about a credential", () => {
+    const bids: BidDoc[] = [{ bidder: "Eq", source: "03-bid-eq.md", text: "The offer expired last week." }];
+    expect(expiredLicenceFindings(bids)).toHaveLength(0);
+  });
+
+  test("a document still in review does not count as provided", () => {
+    expect(bidNamesDocument("- Radiation Protection Board type-approval \u2014 submitted, approval in review", "Radiation Protection Board")).toBe(false);
+    expect(bidNamesDocument("- Radiation Protection Board type-approval \u2014 attached", "Radiation Protection Board")).toBe(true);
+  });
+
+  test("a required document named but pending is reported as named-not-provided, quoting the bid line", () => {
+    const notice = "- [REQUIRED] PPB wholesaler licence\n";
+    const bids: BidDoc[] = [
+      { bidder: "Eq", source: "03-bid-eq.md", text: "- PPB wholesaler licence — application pending" },
+      { bidder: "Other", source: "03-bid-other.md", text: "- Tax certificate — attached" },
+    ];
+    const [eq, other] = docMissingFindings(bids, notice, "01-tender-notice.md");
+    expect(eq.evidence).toContain("names it but does not provide it");
+    expect(eq.evidence).toContain("application pending");
+    expect(other.evidence).toContain("does not reference it");
+    expect(bidLineNamingDocument("- Tax certificate — attached", "ppb wholesaler licence")).toBeNull();
+  });
+
+  test("rule findings are not truncated: more than six are returned", () => {
+    const bids: BidDoc[] = Array.from({ length: 8 }, (_, i) => ({
+      bidder: `Bidder ${i}`,
+      source: `0${i + 2}-bid-${i}.md`,
+      text: "| Item A | 1 | KES 10 |\n" + "Alternative offered for item.\n",
+    }));
+    const specs = runRules(bids, "", "01-tender-notice.md").filter((f) => f.rule === "R-SPEC-DEVIATION");
+    expect(specs.length).toBe(8);
   });
 });

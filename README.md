@@ -25,8 +25,9 @@ then is the bundle sealed, filed and receipted.
 9. [Technology stack](#technology-stack)
 10. [Setup / installation](#setup--installation)
 11. [Usage instructions](#usage-instructions)
-12. [Limitations](#limitations)
-13. [Future improvements](#future-improvements)
+12. [Evaluation](#evaluation)
+13. [Limitations](#limitations)
+14. [Future improvements](#future-improvements)
 
 ---
 
@@ -47,7 +48,7 @@ Quorum attacks the review bottleneck directly: an agent reads every document, ex
 - **Read everything.** The agent ingests the tender pack (notices, bids, OCDS records) through a sandboxed filesystem MCP server — path-jailed to the tender directory — so no document is skimmed or skipped.
 - **Pin the requirements.** SHALL/must clauses, budget ceilings and deadlines are extracted into structured, page-referenced requirements.
 - **Flag findings with citations.** Deterministic rules — price outliers (peer-median ×2), missing required documents, spec deviations — raise findings, each carrying its source file path and evidence excerpt. No citation, no finding: that rule is enforced by the test suite.
-- **Draft redlines.** For flagged clauses, an LLM drafts a `{proposed, rationale}` committee redline through any OpenAI-compatible endpoint set in `LLM_BASE_URL`/`LLM_MODEL`. The intended setup is an open-weights model served in-region; the endpoint in `.env.local` is not (see Honest status). A deterministic template fallback keeps runs alive if inference is unreachable, and every draft records its source.
+- **Draft redlines.** For flagged clauses, an LLM drafts a `{proposed, rationale}` committee redline through any OpenAI-compatible endpoint set in `LLM_BASE_URL`/`LLM_MODEL`. The intended setup is an open-weights model served in-region; the endpoint in `.env.local` is not (see Limitations). A deterministic template fallback keeps runs alive if inference is unreachable, and every draft records its source.
 - **Stop at the gate.** The review graph ends at `propose_gate`. The edge from the gate to filing does not exist in the graph — no prompt, tool misuse or model turn can file an award. Only a *named* human on the committee roster can release the sealed filing.
 - **Prove everything.** One append-only line per tool call lands in `tool-log.jsonl`, and each approved filing writes a sha-256-sealed receipt into `data/submissions/`.
 
@@ -177,7 +178,7 @@ Full workflow detail (incl. supporting capabilities): [`SUBMISSION/03-solution.m
 | Databases | One dependency-free JSON file for the web app (users, sessions, committee roster, settings, workspace invites, pilot requests), written atomically; file-backed state + append-only audit JSONL on the agent side | Small, inspectable, zero native dependencies; append-only where auditable |
 | Identity | Firebase Auth (email/passphrase + Google Sign-In) + Firebase Storage mirror | Real authentication without a homegrown password system |
 | Infra | nginx, systemd, EC2 `t4g.small` in `af-south-1`, Route 53 zone, Elastic IP | Small, boring, reproducible from the repo |
-| Tests | Bun test runner, `engine.test.ts` — 26 tests green | Safety rules enforced by tests, not just docs |
+| Tests | Bun test runner, `engine.test.ts` — 39 tests green (`cd mini-services/quorum-mcp && bun test`) | Safety rules enforced by tests, not just docs |
 
 ---
 
@@ -197,7 +198,7 @@ bun run mcp
 > and self-heals via `GET /api/mcp-ensure` — terminal 2 is only needed for
 > development on the MCP service itself.
 
-Optional: set `LLM_BASE_URL` + `LLM_MODEL` (optionally `LLM_API_KEY`) to any OpenAI-compatible endpoint to switch redline drafting from the template fallback to a live open-weights model — e.g. a self-hosted vLLM/Ollama instance.
+Optional configuration lives in `.env.local` (template: `.env.example`). Nothing is required to run. Set `LLM_BASE_URL` + `LLM_MODEL` (optionally `LLM_API_KEY`) to any OpenAI-compatible endpoint to switch redline drafting from the template fallback to a live open-weights model — e.g. a self-hosted vLLM/Ollama instance. `QUORUM_WEB_URL` tells the sidecar where the web app is (default `http://127.0.0.1:3000`).
 
 Open `http://localhost:3000`. Sign up or sign in — there is no demo workspace; every view reads the live MCP sidecar.
 
@@ -234,6 +235,22 @@ curl -s localhost:3031/mcp -X POST -H 'content-type: application/json' \
 - **Landing** (`/`) — product story, live stack console, film.
 - **Auth** (`/#/login`, `/#/register`) — email/passphrase + Google Sign-In (Firebase project `public-tender`; identity mirror + document storage), with the optional workspace invite code field.
 - **Mission Control** (`/#/dashboard`) — flow guide, live stats, run register with SOURCED REPORT downloads, human-gate queue with named sign-off, decision ledger, agent feed, portal sync, committee roll-call, settings with team members.
+
+---
+
+## Evaluation
+
+The compliance layer is tested against 8 sample tender packs (`mini-services/quorum-mcp/data/tenders/`) with hand-written gold labels (`data/eval/gold.json`). Run it with `cd mini-services/quorum-mcp && bun eval.ts --runs 5`; results land in `data/eval/report.json`.
+
+| Set | Tenders | Gold labels | Labels hit | Findings with no label |
+| --- | --- | --- | --- | --- |
+| Original labels (written before the last rule additions) | 8 | 40 | 37 (recall 92.5%) | 15 (precision 71.2%) |
+| Adjudicated (labels for real findings the rules raised after review, marked `postHoc`) | 8 | 55 | 52 (recall 94.5%) | 0 (precision 100%) |
+| Held-out (2 tenders, labels written before they were run) | 2 | 10 | 8 (recall 80%) | 0 (precision 100%) |
+
+- **Honesty about the set.** The rules were developed while reading the first six tenders, so those numbers are a development score, not a generalisation claim. The two held-out tenders were labelled before the engine ran on them, and the rules were not changed in response to their results. Both misses there are real gaps the rules do not cover: a warranty term below the required period, and a bid above the tender value in OCDS form. The `postHoc` labels are findings we confirmed against the source documents after the first run. They are reported separately, not folded into the original number.
+- **Stability.** Across 5 runs on all 8 tenders the findings are identical (the eval compares them run to run). The rules make zero LLM calls, so this result is deterministic by design. It says nothing about the variance of LLM redline drafting, which is not measured here.
+- **Not yet measured.** Time saved for a real tender office, and inter-rater agreement between human reviewers and the gold labels. The labels were written by the team, not by an independent reviewer.
 
 ---
 

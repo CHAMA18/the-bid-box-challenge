@@ -19,7 +19,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildPack, flagPack, runRules, TENDERS_DIR, verifyFinding } from "./engine";
+import { buildPack, flagPack, TENDERS_DIR, verifyFinding } from "./engine";
 import type { Finding } from "./store";
 
 interface GoldItem {
@@ -43,8 +43,6 @@ interface Gold {
 const EVAL_DIR = fileURLToPath(new URL("./data/eval/", import.meta.url));
 const runsFlag = process.argv.indexOf("--runs");
 const RUNS = runsFlag >= 0 ? Number(process.argv[runsFlag + 1]) : 5;
-/* runRules() truncates its output at this many findings. Hitting it means findings may be silently dropped. */
-const RULE_CAP = 6;
 
 async function runOnce(tenderId: string) {
   const dir = join(TENDERS_DIR, tenderId);
@@ -63,7 +61,6 @@ async function runOnce(tenderId: string) {
     ms,
     rejectedCount: rejected.length,
     droppedBySelfCheck: kept.length - findings.length,
-    ruleCapHit: runRules(pack.bids, "", "").length >= RULE_CAP,
   };
 }
 
@@ -160,6 +157,7 @@ const summary = {
     tenders: gold.heldOut,
     labelsWrittenBeforeRun: true,
     original: score("original", gold.heldOut).summary,
+    adjudicated: score("adjudicated", gold.heldOut).summary,
   },
 };
 
@@ -175,7 +173,6 @@ const tenders = tenderIds.map((id) => {
     unlabelled: a.unlabelled.map((f) => ({ rule: f.rule, item: f.item, citation: f.citation, evidence: f.evidence })),
     rejectedUncited: r.rejectedCount,
     droppedBySelfCheck: r.droppedBySelfCheck,
-    ruleCapHit: r.ruleCapHit,
     identicalAcrossRuns: r.identical,
     medianMs: r.medianMs,
   };

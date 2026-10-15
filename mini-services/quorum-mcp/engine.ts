@@ -156,8 +156,17 @@ export async function callLlama(
   };
 }
 
-async function llmDraft(original: string, anomaly: string, runId: string): Promise<Draft> {
-  const t0 = performance.now();
+export interface ClauseDraft {
+  proposed: string;
+  rationale: string;
+  model: string;
+  source: "llm" | "template";
+  usage: { promptTokens: number; completionTokens: number };
+}
+
+/* Drafts one clause. Never throws and writes nothing to the audit log: any model
+   failure (no config, unreachable endpoint, bad reply) becomes the template guard. */
+export async function draftClause(original: string, anomaly: string): Promise<ClauseDraft> {
   const cfg = llmConfigFromEnv();
   let model = cfg ? `${cfg.model} (llm)` : "template (no model configured)";
   let source: "llm" | "template" = "template";
@@ -190,6 +199,12 @@ async function llmDraft(original: string, anomaly: string, runId: string): Promi
     model = cfg ? `${cfg.model} (llm) · failed — template used` : "template (no model configured)";
     rationale = `LLM call failed (${(err as Error).message}); template guard applied so the run never stalls.`;
   }
+  return { proposed, rationale, model, source, usage };
+}
+
+async function llmDraft(original: string, anomaly: string, runId: string): Promise<Draft> {
+  const t0 = performance.now();
+  const { proposed, rationale, model, source, usage } = await draftClause(original, anomaly);
   appendLog({
     actor: "quorum-agent",
     server: source === "llm" ? "llm endpoint" : "template",
@@ -461,10 +476,17 @@ export function verifyFinding(f: Finding, sources: Record<string, string>): bool
       return itemName.length > 0 && lower.includes(itemName);
     }
     case "R-VALUE-OUTLIER":
+    case "R-OVER-BUDGET":
     case "R-AWARD-OVER-BUDGET": {
       const ocid = f.citation.match(/ocid ([^,]+)/)?.[1]?.trim();
-      return !!ocid && text.includes(ocid) && text.includes(f.item);
+      if (ocid) return text.includes(ocid) && text.includes(f.item);
+      if (f.rule === "R-AWARD-OVER-BUDGET") return false;
+      /* Markdown bids: the anchor is the first number in the evidence, which must appear next to the bid value line. */
+      const num = f.evidence.match(/[\d,]{5,}/)?.[0];
+      return !!num && lower.includes("bid value") && text.includes(num);
     }
+    case "R-LICENCE-EXPIRED":
+      return f.evidence.length > 0 && text.includes(f.evidence);
     case "R-SPEC-DEVIATION":
       return f.evidence.length > 0 && text.includes(f.evidence);
     case "R-DOC-MISSING": {
@@ -496,7 +518,7 @@ export function docTokens(s: string): string[] {
     .map((t) => (t.length > 3 && t.endsWith("s") ? t.slice(0, -1) : t));
 }
 
-const PENDING_MARKER = /\b(pending|outstanding|awaiting|to follow|not yet)\b/i;
+const PENDING_MARKER = /\b(pending|outstanding|awaiting|to follow|not yet|in review)\b/i;
 
 /* A document is provided when one bid line names every significant word of an option and does not say the document is pending. */
 export function bidNamesDocument(bidText: string, option: string): boolean {
@@ -509,6 +531,18 @@ export function bidNamesDocument(bidText: string, option: string): boolean {
   });
 }
 
+/* The bid line that names a document, even when that line says it is pending. Null when no line names it. */
+export function bidLineNamingDocument(bidText: string, option: string): string | null {
+  const need = docTokens(option);
+  if (need.length === 0) return null;
+  return (
+    bidText.split("\n").find((line) => {
+      const have = new Set(docTokens(line));
+      return need.every((t) => have.has(t));
+    }) ?? null
+  );
+}
+
 /* Required documents named in a notice ("- [REQUIRED] …") that a bid does not reference. */
 export function docMissingFindings(bids: BidDoc[], notice: string, noticeFile: string): Finding[] {
   const findings: Finding[] = [];
@@ -518,13 +552,66 @@ export function docMissingFindings(bids: BidDoc[], notice: string, noticeFile: s
       const req = reqRaw.toLowerCase();
       /* Every significant word of an option must appear. A single shared word ("reference" in a bid header) is not evidence. */
       if (!requirementOptions(req).some((o) => bidNamesDocument(bid.text, o))) {
+        /* A bid line can name the document and still not provide it (pending, expired). Say so, quoting that line. */
+        const named = requirementOptions(req)
+          .map((o) => bidLineNamingDocument(bid.text, o))
+          .find((line): line is string => line !== null);
         findings.push({
           id: "",
           rule: "R-DOC-MISSING",
           severity: "MEDIUM",
           item: `${bid.bidder} — ${req}`,
-          evidence: `Tender notice lists "${req}" as REQUIRED; the bid does not reference it.`,
+          evidence: named
+            ? `Tender notice lists "${req}" as REQUIRED; the bid names it but does not provide it: "${named.trim().slice(0, 160)}".`
+            : `Tender notice lists "${req}" as REQUIRED; the bid does not reference it.`,
           citation: `${noticeFile}, eligibility checklist`,
+        });
+      }
+    }
+  }
+  return findings;
+}
+
+/* A markdown bid's stated value: "**Bid value:** KES 3,940,000,000". */
+export function markdownBidValue(text: string): { value: number; currency: string } | undefined {
+  const m = text.match(/\*\*Bid value:\*\*\s*(KES|RWF|USD)\s*([\d,]+(?:\.\d+)?)/);
+  return m ? { currency: m[1], value: Number(m[2].replace(/,/g, "")) } : undefined;
+}
+
+/* Markdown bids whose stated value exceeds the notice's published budget ceiling. */
+export function budgetFindings(bids: BidDoc[], notice: string, noticeFile: string): Finding[] {
+  const m = notice.match(/\*\*Budget ceiling:\*\*\s*(KES|RWF|USD)\s*([\d,]+)/);
+  if (!m) return [];
+  const ceiling = Number(m[2].replace(/,/g, ""));
+  const findings: Finding[] = [];
+  for (const b of bids) {
+    if (b.source.endsWith(".json") || b.value === undefined || b.value <= ceiling) continue;
+    findings.push({
+      id: "",
+      rule: "R-OVER-BUDGET",
+      severity: "HIGH",
+      item: b.bidder,
+      evidence: `Bid value ${m[1]} ${b.value.toLocaleString()} exceeds the budget ceiling ${m[1]} ${ceiling.toLocaleString()} in ${noticeFile}.`,
+      citation: `${b.source}, bid value`,
+    });
+  }
+  return findings;
+}
+
+/* A bid line stating a licence, registration, certificate or permit as expired. Expired with renewal in progress still counts as not in force. */
+export function expiredLicenceFindings(bids: BidDoc[]): Finding[] {
+  const findings: Finding[] = [];
+  for (const bid of bids) {
+    if (bid.source.endsWith(".json")) continue;
+    for (const line of bid.text.split("\n")) {
+      if (/\bexpired\b/i.test(line) && /\b(licen[cs]e|registration|certificate|permit|authori[sz]ation)\b/i.test(line)) {
+        findings.push({
+          id: "",
+          rule: "R-LICENCE-EXPIRED",
+          severity: "MEDIUM",
+          item: `${bid.bidder} — ${line.trim().replace(/^[-*\s]+/, "").slice(0, 80)}`,
+          evidence: line.trim().slice(0, 220),
+          citation: `${bid.source}, credentials`,
         });
       }
     }
@@ -616,7 +703,7 @@ export function runRules(bids: BidDoc[], notice: string, noticeFile: string): Fi
       });
     }
   }
-  return findings.slice(0, 6);
+  return findings;
 }
 
 /* ── 4. LangGraph.js — review graph (halts at the gate) ──────────────────── */
@@ -676,7 +763,8 @@ export function buildPack(files: string[], sources: Record<string, string>) {
       /* markdown notice — read below via sources */
     } else {
       const bidder = f.replace(/^\d+-bid-/, "").replace(/\.md$/, "").replace(/-/g, " ").toUpperCase();
-      bids.push({ bidder, text, source: f });
+      const mv = markdownBidValue(text);
+      bids.push({ bidder, text, source: f, value: mv?.value, currency: mv?.currency, ref: "bid value" });
     }
   }
   const mdNotice = files.find((f) => f.startsWith("01-") && f.endsWith(".md"));
@@ -699,6 +787,8 @@ export function flagPack(
     ...runRules(pack.bids, "", ""),
     ...pack.notices.flatMap((n) => docMissingFindings(pack.bids, n.text, n.file)),
     ...runAwardRules(pack.records),
+    ...pack.notices.flatMap((n) => budgetFindings(pack.bids, n.text, n.file)),
+    ...expiredLicenceFindings(pack.bids),
   ];
   const kept: Finding[] = [];
   const rejected: Finding[] = [];
