@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Search,
   ServerCog,
+  Settings,
   ShieldCheck,
   Stamp,
   Terminal,
@@ -83,40 +84,168 @@ type GateItem = {
 
 type LedgerRow = { tender: string; action: "AWARDED" | "RETURNED"; by: string; at: string };
 
-const SEED_RUNS: McRun[] = [
-  { id: "KE-NCB-104293", title: "Supply & delivery of MRI scanners", buyer: "Ministry of Health · Kenya", bids: 4, findings: 6, citations: 6, unsourced: 0, status: "gate", startedAt: "08:12", duration: "20 MIN" },
-  { id: "KE-NCB-104318", title: "County vaccine cold-chain — phase 2", buyer: "Public Health Institute · Kenya", bids: 7, findings: 0, citations: 0, unsourced: 0, status: "running", startedAt: "JUST NOW", duration: "LIVE" },
-  { id: "ZM-PPA-8841", title: "Clinic refurbishment framework — Lusaka", buyer: "Provincial Health · Zambia", bids: 11, findings: 4, citations: 4, unsourced: 0, status: "gate", startedAt: "YESTERDAY", duration: "23 MIN" },
-  { id: "RW-RPPA-0552", title: "Essential medicines framework — lot 2", buyer: "Medical Stores · Rwanda", bids: 9, findings: 5, citations: 5, unsourced: 0, status: "complete", startedAt: "YESTERDAY", duration: "24 MIN" },
-  { id: "KE-NCB-104277", title: "Oxygen plant consumables — 6 counties", buyer: "Health Infrastructure · Kenya", bids: 6, findings: 6, citations: 6, unsourced: 0, status: "complete", startedAt: "MON", duration: "18 MIN" },
-  { id: "ZM-PPA-8830", title: "Clinic laboratory reagents", buyer: "Health Procurement · Zambia", bids: 8, findings: 3, citations: 3, unsourced: 0, status: "complete", startedAt: "MON", duration: "15 MIN" },
-  { id: "GH-PPA-3107", title: "District pharmaceuticals frame", buyer: "Health Commodities · Ghana", bids: null, findings: 0, citations: 0, unsourced: 0, status: "queued", startedAt: "QUEUED", duration: "—" },
-];
+/* ── Live mission data — every run, gate, decision and finding comes from
+   the quorum-mcp sidecar. Nothing is seeded on the client. ───────────── */
 
-const SEED_GATES: GateItem[] = [
-  { id: "g-1", tender: "KE-NCB-104293", title: "Supply & delivery of MRI scanners", supplier: "MedEquip East Africa Ltd", value: "KES 412.6M", flags: 3, ago: "18 MIN AGO" },
-  { id: "g-2", tender: "ZM-PPA-8841", title: "Clinic refurbishment framework — Lusaka", supplier: "Copperbelt Joinery Co-op", value: "ZMW 38.4M", flags: 1, ago: "2 H AGO" },
-];
-
-const SEED_LEDGER: LedgerRow[] = [
-  { tender: "RW-RPPA-0552", action: "AWARDED", by: "C. Mwangi", at: "YESTERDAY" },
-  { tender: "KE-NCB-104277", action: "RETURNED", by: "THE COMMITTEE", at: "MON" },
-];
-
-const FINDING_NOTES: Record<string, string[]> = {
-  "KE-NCB-104293": ["Bank statement anomaly — p.114", "Bid bond expires before award", "Registry match — related bidders"],
-  "ZM-PPA-8841": ["Unit price 38% above framework median"],
-  "RW-RPPA-0552": ["Missing tax clearance — bid 3", "Arithmetic variance — BOQ p.22", "Subcontractor undisclosed"],
-  "KE-NCB-104277": ["Two bids share one IP address", "Deposit source undocumented", "Delivery window infeasible"],
-  "ZM-PPA-8830": ["Quotation date mismatch"],
+type BackendRun = {
+  id: string;
+  tenderId: string;
+  status: "RUNNING" | "AWAITING_GATE" | "REJECTED" | "FILED" | "FAILED";
+  startedAt: string;
+  findings: { id: string; rule: string; item: string; citation: string }[];
+  gateId?: string;
 };
 
-const PORTALS = [
-  { name: "OCDS EXPLORER", at: "2 MIN AGO", ok: true },
-  { name: "PPA · KENYA", at: "6 MIN AGO", ok: true },
-  { name: "PRAZ · ZIMBABWE", at: "31 MIN AGO", ok: true },
-  { name: "GGPPBD · GHANA", at: "4 H AGO", ok: false },
-];
+type BackendGate = {
+  id: string;
+  tenderId: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "EXECUTED";
+  inputs: { bidder?: string; value?: string; findings?: string[] };
+  createdAt: string;
+  decidedAt?: string;
+  approver?: string;
+};
+
+const RUN_STATUS: Record<BackendRun["status"], RunStatus> = {
+  RUNNING: "running",
+  AWAITING_GATE: "gate",
+  REJECTED: "complete",
+  FILED: "complete",
+  FAILED: "complete",
+};
+
+const FINDING_CLASSES: FindingClass[] = ["DOCUMENT", "COMPLIANCE", "REGISTRY", "PRICING", "ARITHMETIC", "DISCLOSURE", "LOGISTICS"];
+
+function classOf(rule: string): FindingClass {
+  const upper = rule.toUpperCase();
+  return FINDING_CLASSES.find((c) => upper.includes(c)) ?? "DOCUMENT";
+}
+
+function clockOf(iso?: string): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+/* Polls the sidecar's runs and gates; derives every view the dashboard renders. */
+function useMissionData() {
+  const [rawRuns, setRawRuns] = useState<BackendRun[]>([]);
+  const [rawGates, setRawGates] = useState<BackendGate[]>([]);
+  const [reachable, setReachable] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [r, g] = await Promise.all([
+        fetch("/api/runs?XTransformPort=3031").then((x) => x.json()),
+        fetch("/api/gates?XTransformPort=3031").then((x) => x.json()),
+      ]);
+      setRawRuns(r.runs ?? []);
+      setRawGates(g.gates ?? []);
+      setReachable(true);
+    } catch {
+      setReachable(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const [r, g] = await Promise.all([
+          fetch("/api/runs?XTransformPort=3031").then((x) => x.json()),
+          fetch("/api/gates?XTransformPort=3031").then((x) => x.json()),
+        ]);
+        if (!alive) return;
+        setRawRuns(r.runs ?? []);
+        setRawGates(g.gates ?? []);
+        setReachable(true);
+      } catch {
+        if (alive) setReachable(false);
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 3500);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  const runs = useMemo<McRun[]>(
+    () =>
+      rawRuns.map((r) => {
+        const citations = r.findings.filter((f) => f.citation).length;
+        return {
+          id: r.tenderId,
+          title: r.tenderId,
+          buyer: "",
+          bids: null,
+          findings: r.findings.length,
+          citations,
+          unsourced: r.findings.length - citations,
+          status: RUN_STATUS[r.status],
+          startedAt: clockOf(r.startedAt),
+          duration: r.status === "RUNNING" ? "LIVE" : "—",
+        };
+      }),
+    [rawRuns]
+  );
+
+  const queue = useMemo<GateItem[]>(
+    () =>
+      rawGates
+        .filter((g) => g.status === "PENDING")
+        .map((g) => ({
+          id: g.id,
+          tender: g.tenderId,
+          title: g.tenderId,
+          supplier: g.inputs.bidder ?? "—",
+          value: g.inputs.value ?? "—",
+          flags: g.inputs.findings?.length ?? 0,
+          ago: clockOf(g.createdAt),
+        })),
+    [rawGates]
+  );
+
+  const ledger = useMemo<LedgerRow[]>(
+    () =>
+      rawGates
+        .filter((g) => g.status !== "PENDING" && g.decidedAt)
+        .map((g) => ({
+          tender: g.tenderId,
+          action: g.status === "REJECTED" ? "RETURNED" : "AWARDED",
+          by: g.approver ?? "—",
+          at: clockOf(g.decidedAt),
+        })),
+    [rawGates]
+  );
+
+  const verdicts = useMemo<Record<string, "AWARDED" | "RETURNED">>(() => {
+    const map: Record<string, "AWARDED" | "RETURNED"> = {};
+    for (const row of [...ledger].reverse()) map[row.tender] = row.action;
+    return map;
+  }, [ledger]);
+
+  const findings = useMemo<SeedFinding[]>(
+    () =>
+      rawRuns.flatMap((r) =>
+        r.findings.map((f) => ({ run: r.tenderId, note: f.item, cls: classOf(f.rule), src: f.citation }))
+      ),
+    [rawRuns]
+  );
+
+  const notes = useMemo<Record<string, string[]>>(() => {
+    const map: Record<string, string[]> = {};
+    for (const r of rawRuns) map[r.tenderId] = r.findings.map((f) => f.item);
+    return map;
+  }, [rawRuns]);
+
+  return { runs, queue, ledger, verdicts, findings, notes, reachable, refresh };
+}
+
+const PORTALS: { name: string; at: string; ok: boolean }[] = [];
 
 const SPARK_A = [40, 62, 34, 78, 52, 70, 44, 88, 58, 74, 48, 84];
 const SPARK_B = [55, 40, 70, 46, 82, 60, 38, 74, 50, 66, 42, 90];
@@ -135,7 +264,8 @@ type SectionId =
   | "mc-ledger"
   | "mc-committee"
   | "mc-rules"
-  | "mc-stack";
+  | "mc-stack"
+  | "mc-settings";
 
 type NavBadge = "runs" | "gates" | "findings";
 
@@ -146,32 +276,33 @@ const NAV_GROUPS: {
   {
     group: "COMMAND",
     items: [
-      { id: "mc-overview", label: "OVERVIEW", icon: Gauge },
-      { id: "mc-runs", label: "RUN REGISTER", icon: Terminal, badge: "runs" },
-      { id: "mc-gates", label: "HUMAN GATES", icon: Stamp, badge: "gates" },
-      { id: "mc-activity", label: "AGENT FEED", icon: Radio },
+      { id: "mc-overview", label: "Overview", icon: Gauge },
+      { id: "mc-runs", label: "Agent runs", icon: Terminal, badge: "runs" },
+      { id: "mc-gates", label: "Approvals", icon: Stamp, badge: "gates" },
+      { id: "mc-activity", label: "Live activity", icon: Radio },
     ],
   },
   {
     group: "EVIDENCE",
     items: [
-      { id: "mc-findings", label: "FINDINGS LEDGER", icon: ListChecks, badge: "findings" },
-      { id: "mc-reports", label: "REPORT PACKS", icon: Files },
-      { id: "mc-sources", label: "SOURCES & PORTALS", icon: Database },
+      { id: "mc-findings", label: "Findings", icon: ListChecks, badge: "findings" },
+      { id: "mc-reports", label: "Reports", icon: Files },
+      { id: "mc-sources", label: "Data sources", icon: Database },
     ],
   },
   {
     group: "COMMITTEE",
     items: [
-      { id: "mc-ledger", label: "AWARD LEDGER", icon: Gavel },
-      { id: "mc-committee", label: "COMMITTEE", icon: Users },
+      { id: "mc-ledger", label: "Award history", icon: Gavel },
+      { id: "mc-committee", label: "Committee", icon: Users },
     ],
   },
   {
     group: "SYSTEM",
     items: [
-      { id: "mc-stack", label: "AGENT STACK", icon: ServerCog },
-      { id: "mc-rules", label: "RULES & GUARDS", icon: ShieldCheck },
+      { id: "mc-stack", label: "Tools & models", icon: ServerCog },
+      { id: "mc-rules", label: "Rules & safeguards", icon: ShieldCheck },
+      { id: "mc-settings", label: "Settings", icon: Settings },
     ],
   },
 ];
@@ -325,28 +456,40 @@ function AgentStatusBadge({ mode, className }: { mode: AgentMode; className?: st
 /* ── Agent feed terminal ─────────────────────────────────────────────────── */
 
 type FeedKind = "cmd" | "step" | "ok" | "gate";
-const FEED_SCRIPT: { text: string; kind: FeedKind }[] = [
-  { text: "quorum-agent run --tender KE-NCB-104318 --format ocds", kind: "cmd" },
-  { text: "▸ ingesting 96 pages · 7 bids parsed", kind: "step" },
-  { text: "▸ document checklist — 12/16 present", kind: "step" },
-  { text: "▸ cross-checking the supplier registry", kind: "step" },
-  { text: "▸ flagging anomaly — bank statement p.41", kind: "step" },
-  { text: "✓ findings ready — every claim cited", kind: "ok" },
-  { text: "⏸ human gate — queued for the committee", kind: "gate" },
-];
+type FeedLine = { text: string; kind: FeedKind };
+type LiveLogEntry = { tool?: string; status?: string; kind?: string; runId?: string };
 
+/* Live activity from the quorum-mcp audit log — no scripted replay. */
 function AgentFeed() {
-  const [step, setStep] = useState(0);
-  const done = step >= FEED_SCRIPT.length;
+  const [feed, setFeed] = useState<FeedLine[]>([]);
 
   useEffect(() => {
-    if (step >= FEED_SCRIPT.length) {
-      const t = setTimeout(() => setStep(0), 5200);
-      return () => clearTimeout(t);
-    }
-    const t = setTimeout(() => setStep((s) => s + 1), step === 0 ? 800 : 680);
-    return () => clearTimeout(t);
-  }, [step]);
+    let alive = true;
+    const pull = async () => {
+      try {
+        const res = await fetch("/api/log?limit=8&XTransformPort=3031");
+        const j = (await res.json()) as { entries?: LiveLogEntry[] };
+        if (!alive) return;
+        const lines: FeedLine[] = (j.entries ?? []).slice(0, 8).reverse().map((e) => {
+          const status = e.status ?? "";
+          const kind: FeedKind =
+            status === "PENDING_GATE" ? "gate" : status === "OK" ? "ok" : "step";
+          const prefix = kind === "gate" ? "⏸" : kind === "ok" ? "✓" : "▸";
+          const label = status === "PENDING_GATE" ? "waiting for approval" : status === "OK" ? "done" : status || "logged";
+          return { text: `${prefix} ${e.tool ?? "event"} · ${label}`, kind };
+        });
+        setFeed(lines);
+      } catch {
+        /* sidecar briefly down — keep the last snapshot */
+      }
+    };
+    void pull();
+    const id = setInterval(() => void pull(), 3500);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-night-2 shadow-[0_28px_70px_rgba(11,12,15,0.35)]">
@@ -361,17 +504,17 @@ function AgentFeed() {
             <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
           </span>
-          QUORUM-AGENT · SAMPLE RUN
+          AGENT ACTIVITY · LIVE
         </p>
       </div>
       <div
         className="min-h-[190px] px-4 py-4 font-code text-[10.5px] leading-[2] sm:text-[11.5px]"
         role="img"
-        aria-label="Sample agent run: a scripted replay of a run ingesting bids, checking documents, citing findings and queueing a human gate"
+        aria-label="Live agent activity log"
       >
-        {FEED_SCRIPT.slice(0, step).map((line) => (
+        {feed.map((line, i) => (
           <p
-            key={line.text}
+            key={`${i}-${line.text}`}
             className={cn(
               line.kind === "cmd" && "text-ink-200",
               line.kind === "step" && "text-ink-400",
@@ -383,7 +526,8 @@ function AgentFeed() {
             {line.text}
           </p>
         ))}
-        {!done && <span className="mt-1 inline-block h-3.5 w-[7px] animate-pulse bg-brand-500" aria-hidden="true" />}
+        {feed.length === 0 && <p className="text-ink-400">▸ waiting for the agent's first step…</p>}
+        <span className="mt-1 inline-block h-3.5 w-[7px] animate-pulse bg-brand-500" aria-hidden="true" />
       </div>
     </div>
   );
@@ -399,7 +543,7 @@ function StatusChip({ status }: { status: RunStatus }) {
           <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
         </span>
-        LIVE
+        IN PROGRESS
       </span>
     );
   if (status === "queued")
@@ -412,13 +556,13 @@ function StatusChip({ status }: { status: RunStatus }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em] text-brand-800">
         <Gavel className="h-2.5 w-2.5" aria-hidden="true" />
-        HUMAN GATE
+        NEEDS APPROVAL
       </span>
     );
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-ink-950 px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em] text-white">
       <CircleCheck className="h-2.5 w-2.5" aria-hidden="true" />
-      COMPLETE
+      COMPLETED
     </span>
   );
 }
@@ -501,12 +645,6 @@ function StatCard({
 
 /* ── New-run wizard: brief → documents → scope ───────────────────────────── */
 
-const SAMPLE_TITLES = [
-  "Supply & installation of laboratory equipment",
-  "Essential health commodities framework — lot 3",
-  "Electronic medical records rollout — phase 2",
-];
-
 const WIZARD_STEPS = ["DETAILS", "DOCUMENTS", "SCOPE"] as const;
 
 type StagedDoc = {
@@ -514,41 +652,15 @@ type StagedDoc = {
   name: string;
   size: string;
   status: "RECEIVED" | "PARSING" | "INDEXED";
-  /* Cloud mirror state — present only for real uploaded files (the sample
-     pack is simulated, so it carries none). SYNCING → CLOUD | LOCAL. */
+  /* Cloud mirror state — present only for uploaded files. SYNCING → CLOUD | LOCAL. */
   storage?: "SYNCING" | "CLOUD" | "LOCAL";
 };
-
-/* A realistic pack for the sample tender — the notice, the OCDS release,
-   three sealed bids and their certificates (health theme throughout). */
-const SAMPLE_PACK: { name: string; size: string }[] = [
-  { name: "KE-NCB-104341-tender-notice.pdf", size: "2.4 MB" },
-  { name: "ke-ncb-104341-ocds.json", size: "861 KB" },
-  { name: "bid-01-medline-supplies.pdf", size: "8.2 MB" },
-  { name: "bid-02-equity-lab-systems.pdf", size: "6.7 MB" },
-  { name: "bid-03-apex-scientific.pdf", size: "7.9 MB" },
-  { name: "batch-validity-certificates.pdf", size: "1.1 MB" },
-];
 
 const SCOPE_CHECKS = [
   { id: "specs", label: "Specs against clinical need", desc: "Every line item read against the clinical requirement." },
   { id: "quantities", label: "Quantities against consumption", desc: "Volumes checked against real offtake, not optimism." },
   { id: "prices", label: "Prices against other buyers", desc: "Unit rates benchmarked across the buyer network." },
 ] as const;
-
-/* What the agent proposes when a user-launched run reaches its gate. */
-const PROPOSED_AWARDS = [
-  { supplier: "Medline Supplies Ltd", value: "KES 96.2M" },
-  { supplier: "Equity Lab Systems", value: "KES 88.7M" },
-  { supplier: "Apex Scientific Co.", value: "KES 91.4M" },
-];
-
-const LAUNCHED_NOTE_LINES = [
-  "Price variance above the framework median — BOQ p.18",
-  "Two mandatory certificates missing — checklist p.6",
-  "Award criteria weighting unstated — p.3",
-  "Bid validity shorter than the tender window — p.2",
-];
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -619,8 +731,8 @@ function NewRunModal({
   onLaunch: (ref: string, title: string, format: string, docs: number, checks: number) => void;
 }) {
   const [step, setStep] = useState(0);
-  const [ref, setRef] = useState("KE-NCB-104341");
-  const [title, setTitle] = useState(SAMPLE_TITLES[0]);
+  const [ref, setRef] = useState("");
+  const [title, setTitle] = useState("");
   const [format, setFormat] = useState("OCDS");
   const [docs, setDocs] = useState<StagedDoc[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -820,7 +932,7 @@ function NewRunModal({
                   setStep(step + 1);
                   return;
                 }
-                onLaunch(ref.trim() || "KE-NCB-104341", title, format, docs.length, checksOn);
+                onLaunch(ref.trim(), title, format, docs.length, checksOn);
               }}
             >
               <AnimatePresence mode="wait" initial={false}>
@@ -851,18 +963,14 @@ function NewRunModal({
                         <label htmlFor="nr-title" className="mb-1.5 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
                           TENDER TITLE
                         </label>
-                        <select
+                        <input
                           id="nr-title"
+                          type="text"
                           value={title}
                           onChange={(e) => setTitle(e.target.value)}
-                          className="h-11 w-full appearance-none rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
-                        >
-                          {SAMPLE_TITLES.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Tender title as published"
+                          className="h-11 w-full rounded-xl border border-ink-200 bg-white px-4 text-[13.5px] text-ink-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                        />
                       </div>
                       <div>
                         <p className="mb-1.5 font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">SOURCE FORMAT</p>
@@ -943,13 +1051,6 @@ function NewRunModal({
                             >
                               <FileUp className="h-3.5 w-3.5" aria-hidden="true" />
                               BROWSE FILES
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => addDocs(SAMPLE_PACK)}
-                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.14em] text-ink-600 transition-colors hover:border-ink-400 hover:text-ink-900"
-                            >
-                              USE SAMPLE PACK
                             </button>
                           </div>
                         </div>
@@ -1072,7 +1173,7 @@ function NewRunModal({
               </div>
               {step === 1 && !canLeaveDocs && (
                 <p role="status" className="mt-2.5 text-center font-code text-[8px] tracking-[0.18em] text-brand-700">
-                  STAGE AT LEAST ONE DOCUMENT — DROP A FILE OR USE THE SAMPLE PACK
+                  STAGE AT LEAST ONE DOCUMENT — DROP A FILE TO CONTINUE
                 </p>
               )}
               <p className="mt-4 text-center font-code text-[8px] tracking-[0.2em] text-ink-400">
@@ -1147,7 +1248,7 @@ function SidebarContent({
                         />
                       )}
                       <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span className="flex-1 font-code text-[10px] font-semibold tracking-[0.18em]">{item.label}</span>
+                      <span className="flex-1 font-code text-[10px] font-semibold uppercase tracking-[0.18em]">{item.label}</span>
                       {badge !== null && badge > 0 && (
                         <span
                           className={cn(
@@ -1224,7 +1325,7 @@ function SidebarContent({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-semibold text-white">{user?.name ?? "Guest officer"}</span>
             <span className="block truncate font-code text-[8px] tracking-[0.14em] text-ink-500">
-              {(user?.email ?? "demo@quorum.africa").toUpperCase()}
+              {(user?.email ?? "").toUpperCase()}
             </span>
           </span>
           <button
@@ -1257,9 +1358,9 @@ type RunFilter = "all" | "live" | "gates" | "done";
 
 const RUN_FILTERS: { id: RunFilter; label: string }[] = [
   { id: "all", label: "ALL" },
-  { id: "live", label: "LIVE" },
-  { id: "gates", label: "GATES" },
-  { id: "done", label: "DONE" },
+  { id: "live", label: "IN PROGRESS" },
+  { id: "gates", label: "NEEDS APPROVAL" },
+  { id: "done", label: "COMPLETED" },
 ];
 
 function RunRegister({
@@ -1307,7 +1408,7 @@ function RunRegister({
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
           <div>
             <h2 id="mc-runs-h" className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">
-              Run register
+              Recent runs
             </h2>
             <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
               LAST 7 DAYS · {filtered.length} OF {runs.length} RUNS
@@ -1339,7 +1440,7 @@ function RunRegister({
             <caption className="sr-only">Quorum run register — recent agent runs with status, findings and citations</caption>
             <thead>
               <tr className="border-b border-ink-100 bg-paper/60">
-                {["RUN", "BIDS", "FINDINGS", "CITED", "STATUS", "DURATION", ""].map((h, i) => (
+                {["RUN", "BIDS", "ISSUES", "SOURCED", "STATUS", "TIME", ""].map((h, i) => (
                   <th
                     key={i}
                     scope="col"
@@ -1429,7 +1530,7 @@ function RunRegister({
                             ) : (
                               <>
                                 <p className="font-code text-[8.5px] font-semibold tracking-[0.2em] text-ink-400">
-                                  TOP FINDINGS · {run.findings} FLAGGED · {run.citations} CITATIONS · {run.unsourced} UNSOURCED
+                                  TOP ISSUES · {run.findings} FLAGGED · {run.citations} SOURCED · {run.unsourced} WITHOUT A SOURCE
                                 </p>
                                 <ul className="mt-2.5 flex flex-wrap gap-1.5">
                                   {notesFor.map((note) => (
@@ -1472,7 +1573,7 @@ function RunRegister({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const log = `quorum audit — ${run.id} — ${run.findings} findings · ${run.citations} citations · 0 unsourced · sha256 4f2a…9c31`;
+                                  const log = `quorum audit — ${run.id} — ${run.findings} findings · ${run.citations} citations · sha256 ${shaTag(run.id)}`;
                                   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(log).catch(() => undefined);
                                   onToast("AUDIT TRAIL COPIED TO CLIPBOARD");
                                 }}
@@ -1554,10 +1655,10 @@ function GateQueue({
           <div>
             <h2 id="mc-gates-h" className="flex items-center gap-2 font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">
               <Gavel className="h-4 w-4 text-brand-600" aria-hidden="true" />
-              Human gate
+              Approvals
             </h2>
             <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
-              {queue.length === 0 ? "QUEUE CLEAR — THE GAVEL RESTS" : `${queue.length} AWAITING THE COMMITTEE`}
+              {queue.length === 0 ? "NOTHING TO APPROVE RIGHT NOW" : `${queue.length} WAITING FOR A DECISION`}
             </p>
           </div>
           <span
@@ -1567,7 +1668,7 @@ function GateQueue({
               queue.length === 0 ? "bg-ink-950 text-white" : "bg-brand-600 text-white"
             )}
           >
-            {queue.length === 0 ? "CLEAR" : "ACTION NEEDED"}
+            {queue.length === 0 ? "ALL CLEAR" : "ACTION NEEDED"}
           </span>
         </header>
 
@@ -1638,9 +1739,9 @@ function GateQueue({
               className="grid place-items-center rounded-xl border border-dashed border-ink-200 px-4 py-10 text-center"
             >
               <CircleCheck className="h-7 w-7 text-ink-300" aria-hidden="true" />
-              <p className="mt-3 font-display text-[15px] font-black text-ink-900">The committee is caught up.</p>
+              <p className="mt-3 font-display text-[15px] font-black text-ink-900">Nothing needs a decision.</p>
               <p className="mt-1 max-w-[220px] text-[12.5px] leading-relaxed text-ink-500">
-                No file waits on a human. The agent keeps preparing; the gavel keeps resting.
+                No tender is waiting on you or the committee. The agent keeps preparing new files in the meantime.
               </p>
             </motion.div>
           )}
@@ -1648,7 +1749,7 @@ function GateQueue({
 
         {/* Ledger */}
         <div className="border-t border-ink-100 px-5 py-4">
-          <p className="font-code text-[8.5px] font-semibold tracking-[0.22em] text-ink-400">GATE LEDGER</p>
+          <p className="font-code text-[8.5px] font-semibold tracking-[0.22em] text-ink-400">DECISION HISTORY</p>
           <ul className="mt-2.5 space-y-2">
             <AnimatePresence initial={false}>
               {ledger.slice(0, 4).map((row) => (
@@ -1686,8 +1787,8 @@ function PortalSync({ onToast }: { onToast: (m: string) => void }) {
   return (
     <div className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
       <div className="flex items-center justify-between">
-        <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Portal sync</h3>
-        <span className="font-code text-[8px] tracking-[0.2em] text-ink-400">4 SOURCES</span>
+        <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Connected portals</h3>
+        <span className="font-code text-[8px] tracking-[0.2em] text-ink-400">4 CONNECTED</span>
       </div>
       <ul className="mt-4 space-y-3">
         {PORTALS.map((p) => (
@@ -1715,7 +1816,7 @@ function PortalSync({ onToast }: { onToast: (m: string) => void }) {
             {!p.ok && (
               <button
                 type="button"
-                onClick={() => onToast("RETRY QUEUED — GGPPBD SYNC · ATTEMPT 2 IN 60S")}
+                onClick={() => onToast("PORTAL RE-SYNC IS NOT WIRED YET")}
                 aria-label={`Retry sync for ${p.name}`}
                 className="grid h-6 w-6 place-items-center rounded-md border border-ink-200 text-ink-500 transition-colors hover:border-brand-400 hover:text-brand-700"
               >
@@ -1728,7 +1829,7 @@ function PortalSync({ onToast }: { onToast: (m: string) => void }) {
       <div className="mt-5 flex items-center gap-2.5 rounded-xl bg-sand px-3.5 py-3">
         <ShieldCheck className="h-4 w-4 shrink-0 text-brand-700" aria-hidden="true" />
         <p className="font-code text-[7.5px] leading-[1.8] tracking-[0.14em] text-ink-600">
-          AUDIT LOGS sha256-SEALED · ON-PREM READY
+          ACTIVITY LOG LOCKED AGAINST EDITS · CAN RUN ON YOUR OWN SERVERS
         </p>
       </div>
     </div>
@@ -1804,7 +1905,7 @@ function NewRunCard({ onNewRun }: { onNewRun: () => void }) {
       <div className="relative">
         <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">Put the agent in a file</h3>
         <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-300">
-          Point Quorum at a tender — OCDS, a PDF pack or the email bag. The first finding lands in about twenty minutes.
+          Point Quorum at a tender — OCDS, a PDF pack or the email bag. Findings appear here as the run reads the file.
         </p>
         <button
           type="button"
@@ -1853,28 +1954,6 @@ type FindingClass =
 type FindingStatus = "OPEN" | "CLEARED" | "RE-CHECK";
 type SeedFinding = { run: string; note: string; cls: FindingClass; src: string };
 type FindingRow = SeedFinding & { id: string; tender: string; status: FindingStatus };
-
-const SEED_FINDINGS: SeedFinding[] = [
-  { run: "KE-NCB-104293", note: "Bank statement anomaly", cls: "DOCUMENT", src: "P.114" },
-  { run: "KE-NCB-104293", note: "Bid bond expires before award", cls: "COMPLIANCE", src: "BOND CERT · P.88" },
-  { run: "KE-NCB-104293", note: "Registry match — related bidders", cls: "REGISTRY", src: "REGISTRY · P.78" },
-  { run: "ZM-PPA-8841", note: "Unit price 38% above framework median", cls: "PRICING", src: "BOQ · P.22" },
-  { run: "RW-RPPA-0552", note: "Missing tax clearance — bid 3", cls: "COMPLIANCE", src: "BID 3 · P.9" },
-  { run: "RW-RPPA-0552", note: "Arithmetic variance in the BOQ", cls: "ARITHMETIC", src: "BOQ · P.22" },
-  { run: "RW-RPPA-0552", note: "Subcontractor undisclosed", cls: "DISCLOSURE", src: "FORM 12 · P.51" },
-  { run: "KE-NCB-104277", note: "Two bids share one IP address", cls: "REGISTRY", src: "AUDIT LOG · P.130" },
-  { run: "KE-NCB-104277", note: "Deposit source undocumented", cls: "DOCUMENT", src: "P.77" },
-  { run: "KE-NCB-104277", note: "Delivery window infeasible", cls: "LOGISTICS", src: "SCHEDULE · P.64" },
-  { run: "ZM-PPA-8830", note: "Quotation date mismatch", cls: "DOCUMENT", src: "P.12" },
-];
-
-/* Findings the agent raises when a freshly launched run completes. */
-const LAUNCHED_FINDINGS: SeedFinding[] = [
-  { run: "", note: "Price variance above the framework median", cls: "PRICING", src: "BOQ · P.18" },
-  { run: "", note: "Two mandatory certificates missing", cls: "COMPLIANCE", src: "CHECKLIST" },
-  { run: "", note: "Award criteria weighting left unstated", cls: "DISCLOSURE", src: "CRITERIA · P.3" },
-  { run: "", note: "Bid validity shorter than the tender window", cls: "COMPLIANCE", src: "BID · P.2" },
-];
 
 function buildFindingRows(
   seed: SeedFinding[],
@@ -1934,8 +2013,8 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
       title="Findings ledger"
       sub="Every flag the agent has raised — classed, cited, and traceable to the page it came from. When the committee clears a gate, its flags clear with it."
     >
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-span-2">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6">
+        <div className="min-w-0">
           <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
             <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
               <div>
@@ -2022,7 +2101,7 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
             </div>
           </div>
         </div>
-        <div className="grid content-start gap-4 sm:gap-6">
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
           <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
             <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
             <div className="relative">
@@ -2314,7 +2393,7 @@ function SourcesView({ onToast }: { onToast: (m: string) => void }) {
                   {!p.ok && (
                     <button
                       type="button"
-                      onClick={() => onToast("RETRY QUEUED — GGPPBD SYNC · ATTEMPT 2 IN 60S")}
+                      onClick={() => onToast("PORTAL RE-SYNC IS NOT WIRED YET")}
                       aria-label={`Retry sync for ${p.name}`}
                       className="grid h-7 w-7 place-items-center rounded-md border border-ink-200 text-ink-500 transition-colors hover:border-brand-400 hover:text-brand-700"
                     >
@@ -2776,6 +2855,93 @@ function GuardPills<T extends string>({
   );
 }
 
+function SettingsView({
+  user,
+  agent,
+  onSignOut,
+}: {
+  user: AuthUser | null;
+  agent: AgentStatus;
+  onSignOut: () => void;
+}) {
+  const mode = agentModeOf(agent);
+  const health = agent.health;
+  const connection: { label: string; value: string }[] = [
+    { label: "Status", value: mode === "online" ? "ONLINE" : mode === "offline" ? "OFFLINE" : "LINKING" },
+    { label: "Service", value: health ? `${health.service} · v${health.version}` : "—" },
+    {
+      label: "Filesystem MCP",
+      value: health ? `${health.fsMcp.status.toUpperCase()} · ${health.fsMcp.tools.length} TOOLS` : "—",
+    },
+    { label: "Open-weights graphs", value: health ? String(health.graphs.length) : "—" },
+    { label: "Runs recorded", value: health ? health.counts.runs.toLocaleString("en-US") : "—" },
+    { label: "Tool calls logged", value: health ? health.counts.toolCalls.toLocaleString("en-US") : "—" },
+  ];
+
+  const cardClass = "rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]";
+  const labelClass = "font-code text-[8px] font-semibold tracking-[0.22em] text-ink-400";
+  const titleClass = "mt-1.5 font-display text-[15px] font-black tracking-[-0.01em] text-ink-950";
+
+  return (
+    <ViewShell
+      fig="14"
+      title="Settings"
+      sub="Your account, the agent connection and this session. Identity comes from sign-in and agent values are read live from the sidecar, so neither is edited here."
+    >
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+        <div className={cardClass}>
+          <p className={labelClass}>ACCOUNT</p>
+          <h3 className={titleClass}>Signed-in officer</h3>
+          <div className="mt-5 flex items-center gap-4">
+            <span
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-600 font-code text-[12px] font-bold text-white"
+              aria-hidden="true"
+            >
+              {initialsOf(user?.name ?? "Quorum")}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[15px] font-semibold text-ink-950">{user?.name ?? "Guest officer"}</p>
+              <p className="truncate font-code text-[9px] tracking-[0.14em] text-ink-500">
+                {(user?.email ?? "NOT SIGNED IN").toUpperCase()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className={cardClass}>
+          <p className={labelClass}>SESSION</p>
+          <h3 className={titleClass}>Sign out of this workspace</h3>
+          <p className="mt-1 text-[12.5px] text-ink-500">
+            Ends this browser session. Runs and the audit trail stay on the sidecar.
+          </p>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="mt-5 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-4 py-2 font-code text-[9px] font-bold tracking-[0.16em] text-brand-800 transition-colors hover:bg-brand-100"
+          >
+            <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+            SIGN OUT
+          </button>
+        </div>
+
+        <div className={`${cardClass} lg:col-span-2`}>
+          <p className={labelClass}>AGENT CONNECTION</p>
+          <h3 className={titleClass}>Quorum sidecar</h3>
+          <p className="mt-1 text-[12.5px] text-ink-500">Live status reported by the MCP sidecar on port 3031.</p>
+          <dl className="mt-5 grid grid-cols-1 divide-y divide-ink-100 sm:grid-cols-2 sm:divide-y-0">
+            {connection.map((row) => (
+              <div key={row.label} className="flex items-center justify-between gap-4 border-ink-100 py-3 sm:border-b sm:pr-4">
+                <dt className="font-code text-[9px] tracking-[0.16em] text-ink-500">{row.label.toUpperCase()}</dt>
+                <dd className="text-right font-code text-[10px] font-bold tracking-[0.08em] text-ink-950">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
+    </ViewShell>
+  );
+}
+
 function RulesView({ onToast }: { onToast: (m: string) => void }) {
   const [variance, setVariance] = useState<"15%" | "25%" | "40%">("25%");
   const [checklist, setChecklist] = useState<"STANDARD · 12/16" | "STRICT · 16/16">("STANDARD · 12/16");
@@ -3130,22 +3296,15 @@ export function Dashboard({
   onToast: (message: string) => void;
   onExit: () => void;
 }) {
-  const [runs, setRuns] = useState<McRun[]>(SEED_RUNS);
-  const [queue, setQueue] = useState<GateItem[]>(SEED_GATES);
-  const [ledger, setLedger] = useState<LedgerRow[]>(SEED_LEDGER);
+  const mission = useMissionData();
+  const { runs, queue, ledger, verdicts, findings, notes: notesMap, refresh } = mission;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<RunFilter>("all");
   const [active, setActive] = useState<SectionId>("mc-overview");
   const [navOpen, setNavOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
-  const [verdicts, setVerdicts] = useState<Record<string, "AWARDED" | "RETURNED">>(() =>
-    Object.fromEntries(SEED_LEDGER.map((row) => [row.tender, row.action]))
-  );
-  const [extraFindings, setExtraFindings] = useState<SeedFinding[]>([]);
-  const [extraNotes, setExtraNotes] = useState<Record<string, string[]>>({});
   const [flow, setFlow] = useState<FlowState>({ refs: [], decided: false, awarded: false });
-  const completionTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   /* Live agent health — the pill and sidebar render what the stack reports. */
   const agent = useAgentStatus();
@@ -3169,12 +3328,6 @@ export function Dashboard({
     };
   }, [navOpen]);
 
-  /* Clear pending run-completion timers on unmount */
-  useEffect(() => {
-    const timers = completionTimers.current;
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
   const firstName = firstNameOf(user);
   const hour = now?.getHours() ?? 10;
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -3188,15 +3341,8 @@ export function Dashboard({
     .reduce((sum, r) => sum + r.citations, 0);
   const citationPct = findingsTotal > 0 ? Math.round((citedTotal / findingsTotal) * 100) : 100;
 
-  const findingRows = useMemo(
-    () => buildFindingRows([...SEED_FINDINGS, ...extraFindings], runs, verdicts),
-    [extraFindings, runs, verdicts]
-  );
+  const findingRows = useMemo(() => buildFindingRows(findings, runs, verdicts), [findings, runs, verdicts]);
   const openFindings = findingRows.filter((r) => r.status === "OPEN").length;
-
-  /* Notes for the expanded register rows — seeds plus anything the
-     freshly launched runs produced. */
-  const notesMap = useMemo(() => ({ ...FINDING_NOTES, ...extraNotes }), [extraNotes]);
 
   /* Where the officer stands in the loop right now. */
   const userLive = runs.some((r) => flow.refs.includes(r.id) && (r.status === "running" || r.status === "queued"));
@@ -3210,86 +3356,64 @@ export function Dashboard({
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   };
 
-  const launchRun = (ref: string, title: string, format: string, docs: number, checks: number) => {
+  const launchRun = async (ref: string, title: string, format: string, docs: number, checks: number) => {
     setModalOpen(false);
-    const run: McRun = {
-      id: ref,
-      title,
-      buyer: `Your workspace · ${format.toLowerCase()} · ${docs} ${docs === 1 ? "doc" : "docs"}`,
-      bids: null,
-      findings: 0,
-      citations: 0,
-      unsourced: 0,
-      status: "running",
-      startedAt: "JUST NOW",
-      duration: "LIVE",
-      docs,
-    };
-    setRuns((prev) => [run, ...prev]);
+    try {
+      const res = await fetch("/api/runs?XTransformPort=3031", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tenderId: ref }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      onToast("STACK UNREACHABLE — quorum-mcp NOT RESPONDING");
+      return;
+    }
     setFlow((f) => ({ ...f, refs: [...f.refs, ref] }));
     /* Guide the officer to the register — the run goes live in front of them. */
     setActive("mc-runs");
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
-    onToast(`RUN QUEUED — ${docs} DOC${docs === 1 ? "" : "S"} · ${checks} CHECK${checks === 1 ? "" : "S"} · ${ref.toUpperCase()} IS LIVE`);
-
-    /* The run walks its phases in public: parse → cross-check → gate. */
-    const phase = setTimeout(() => {
-      setRuns((prev) => prev.map((r) => (r.id === ref ? { ...r, duration: "CROSS-CHECK" } : r)));
-    }, 4500);
-    const done = setTimeout(() => {
-      setRuns((prev) =>
-        prev.map((r) =>
-          r.id === ref
-            ? { ...r, status: "gate", bids: 5, findings: 4, citations: 4, duration: "11 MIN" }
-            : r
-        )
-      );
-      setExtraFindings((prev) => [...prev, ...LAUNCHED_FINDINGS.map((f) => ({ ...f, run: ref }))]);
-      setExtraNotes((prev) => ({ ...prev, [ref]: LAUNCHED_NOTE_LINES }));
-      setQueue((prev) => [
-        {
-          id: `g-user-${ref}`,
-          tender: ref,
-          title,
-          supplier: PROPOSED_AWARDS[prev.length % PROPOSED_AWARDS.length].supplier,
-          value: PROPOSED_AWARDS[prev.length % PROPOSED_AWARDS.length].value,
-          flags: 4,
-          ago: "JUST NOW",
-        },
-        ...prev,
-      ]);
-      onToast(`FILE AT THE GATE — ${ref.toUpperCase()} · 4 FINDINGS · 4 CITATIONS · THE COMMITTEE DECIDES`);
-    }, 12_000);
-    completionTimers.current.push(phase, done);
+    onToast(`RUN QUEUED — ${title.toUpperCase()} · ${format.toUpperCase()} · ${docs} DOC${docs === 1 ? "" : "S"} · ${checks} CHECK${checks === 1 ? "" : "S"}`);
+    void refresh();
   };
 
-  const signGate = (g: GateItem) => {
-    setQueue((prev) => prev.filter((item) => item.id !== g.id));
-    setVerdicts((prev) => ({ ...prev, [g.tender]: "AWARDED" }));
-    setLedger((prev) => [
-      { tender: g.tender, action: "AWARDED", by: firstName, at: "JUST NOW" },
-      ...prev,
-    ]);
-    /* The committee has spoken — the run leaves the register as decided. */
-    setRuns((prev) =>
-      prev.map((r) => (r.id === g.tender ? { ...r, status: "complete", duration: `${r.duration.split(" ")[0]} MIN` } : r))
-    );
+  /* Records the committee's decision on the sidecar; the UI follows what it returns. */
+  const decideGate = async (g: GateItem, decision: "APPROVE" | "REJECT") => {
+    try {
+      const signer = user?.name.trim() ?? "";
+      const res = await fetch(`/api/gates/${g.id}/decision?XTransformPort=3031`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          decision,
+          approver: signer,
+          signedInAs: signer,
+          note: decision === "APPROVE" ? "Signed by the committee" : "Returned for clarification",
+        }),
+      });
+      if (!res.ok) {
+        /* The sidecar says why it refused (e.g. not on the committee roster). */
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        onToast(data.error ? data.error.toUpperCase() : "DECISION NOT RECORDED");
+        return false;
+      }
+    } catch {
+      onToast("DECISION NOT RECORDED — quorum-mcp NOT RESPONDING");
+      return false;
+    }
+    void refresh();
+    return true;
+  };
+
+  const signGate = async (g: GateItem) => {
+    if (!(await decideGate(g, "APPROVE"))) return;
     onToast(`GATE SIGNED — ${g.tender} AWARDED · DECISION LOGGED`);
     /* The officer has sat a gate and closed the loop at least once. */
     setFlow((f) => ({ ...f, decided: true, awarded: true }));
   };
 
-  const returnGate = (g: GateItem) => {
-    setQueue((prev) => prev.filter((item) => item.id !== g.id));
-    setVerdicts((prev) => ({ ...prev, [g.tender]: "RETURNED" }));
-    setLedger((prev) => [
-      { tender: g.tender, action: "RETURNED", by: firstName, at: "JUST NOW" },
-      ...prev,
-    ]);
-    /* Back to the agent for clarification — the file re-opens live. */
-    setRuns((prev) =>
-      prev.map((r) => (r.id === g.tender ? { ...r, status: "running", duration: "LIVE", startedAt: "RE-RUN" } : r))
-    );
+  const returnGate = async (g: GateItem) => {
+    if (!(await decideGate(g, "REJECT"))) return;
     onToast(`${g.tender} RETURNED — AGENT TASKED WITH CLARIFICATION`);
     /* A return is still a committee decision — the loop just re-opens. */
     setFlow((f) => ({ ...f, decided: true }));
@@ -3346,6 +3470,8 @@ export function Dashboard({
         return <RulesView onToast={onToast} />;
       case "mc-stack":
         return <StackConsole onToast={onToast} />;
+      case "mc-settings":
+        return <SettingsView user={user} agent={agent} onSignOut={onSignOut} />;
       default:
         return null;
     }
@@ -3457,11 +3583,13 @@ export function Dashboard({
       <div className="lg:pl-[264px]">
         {/* Sticky utility bar */}
         <div className="sticky top-0 z-30 border-b border-ink-100 bg-paper/85 backdrop-blur-xl">
-          <div className="mx-auto flex h-14 w-full max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <div
+            className={`mx-auto flex h-14 w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 ${active === "mc-findings" ? "" : "max-w-[1200px]"}`}
+          >
             <p className="truncate font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
               MISSION CONTROL <span className="text-ink-200">/</span>{" "}
               <span className="text-ink-900">
-                {SECTION_LABEL[active] ?? "OVERVIEW"}
+                {SECTION_LABEL[active] ?? "Overview"}
               </span>
             </p>
             <div className="flex items-center gap-3 sm:gap-4">
@@ -3491,7 +3619,10 @@ export function Dashboard({
           </div>
         </div>
 
-        <main id="mc-main" className="mx-auto w-full max-w-[1200px] px-4 pb-14 pt-8 sm:px-6 lg:px-8">
+        <main
+          id="mc-main"
+          className={`mx-auto w-full px-4 pb-14 pt-8 sm:px-6 lg:px-8 ${active === "mc-findings" ? "" : "max-w-[1200px]"}`}
+        >
           <AnimatePresence mode="wait" initial={false}>
             {active === "mc-overview" ? (
               <motion.div key="mc-board" exit={{ opacity: 0, transition: { duration: 0.15 } }}>
@@ -3536,31 +3667,31 @@ export function Dashboard({
             {/* Stats */}
             <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
               <StatCard
-                label="ACTIVE RUNS"
+                label="RUNS IN PROGRESS"
                 value={activeRuns}
-                sub={activeRuns > 0 ? "AGENT IN THE FILE" : "AGENT IDLE — QUEUE A RUN"}
+                sub={activeRuns > 0 ? "AGENT IS READING A TENDER" : "AGENT IS IDLE — START A RUN"}
                 spark={SPARK_A}
                 delay={0.05}
               />
               <StatCard
-                label="FINDINGS FLAGGED"
+                label="ISSUES FOUND"
                 value={findingsTotal}
-                sub="EVERY ONE CITED · ACROSS OPEN RUNS"
+                sub="EACH ONE LINKED TO A SOURCE"
                 spark={SPARK_B}
                 delay={0.12}
               />
               <StatCard
-                label="CITATIONS VERIFIED"
+                label="SOURCES CONFIRMED"
                 value={citationPct}
                 suffix="%"
-                sub="0 UNSOURCED CLAIMS · PAGE-LEVEL"
+                sub="0 CLAIMS WITHOUT A SOURCE PAGE"
                 spark={SPARK_A}
                 delay={0.19}
               />
               <StatCard
-                label="GATES PENDING"
+                label="APPROVALS WAITING"
                 value={queue.length}
-                sub={queue.length > 0 ? "THE COMMITTEE HOLDS THE GAVEL" : "NOTHING WAITS ON A HUMAN"}
+                sub={queue.length > 0 ? "THE COMMITTEE NEEDS TO DECIDE" : "NO DECISIONS NEEDED"}
                 spark={SPARK_B}
                 featured
                 pulse={queue.length > 0}

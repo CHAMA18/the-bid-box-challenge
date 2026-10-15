@@ -158,7 +158,7 @@ export interface GoogleIdentity {
  * Resolves to the signed-in Google identity, or null when anything goes
  * wrong (Google provider not yet enabled in the console, popup blocked or
  * closed, network down, 15s budget exceeded) — callers decide how to carry
- * on; the demo workspace always stays reachable.
+ * on; no fallback identity is ever granted.
  */
 export async function signInWithGooglePopup(): Promise<GoogleIdentity | null> {
   try {

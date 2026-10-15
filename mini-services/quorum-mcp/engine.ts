@@ -5,10 +5,11 @@
 
 import { join } from "node:path";
 import { readdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { appendLog, shaOf, type Draft, type Finding, type Gate, type Requirement, type Run } from "./store";
 
-export const TENDERS_DIR = new URL("./data/tenders/", import.meta.url).pathname;
+export const TENDERS_DIR = fileURLToPath(new URL("./data/tenders/", import.meta.url));
 
 /* ── 1. Third-party MCP server we did NOT write ────────────────────────────
    @modelcontextprotocol/server-filesystem (official). Why not hand-roll it:
@@ -96,36 +97,63 @@ async function readTenderFile(rel: string, runId: string): Promise<string> {
   return text;
 }
 
-/* ── 2. Open-weights model call (GLM via in-region inference) ──────────────
-   Procurement data cannot leave the jurisdiction — the drafting tool calls an
-   open-weights model rather than a closed frontier endpoint. */
+/* ── 2. Open-weights model call (Llama, served in-region) ──────────────────
+   Procurement data cannot leave the jurisdiction. Llama runs on infrastructure
+   we host, behind an OpenAI-compatible /chat/completions endpoint (vLLM, TGI,
+   Ollama, …). Nothing is sent to a closed frontier API. */
 
-let zai: { chat: { completions: { create(a: unknown): Promise<ChatCompletion> } } } | null = null;
-interface ChatCompletion {
-  model?: string;
-  choices?: { message?: { content?: string } }[];
+export interface LlmConfig {
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
 }
 
-async function getZai() {
-  if (!zai) {
-    const mod = await import("z-ai-web-dev-sdk");
-    const ZAI = (mod as { default: { create(): Promise<unknown> } }).default;
-    zai = (await ZAI.create()) as typeof zai;
-  }
-  return zai;
+/* The one fetch signature the sidecar injects (tests pass fakes of this shape). */
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+export interface ChatMessage {
+  role: "system" | "user";
+  content: string;
+}
+
+export function llmConfigFromEnv(env: Record<string, string | undefined> = process.env): LlmConfig | null {
+  const baseUrl = env.LLM_BASE_URL?.trim();
+  const model = env.LLM_MODEL?.trim();
+  if (!baseUrl || !model) return null;
+  return { baseUrl, model, apiKey: env.LLM_API_KEY?.trim() || undefined };
+}
+
+/* One chat completion from the in-region Llama endpoint. Throws on any failure; the caller falls back. */
+export async function callLlama(
+  cfg: LlmConfig,
+  messages: ChatMessage[],
+  fetchImpl: FetchLike = fetch,
+): Promise<{ model: string; content: string }> {
+  const res = await fetchImpl(`${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}),
+    },
+    body: JSON.stringify({ model: cfg.model, messages, temperature: 0.2 }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) throw new Error(`llm endpoint answered ${res.status}`);
+  const data = (await res.json()) as { model?: string; choices?: { message?: { content?: string } }[] };
+  return { model: data.model ?? cfg.model, content: data.choices?.[0]?.message?.content ?? "" };
 }
 
 async function llmDraft(original: string, anomaly: string, runId: string): Promise<Draft> {
   const t0 = performance.now();
-  let model = "glm (open weights)";
+  const cfg = llmConfigFromEnv();
+  let model = cfg ? `llama (${cfg.model})` : "llama (not configured)";
   let proposed = `Insert: "The Buyer reserves the right to seek written clarification of ${anomaly} prior to award, and to disqualify bids left unclarified after five (5) working days."`;
   let rationale = `Template guard added in-region: ${anomaly}.`;
   try {
-    const z = await getZai();
-    const completion = await z.chat.completions.create({
-      messages: [
+    if (!cfg) throw new Error("LLM_BASE_URL and LLM_MODEL are not set");
+    const completion = await callLlama(cfg, [
         {
-          role: "assistant",
+          role: "system",
           content:
             'You are a public-procurement review officer. Given a flagged evidence line and the anomaly, write the text of ONE new clarifying clause the review committee could adopt before award. Do NOT repeat or echo the evidence. Reply with STRICT JSON only: {"proposed":"...","rationale":"..."} — no markdown, no extra keys.',
         },
@@ -133,11 +161,9 @@ async function llmDraft(original: string, anomaly: string, runId: string): Promi
           role: "user",
           content: `EVIDENCE (do not echo):\n${original}\n\nANOMALY RULE:\n${anomaly}\n\nExample of the expected shape: {"proposed":"The Buyer reserves the right to seek written clarification of any line-item price exceeding the peer median by more than 100% prior to award; bids left unclarified after five (5) working days shall be disqualified.","rationale":"..."}\n\nDraft the redline now.`,
         },
-      ],
-      thinking: { type: "disabled" },
-    });
-    if (completion.model) model = completion.model;
-    const raw = completion.choices?.[0]?.message?.content ?? "";
+    ]);
+    model = completion.model;
+    const raw = completion.content;
     const m = raw.match(/\{[\s\S]*\}/);
     if (m) {
       const parsed = JSON.parse(m[0]) as { proposed?: string; rationale?: string };
@@ -145,12 +171,12 @@ async function llmDraft(original: string, anomaly: string, runId: string): Promi
       if (parsed.rationale) rationale = parsed.rationale;
     }
   } catch (err) {
-    model = "glm (unreachable — template fallback)";
+    model = cfg ? `llama (${cfg.model}) · unreachable — template fallback` : "llama (not configured) — template fallback";
     rationale = `LLM call failed (${(err as Error).message}); template guard applied so the run never stalls.`;
   }
   appendLog({
     actor: "quorum-agent",
-    server: "open-weights · glm",
+    server: "open-weights · llama",
     tool: "draft_redline",
     kind: "WRITES",
     runId,
@@ -227,7 +253,7 @@ export const TOOLS = [
   },
 ] as const;
 
-export async function listTenderDocs(tenderId: string, runId: string): Promise<string[]> {
+export async function listTenderDocs(tenderId: string, runId?: string): Promise<string[]> {
   try {
     return (await readdir(join(TENDERS_DIR, tenderId))).sort();
   } catch {
@@ -263,15 +289,128 @@ interface LineItem {
   item: string;
   qty: number;
   unit: number;
+  source: string;
 }
 
-function parseBid(text: string, bidder: string): LineItem[] {
+/* A bid as read from one tender file. `source` is the real filename it came from — the citation. */
+export interface BidDoc {
+  bidder: string;
+  text: string;
+  source: string;
+  /* OCDS only: the bid's value and where in the record it sits (e.g. "ocid …, bids.details[0].value"). */
+  value?: number;
+  currency?: string;
+  ref?: string;
+}
+
+interface OcdsValue {
+  amount?: number;
+  currency?: string;
+}
+
+interface OcdsRelease {
+  ocid?: string;
+  tender?: {
+    title?: string;
+    description?: string;
+    value?: OcdsValue;
+    documents?: { title?: string; documentType?: string }[];
+  };
+  bids?: {
+    details?: { tenderers?: { name?: string }[]; value?: OcdsValue; documents?: { title?: string }[] }[];
+  };
+  awards?: { suppliers?: { name?: string }[]; value?: OcdsValue }[];
+}
+
+export interface AwardDoc {
+  supplier: string;
+  value: number;
+  currency?: string;
+  ref: string;
+}
+
+/* Everything one OCDS release says about a tender, read from the record itself. */
+export interface OcdsRecord {
+  ocid: string;
+  source: string;
+  /* Notice text in the shape of a markdown notice (title, description, one REQUIRED line per
+     eligibility document), so the same requirement rules apply to it. */
+  notice: string;
+  tenderValue?: { amount: number; currency?: string };
+  bids: BidDoc[];
+  awards: AwardDoc[];
+}
+
+function ocdsRelease(release: OcdsRelease, source: string): OcdsRecord {
+  const ocid = release.ocid ?? "unknown";
+  const bids: BidDoc[] = [];
+  (release.bids?.details ?? []).forEach((d, i) => {
+    const bidder = d.tenderers?.[0]?.name;
+    if (!bidder) return;
+    bids.push({
+      bidder,
+      text: (d.documents ?? []).map((doc) => doc.title ?? "").filter(Boolean).join("\n"),
+      source,
+      value: d.value?.amount,
+      currency: d.value?.currency,
+      ref: `ocid ${ocid}, bids.details[${i}].value`,
+    });
+  });
+  const awards: AwardDoc[] = [];
+  (release.awards ?? []).forEach((a, i) => {
+    const supplier = a.suppliers?.[0]?.name;
+    const amount = a.value?.amount;
+    if (!supplier || amount === undefined) return;
+    awards.push({ supplier, value: amount, currency: a.value?.currency, ref: `ocid ${ocid}, awards[${i}].value` });
+  });
+  /* OCDS documents typed eligibilityCriteria are the notice's REQUIRED documents. */
+  const requiredDocs = (release.tender?.documents ?? []).flatMap((d) =>
+    d.documentType === "eligibilityCriteria" && d.title ? [d.title] : [],
+  );
+  const notice = [
+    release.tender?.title ?? "",
+    release.tender?.description ?? "",
+    ...requiredDocs.map((t) => `- [REQUIRED] ${t}`),
+  ].join("\n");
+  const tenderAmount = release.tender?.value?.amount;
+  return {
+    ocid,
+    source,
+    notice,
+    tenderValue: tenderAmount === undefined ? undefined : { amount: tenderAmount, currency: release.tender?.value?.currency },
+    bids,
+    awards,
+  };
+}
+
+/* OCDS 1.1 JSON → one record per release. Accepts a single release or a `releases` package.
+   Names, values, documents and locations come from the record; nothing is inferred. */
+export function parseOcdsRecords(text: string, source: string): OcdsRecord[] {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!json || typeof json !== "object") return [];
+  const root = json as { releases?: OcdsRelease[] } & OcdsRelease;
+  const releases = Array.isArray(root.releases) ? root.releases : [root];
+  return releases.map((r) => ocdsRelease(r, source));
+}
+
+/* Supplier bids only, from every release in the file. */
+export function parseOcdsBids(text: string, source: string): BidDoc[] {
+  return parseOcdsRecords(text, source).flatMap((r) => r.bids);
+}
+
+export function parseBid(text: string, bidder: string, source: string): LineItem[] {
   const items: LineItem[] = [];
   for (const line of text.split("\n")) {
     const m = line.match(/^\|\s*([^|]+?)\s*\|\s*([\d,]+)\s*\|\s*KES\s*([\d,]+(?:\.\d+)?)\s*\|/);
     if (m) {
       items.push({
         bidder,
+        source,
         item: m[1].trim(),
         qty: Number(m[2].replace(/,/g, "")),
         unit: Number(m[3].replace(/,/g, "")),
@@ -281,9 +420,83 @@ function parseBid(text: string, bidder: string): LineItem[] {
   return items;
 }
 
-function runRules(bids: { bidder: string; text: string }[], notice: string): Finding[] {
+/* Citation gate: a finding must name a document that actually exists in this tender. */
+export function citesKnownDocument(citation: string, files: string[]): boolean {
+  return citation.trim().length > 0 && files.some((f) => citation.startsWith(f));
+}
+
+/* Self-check: a finding is kept only if its anchor text can be found in the document it cites. */
+export function verifyFinding(f: Finding, sources: Record<string, string>): boolean {
+  const file = f.citation.split(",")[0].trim();
+  const text = sources[file];
+  if (text === undefined) return false;
+  const lower = text.toLowerCase();
+  switch (f.rule) {
+    case "R-PRICE-OUTLIER": {
+      const itemName = f.item.split(" × ")[0].trim().toLowerCase();
+      return itemName.length > 0 && lower.includes(itemName);
+    }
+    case "R-VALUE-OUTLIER":
+    case "R-AWARD-OVER-BUDGET": {
+      const ocid = f.citation.match(/ocid ([^,]+)/)?.[1]?.trim();
+      return !!ocid && text.includes(ocid) && text.includes(f.item);
+    }
+    case "R-SPEC-DEVIATION":
+      return f.evidence.length > 0 && text.includes(f.evidence);
+    case "R-DOC-MISSING": {
+      const req = f.evidence.match(/"(.+?)" as REQUIRED/)?.[1]?.toLowerCase();
+      return !!req && lower.includes(req);
+    }
+    default:
+      return false;
+  }
+}
+
+/* Required documents named in a notice ("- [REQUIRED] …") that a bid does not reference. */
+export function docMissingFindings(bids: BidDoc[], notice: string, noticeFile: string): Finding[] {
   const findings: Finding[] = [];
-  const all = bids.flatMap((b) => parseBid(b.text, b.bidder));
+  const requiredDocs = [...notice.matchAll(/^- \[REQUIRED\]\s*(.+)$/gm)].map((m) => m[1].trim().toLowerCase());
+  for (const bid of bids) {
+    for (const req of requiredDocs) {
+      if (!bid.text.toLowerCase().includes(req.split(" ")[0])) {
+        findings.push({
+          id: "",
+          rule: "R-DOC-MISSING",
+          severity: "MEDIUM",
+          item: `${bid.bidder} — ${req}`,
+          evidence: `Tender notice lists "${req}" as REQUIRED; the bid does not reference it.`,
+          citation: `${noticeFile}, eligibility checklist`,
+        });
+      }
+    }
+  }
+  return findings;
+}
+
+/* OCDS awards above the tender's published value are flagged, citing the record and path. */
+export function runAwardRules(records: OcdsRecord[]): Finding[] {
+  const findings: Finding[] = [];
+  for (const rec of records) {
+    const ceiling = rec.tenderValue?.amount;
+    if (ceiling === undefined || ceiling <= 0) continue;
+    for (const a of rec.awards) {
+      if (a.value <= ceiling) continue;
+      findings.push({
+        id: "",
+        rule: "R-AWARD-OVER-BUDGET",
+        severity: "HIGH",
+        item: a.supplier,
+        evidence: `Award ${a.currency ?? ""} ${a.value.toLocaleString()} exceeds the published tender value ${rec.tenderValue?.currency ?? ""} ${ceiling.toLocaleString()}.`.replace(/\s+/g, " "),
+        citation: `${rec.source}, ${a.ref}`,
+      });
+    }
+  }
+  return findings;
+}
+
+export function runRules(bids: BidDoc[], notice: string, noticeFile: string): Finding[] {
+  const findings: Finding[] = [];
+  const all = bids.flatMap((b) => parseBid(b.text, b.bidder, b.source));
   const byItem = new Map<string, LineItem[]>();
   for (const li of all) {
     const key = li.item.split(" ").slice(0, 3).join(" ").toLowerCase();
@@ -303,26 +516,12 @@ function runRules(bids: { bidder: string; text: string }[], notice: string): Fin
           severity: "HIGH",
           item: `${li.item} × ${li.qty} — ${li.bidder}`,
           evidence: `Unit price KES ${li.unit.toLocaleString()} vs peer median KES ${median.toLocaleString()} (${(li.unit / median).toFixed(1)}×) on line item "${key}".`,
-          citation: `bid-${li.bidder.toLowerCase().replace(/[^a-z]+/g, "-")}.md, price schedule`,
+          citation: `${li.source}, price schedule`,
         });
       }
     }
   }
-  const requiredDocs = [...notice.matchAll(/^- \[REQUIRED\]\s*(.+)$/gm)].map((m) => m[1].trim().toLowerCase());
-  for (const bid of bids) {
-    for (const req of requiredDocs) {
-      if (!bid.text.toLowerCase().includes(req.split(" ")[0])) {
-        findings.push({
-          id: "",
-          rule: "R-DOC-MISSING",
-          severity: "MEDIUM",
-          item: `${bid.bidder} — ${req}`,
-          evidence: `Tender notice lists "${req}" as REQUIRED; the bid does not reference it.`,
-          citation: "01-tender-notice.md, eligibility checklist",
-        });
-      }
-    }
-  }
+  findings.push(...docMissingFindings(bids, notice, noticeFile));
   for (const bid of bids) {
     for (const line of bid.text.split("\n")) {
       if (/^\s*no\s+(?:deviations?|alternative)/i.test(line)) continue;
@@ -333,10 +532,29 @@ function runRules(bids: { bidder: string; text: string }[], notice: string): Fin
           severity: "HIGH",
           item: `${bid.bidder}`,
           evidence: line.trim().slice(0, 220),
-          citation: `bid file — specifications matrix`,
+          citation: `${bid.source}, specifications matrix`,
         });
         break;
       }
+    }
+  }
+  /* OCDS bid values: a bid more than twice the median of its peers is flagged, citing the record and path. */
+  const valued = bids.filter((b) => b.value !== undefined && b.value > 0);
+  for (const b of valued) {
+    const value = b.value as number;
+    const peers = valued.filter((o) => o !== b).map((o) => o.value as number).sort((x, y) => x - y);
+    if (!peers.length) continue;
+    const mid = Math.floor(peers.length / 2);
+    const median = peers.length % 2 ? peers[mid] : (peers[mid - 1] + peers[mid]) / 2;
+    if (median > 0 && value > median * 2) {
+      findings.push({
+        id: "",
+        rule: "R-VALUE-OUTLIER",
+        severity: "HIGH",
+        item: b.bidder,
+        evidence: `Bid value ${b.currency ?? ""} ${value.toLocaleString()} vs peer median ${median.toLocaleString()} (${(value / median).toFixed(1)}×).`,
+        citation: `${b.source}, ${b.ref ?? "bid value"}`,
+      });
     }
   }
   return findings.slice(0, 6);
@@ -347,7 +565,11 @@ function runRules(bids: { bidder: string; text: string }[], notice: string): Fin
 const ReviewState = Annotation.Root({
   runId: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
   tenderId: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
-  bids: Annotation<{ bidder: string; text: string }[]>({ reducer: (_, b) => b, default: () => [] }),
+  bids: Annotation<BidDoc[]>({ reducer: (_, b) => b, default: () => [] }),
+  sources: Annotation<Record<string, string>>({ reducer: (_, b) => b, default: () => ({}) }),
+  /* Every tender notice in play: the markdown notice, and each OCDS release's notice. */
+  notices: Annotation<{ file: string; text: string }[]>({ reducer: (_, b) => b, default: () => [] }),
+  records: Annotation<OcdsRecord[]>({ reducer: (_, b) => b, default: () => [] }),
   requirements: Annotation<Requirement[]>({ reducer: (_, b) => b, default: () => [] }),
   findings: Annotation<Finding[]>({ reducer: (_, b) => b, default: () => [] }),
   drafts: Annotation<Draft[]>({ reducer: (_, b) => b, default: () => [] }),
@@ -378,25 +600,41 @@ function progress(runId: string, line: string) {
 async function nodeLoadDocuments(s: typeof ReviewState.State) {
   progress(s.runId, "▸ tender_documents_list — via server-filesystem MCP");
   const files = await listTenderDocs(s.tenderId, s.runId);
-  const bids: { bidder: string; text: string }[] = [];
-  let notice = "";
+  const bids: BidDoc[] = [];
+  const sources: Record<string, string> = {};
+  const records: OcdsRecord[] = [];
   for (const f of files) {
     const text = await readTenderFile(`${s.tenderId}/${f}`, s.runId);
-    if (f.startsWith("01-")) notice = text;
-    else {
+    sources[f] = text;
+    if (f.endsWith(".json")) {
+      /* OCDS release — the notice, bids, documents and awards all come from the record itself. */
+      for (const rec of parseOcdsRecords(text, f)) {
+        records.push(rec);
+        bids.push(...rec.bids);
+      }
+    } else if (f.startsWith("01-")) {
+      /* markdown notice — read below via sources */
+    } else {
       const bidder = f.replace(/^\d+-bid-/, "").replace(/\.md$/, "").replace(/-/g, " ").toUpperCase();
-      bids.push({ bidder, text });
+      bids.push({ bidder, text, source: f });
     }
   }
-  progress(s.runId, `▸ ${files.length} documents read · ${bids.length} bids parsed`);
-  return { bids: bids, tenderId: s.tenderId };
+  const mdNotice = files.find((f) => f.startsWith("01-") && f.endsWith(".md"));
+  const notices = [
+    ...(mdNotice ? [{ file: mdNotice, text: sources[mdNotice] }] : []),
+    ...records.map((r) => ({ file: r.source, text: r.notice })),
+  ];
+  const awardCount = records.reduce((n, r) => n + r.awards.length, 0);
+  progress(
+    s.runId,
+    `▸ ${files.length} documents read · ${bids.length} bids · ${awardCount} awards · ${records.length} OCDS records`,
+  );
+  return { bids, tenderId: s.tenderId, sources, notices, records };
 }
 
 async function nodeExtract(s: typeof ReviewState.State) {
   const t0 = performance.now();
-  const noticeFile = (await listTenderDocs(s.tenderId, s.runId)).find((f) => f.startsWith("01-"));
-  const notice = noticeFile ? await readTenderFile(`${s.tenderId}/${noticeFile}`, s.runId) : "";
-  const requirements = extractRequirements(notice);
+  const requirements = extractRequirements(s.notices.map((n) => n.text).join("\n"));
   appendLog({
     actor: "quorum-agent",
     server: "quorum-mcp",
@@ -413,9 +651,31 @@ async function nodeExtract(s: typeof ReviewState.State) {
 }
 
 async function nodeFlag(s: typeof ReviewState.State) {
-  const noticeFile = (await listTenderDocs(s.tenderId, s.runId)).find((f) => f.startsWith("01-"));
-  const notice = noticeFile ? await readTenderFile(`${s.tenderId}/${noticeFile}`, s.runId) : "";
-  const merged = runRules(s.bids, notice).map((f, i) => ({ ...f, id: `F-${String(i + 1).padStart(2, "0")}` }));
+  const files = Object.keys(s.sources);
+  const merged = [
+    ...runRules(s.bids, "", ""),
+    ...s.notices.flatMap((n) => docMissingFindings(s.bids, n.text, n.file)),
+    ...runAwardRules(s.records),
+  ]
+    .filter((f) => {
+      const ok = citesKnownDocument(f.citation, files);
+      if (!ok) {
+        /* Uncited flags never reach the ledger — logged as rejected instead. */
+        appendLog({
+          actor: "quorum-agent",
+          server: "quorum-mcp",
+          tool: "flag_finding",
+          kind: "WRITES",
+          runId: s.runId,
+          inputs: { rule: f.rule, item: f.item },
+          outputs: { rejected: "no source document in this tender", citation: f.citation },
+          status: "ERROR",
+          durationMs: 0,
+        });
+      }
+      return ok;
+    })
+    .map((f, i) => ({ ...f, id: `F-${String(i + 1).padStart(2, "0")}` }));
   for (const f of merged) {
     appendLog({
       actor: "quorum-agent",
@@ -431,6 +691,31 @@ async function nodeFlag(s: typeof ReviewState.State) {
   }
   progress(s.runId, `▸ flag_finding — ${merged.length} findings flagged, each cited`);
   return { findings: merged };
+}
+
+/* Self-check: findings whose anchor text is not in their cited document are dropped and logged, then IDs are renumbered. */
+async function nodeVerify(s: typeof ReviewState.State) {
+  const kept: Finding[] = [];
+  for (const f of s.findings) {
+    if (verifyFinding(f, s.sources)) {
+      kept.push(f);
+    } else {
+      appendLog({
+        actor: "quorum-agent",
+        server: "quorum-mcp",
+        tool: "verify_finding",
+        kind: "READ",
+        runId: s.runId,
+        inputs: { rule: f.rule, item: f.item },
+        outputs: { rejected: "anchor text not found in cited document", citation: f.citation },
+        status: "ERROR",
+        durationMs: 0,
+      });
+    }
+  }
+  const findings = kept.map((f, i) => ({ ...f, id: `F-${String(i + 1).padStart(2, "0")}` }));
+  progress(s.runId, `▸ verify_findings — ${findings.length}/${s.findings.length} confirmed in their cited document`);
+  return { findings };
 }
 
 async function nodeDraft(s: typeof ReviewState.State) {
@@ -449,6 +734,12 @@ async function nodeGate(s: typeof ReviewState.State) {
   const t0 = performance.now();
   const gateId = `gate_${Math.random().toString(36).slice(2, 8)}`;
   const lead = s.bids[0]?.bidder ?? "bidder";
+  /* The bid value is read from the lead bidder's own filing, never assumed. */
+  const lead0 = s.bids[0];
+  const leadValue =
+    lead0?.value !== undefined
+      ? `${lead0.currency ?? ""} ${lead0.value.toLocaleString()}`.trim()
+      : (lead0?.text.match(/\*\*Bid value:\*\*\s*(KES[^\n]+)/)?.[1]?.trim() ?? "NOT STATED IN BID");
   const gate: Gate = {
     id: gateId,
     runId: s.runId,
@@ -456,7 +747,7 @@ async function nodeGate(s: typeof ReviewState.State) {
     tool: "file_gate_submission",
     inputs: {
       bidder: lead,
-      value: "KES 412,600,000",
+      value: leadValue,
       attachments: s.drafts.length + s.findings.length + 1,
       findings: s.findings.map((f) => f.id),
       drafts: s.drafts.map((d) => d.id),
@@ -485,12 +776,14 @@ function buildReviewGraph() {
     .addNode("load_documents", nodeLoadDocuments)
     .addNode("extract_requirements", nodeExtract)
     .addNode("flag_findings", nodeFlag)
+    .addNode("verify_findings", nodeVerify)
     .addNode("draft_redlines", nodeDraft)
     .addNode("propose_gate", nodeGate)
     .addEdge(START, "load_documents")
     .addEdge("load_documents", "extract_requirements")
     .addEdge("extract_requirements", "flag_findings")
-    .addEdge("flag_findings", "draft_redlines")
+    .addEdge("flag_findings", "verify_findings")
+    .addEdge("verify_findings", "draft_redlines")
     .addEdge("draft_redlines", "propose_gate")
     .addEdge("propose_gate", END);
   return g.compile();
@@ -531,7 +824,47 @@ export async function runReview(run: Run) {
   refs.save();
 }
 
-/* ── 5. Filing graph — runs ONLY after a named human approves ────────────── */
+/* ── Approver check — an APPROVE needs a name on the committee roster, or the signed-in officer ── */
+
+export const WEB_URL = process.env.QUORUM_WEB_URL ?? "http://127.0.0.1:3000";
+
+export interface RosterMember {
+  name: string;
+  status: "PRESENT" | "EXCUSED";
+}
+
+const normName = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+
+/* The stored committee roster from the Next.js app. Null when it cannot be read, so approval fails closed. */
+export async function fetchRoster(fetchImpl: FetchLike = fetch, base = WEB_URL): Promise<RosterMember[] | null> {
+  try {
+    const res = await fetchImpl(`${base}/api/committee`, { signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { members?: RosterMember[] };
+    return Array.isArray(data.members) ? data.members : null;
+  } catch {
+    return null;
+  }
+}
+
+export function approverAllowed(
+  approver: string,
+  signedInAs: string | undefined,
+  roster: RosterMember[],
+): { ok: true } | { ok: false; reason: string } {
+  const who = normName(approver);
+  if (signedInAs && normName(signedInAs) === who) return { ok: true };
+  if (roster.some((m) => m.status === "PRESENT" && normName(m.name) === who)) return { ok: true };
+  return {
+    ok: false,
+    reason:
+      roster.length === 0
+        ? "The committee roster is empty — only the signed-in officer can approve."
+        : `${approver.trim()} is not a PRESENT member of the committee roster and is not the signed-in officer.`,
+  };
+}
+
+/* ── 5. Filing graph — runs ONLY after a named human approves ──────────── */
 
 const FileState = Annotation.Root({
   gateId: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
@@ -560,7 +893,7 @@ async function nodeTransmit(s: typeof FileState.State) {
   const submissionId = `SUB-${Date.now().toString(36).toUpperCase()}`;
   const receipt = { submissionId, hash: s.hash, portal: "egp-portal (simulated)" };
   await Bun.write(
-    new URL(`./data/submissions/${submissionId}.json`, import.meta.url).pathname,
+    fileURLToPath(new URL(`./data/submissions/${submissionId}.json`, import.meta.url)),
     JSON.stringify({ gate, receipt }, null, 2)
   );
   appendLog({

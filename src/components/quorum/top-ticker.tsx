@@ -5,7 +5,7 @@ const ITEMS = [
   { icon: Scale, text: "AGENTS PREPARE THE FILE — COMMITTEES AWARD THE TENDER" },
   { icon: FileSearch, text: "EVERY FINDING CITED, OR IT DOESN'T COUNT" },
   { icon: Stethoscope, text: "SPECS VS CLINICAL NEED · QUANTITIES VS CONSUMPTION · PRICES VS OTHER BUYERS" },
-  { icon: Timer, text: "26 DAYS OF COMMITTEE WORK · ~20 MINUTES OF AGENT WORK" },
+  { icon: Timer, text: "THE AGENT PREPARES THE FILE · THE COMMITTEE HOLDS THE GATE" },
   { icon: Braces, text: "OCDS IN · SOURCED REPORT OUT" },
   { icon: Ticket, text: "PILOT TIER — FREE FOR YOUR FIRST THREE TENDERS" },
   { icon: Crosshair, text: "THREE TOOLS THAT WORK BEAT NINE THAT HALF-WORK" },

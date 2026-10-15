@@ -4,7 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/** Scroll-triggered reveal wrapper used across all sections. */
+/** Scroll-triggered reveal wrapper used across all sections: fade, rise and de-blur. */
 export function Reveal({
   children,
   delay = 0,
@@ -20,17 +20,17 @@ export function Reveal({
   return (
     <motion.div
       className={className}
-      initial={reduce ? false : { opacity: 0, y }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={reduce ? false : { opacity: 0, y, filter: "blur(8px)" }}
+      whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.8, delay, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}
     </motion.div>
   );
 }
 
-/** Section eyebrow: red tick + mono label. */
+/** Section eyebrow: red tick that draws itself in, plus a mono label. */
 export function Eyebrow({
   children,
   tone = "dark",
@@ -40,6 +40,7 @@ export function Eyebrow({
   tone?: "dark" | "light";
   className?: string;
 }) {
+  const reduce = useReducedMotion();
   return (
     <p
       className={cn(
@@ -48,9 +49,13 @@ export function Eyebrow({
         className
       )}
     >
-      <span
-        className={cn("inline-block h-[2px] w-6", tone === "dark" ? "bg-brand-600" : "bg-brand-400")}
+      <motion.span
+        className={cn("inline-block h-[2px] w-6 origin-left", tone === "dark" ? "bg-brand-600" : "bg-brand-400")}
         aria-hidden="true"
+        initial={reduce ? false : { scaleX: 0 }}
+        whileInView={{ scaleX: 1 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
       />
       {children}
     </p>

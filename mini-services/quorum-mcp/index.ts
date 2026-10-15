@@ -9,7 +9,9 @@
  *  GET  /api/runs                 → orchestrated runs
  *  POST /api/runs {tenderId}      → launch a LangGraph review run
  *  GET  /api/gates                → gate queue + decisions
- *  POST /api/gates/:id/decision   → { decision: "APPROVE"|"REJECT", approver, note }
+ *  POST /api/gates/:id/decision   → { decision: "APPROVE"|"REJECT", approver, note, signedInAs }
+ *                                   APPROVE is refused (403) unless approver is a PRESENT committee member
+ *                                   or the signed-in officer; if the roster can't be read, it is refused (503).
  */
 
 import { randomUUID } from "node:crypto";
@@ -24,8 +26,10 @@ import {
   type Run,
 } from "./store";
 import {
+  approverAllowed,
   bindEngine,
   executeFiling,
+  fetchRoster,
   fsMcp,
   initFsMcp,
   listTenderDocs,
@@ -146,12 +150,26 @@ async function handleRpc(body: {
 
 /* ── Gate decisions — the named human, logged ────────────────────────────── */
 
-async function decideGate(id: string, decision: string, approver: string, note?: string) {
+async function decideGate(id: string, decision: string, approver: string, note?: string, signedInAs?: string) {
   const gate = state.gates.find((g) => g.id === id);
   if (!gate) return { error: "gate not found", code: 404 };
   if (gate.status !== "PENDING") return { error: `gate already ${gate.status}`, code: 409 };
   const name = approver?.trim();
   if (!name || name.length < 3) return { error: "A named human is required — provide the approving officer's full name.", code: 422 };
+
+  /* Approval only by a name on the committee roster (or the signed-in officer). Checked before anything changes. */
+  if (decision !== "REJECT") {
+    const roster = await fetchRoster();
+    if (!roster) {
+      appendLog({ actor: "quorum-mcp", server: "quorum-mcp", tool: "gate_decision", kind: "GATE_DECISION", runId: gate.runId, inputs: { gateId: id, decision, approver: name }, outputs: { refused: "committee roster unavailable" }, status: "ERROR", durationMs: 0 });
+      return { error: "The committee roster could not be read — approval refused.", code: 503 };
+    }
+    const verdict = approverAllowed(name, signedInAs?.trim(), roster);
+    if (!verdict.ok) {
+      appendLog({ actor: "quorum-mcp", server: "quorum-mcp", tool: "gate_decision", kind: "GATE_DECISION", runId: gate.runId, inputs: { gateId: id, decision, approver: name }, outputs: { refused: verdict.reason }, status: "ERROR", durationMs: 0 });
+      return { error: verdict.reason, code: 403 };
+    }
+  }
 
   gate.approver = name;
   gate.note = note?.trim() || undefined;
@@ -272,7 +290,7 @@ Bun.serve({
           },
           {
             layer: "MODEL",
-            name: "Open-weights · GLM (in-region)",
+            name: "Open-weights · Llama (in-region)",
             detail: "Procurement data cannot leave the country — drafting runs on open weights behind our own walls.",
           },
           {
@@ -322,7 +340,13 @@ Bun.serve({
     if (path.startsWith("/api/gates/") && req.method === "POST") {
       const id = path.match(/^\/api\/gates\/([^/]+)/)?.[1] ?? "";
       const body = await readBody(req);
-      const out = await decideGate(id, String(body.decision ?? ""), String(body.approver ?? ""), body.note ? String(body.note) : undefined);
+      const out = await decideGate(
+        id,
+        String(body.decision ?? ""),
+        String(body.approver ?? ""),
+        body.note ? String(body.note) : undefined,
+        body.signedInAs ? String(body.signedInAs) : undefined,
+      );
       if (out.error) return json(out, out.code ?? 400);
       return json(out);
     }

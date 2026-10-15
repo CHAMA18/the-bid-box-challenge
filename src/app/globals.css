@@ -78,6 +78,52 @@
   --animate-marquee: marquee 42s linear infinite;
   --animate-route-flow: route-flow 1.4s linear infinite;
   --animate-ping-slow: ping-slow 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-shimmer: shimmer 3.4s ease-in-out infinite;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-float-slow: float 9s ease-in-out infinite reverse;
+  --animate-glow-pulse: glow-pulse 2.8s ease-in-out infinite;
+  --animate-aurora: aurora-drift 18s ease-in-out infinite;
+  --animate-aurora-slow: aurora-drift 26s ease-in-out infinite reverse;
+
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-130%) skewX(-20deg);
+    }
+    55%,
+    100% {
+      transform: translateX(330%) skewX(-20deg);
+    }
+  }
+  @keyframes aurora-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    33% {
+      transform: translate3d(40px, -30px, 0) scale(1.08);
+    }
+    66% {
+      transform: translate3d(-30px, 24px, 0) scale(0.95);
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(0, -10px, 0);
+    }
+  }
+  @keyframes glow-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(232, 56, 42, 0.55);
+    }
+    50% {
+      box-shadow: 0 0 0 10px rgba(232, 56, 42, 0);
+    }
+  }
 
   @keyframes marquee {
     from {
@@ -176,6 +222,19 @@
   }
   .text-balance {
     text-wrap: balance;
+  }
+  /* Keep decorative loops still for users who ask for less motion */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-shimmer,
+    .animate-float,
+    .animate-float-slow,
+    .animate-glow-pulse,
+    .animate-marquee,
+    .animate-ping-slow,
+    .animate-aurora,
+    .animate-aurora-slow {
+      animation: none;
+    }
   }
   .tabular {
     font-variant-numeric: tabular-nums;

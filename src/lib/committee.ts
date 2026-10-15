@@ -7,8 +7,8 @@ import type { AuthUser } from "@/lib/auth-types";
  * The standing committee lives in SQLite (CommitteeMember rows); seat
  * capacity and the quorum threshold are SystemSetting rows. The gavel seat
  * is never a stored row: it belongs to whoever is actually signed in, and
- * the API resolves that from the session cookie. If the tables are empty
- * (first boot), the standing committee is seeded once.
+ * the API resolves that from the session cookie. No member is invented: the
+ * roster starts empty until real members are added.
  */
 
 export interface CommitteeMemberView {
@@ -28,13 +28,6 @@ export interface CommitteeState {
   lastSummonsAt: string | null;
 }
 
-const SEED_MEMBERS: Omit<CommitteeMemberView, "status">[] = [
-  { name: "C. Mwangi", role: "CHAIR OF THE COMMITTEE", isChair: true },
-  { name: "A. Banda", role: "FINANCE OFFICER", isChair: false },
-  { name: "J. Otieno", role: "TECHNICAL ADVISOR", isChair: false },
-  { name: "M. Chirwa", role: "LEGAL COUNSEL", isChair: false },
-];
-
 const DEFAULTS: Record<string, string> = {
   committee_seats: "9",
   quorum_required: "5",
@@ -44,12 +37,6 @@ const DEFAULTS: Record<string, string> = {
 let seedPromise: Promise<void> | null = null;
 
 async function seedOnce(): Promise<void> {
-  const count = await db.committeeMember.count();
-  if (count === 0) {
-    await db.committeeMember.createMany({
-      data: SEED_MEMBERS.map((m, i) => ({ ...m, status: "PRESENT", seatOrder: i })),
-    });
-  }
   for (const [key, value] of Object.entries(DEFAULTS)) {
     await db.systemSetting.upsert({
       where: { key },

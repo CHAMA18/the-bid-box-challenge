@@ -1,86 +1,40 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowRight, CirclePause, Download, FileText, PenLine } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, CirclePause, FileText, PenLine } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/quorum/reveal";
 import { cn } from "@/lib/utils";
 
 type TabId = "report" | "flags" | "audit";
 
-const TABS: { id: TabId; label: string; count: number }[] = [
-  { id: "report", label: "REPORT", count: 5 },
-  { id: "flags", label: "FLAGS", count: 3 },
-  { id: "audit", label: "AUDIT LOG", count: 7 },
-];
+interface LiveFinding {
+  id: string;
+  rule: string;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  item: string;
+  evidence: string;
+  citation: string;
+}
 
-const FINDINGS = [
-  {
-    severity: "red" as const,
-    tag: "MISSING DOC",
-    text: "Bid 03 is missing the batch validity certificates required by line 12 of the checklist.",
-    cite: "bid-03/checklist.pdf — p.4",
-    note: "← cited to the page",
-  },
-  {
-    severity: "red" as const,
-    tag: "REGISTRY",
-    text: "Bidder registration lapsed on 12 Mar 2025 — thirty days before the closing date.",
-    cite: "bid-03/registration.pdf — p.2",
-    note: null,
-  },
-  {
-    severity: "amber" as const,
-    tag: "PRICE",
-    text: "Item 3 unit price is +41.8% above the median across bids ($26.10 vs $18.40).",
-    cite: "price-schedules.xlsx — tab C, rows 31–47",
-    note: null,
-  },
-  {
-    severity: "amber" as const,
-    tag: "PATTERN",
-    text: "Same supplier appears in two 2024 awards with the same evaluatee signatures.",
-    cite: "awards-2024.json — ocids 2, 17",
-    note: "← every pattern has a source",
-  },
-  {
-    severity: "green" as const,
-    tag: "CLEAR",
-    text: "Bids 01, 02 and 04: all 16 required documents present and in date.",
-    cite: "run log — 00:03.1",
-    note: null,
-  },
-];
+interface LiveRun {
+  id: string;
+  tenderId: string;
+  status: string;
+  updatedAt: string;
+  requirements: { id: string }[];
+  findings: LiveFinding[];
+  drafts: { id: string }[];
+}
 
-const FLAGS = [
-  {
-    code: "FLAG-01",
-    level: "DISQUALIFYING",
-    text: "Bid 03 — missing batch validity certificates.",
-    action: "Committee may reject under clause 14.2.",
-  },
-  {
-    code: "FLAG-02",
-    level: "PRICE OUTLIER",
-    text: "Item 3 priced +41.8% above median.",
-    action: "Committee may seek clarification.",
-  },
-  {
-    code: "FLAG-03",
-    level: "PATTERN",
-    text: "Repeat supplier in 2024 awards (ocids 2, 17).",
-    action: "Committee may request a conflict review.",
-  },
-];
-
-const AUDIT = [
-  { t: "00:00.4", call: "fetch-notices", io: "in: ppip.go.ke · ocds  →  out: 4 bids parsed" },
-  { t: "00:03.1", call: "check-documents", io: "in: 4 bids · 16 required  →  out: 1 missing" },
-  { t: "00:07.9", call: "verify-bidder", io: "in: bid-03 registry  →  out: expired 12 Mar 2025" },
-  { t: "00:12.6", call: "compare-prices", io: "in: 4 schedules  →  out: median 18.40 · outlier 26.10" },
-  { t: "00:16.2", call: "cross-check", io: "in: supplier id  →  out: 2 hits in awards-2024" },
-  { t: "00:19.4", call: "draft-report", io: "out: 6 findings · 6 citations · 0 unsourced" },
-  { t: "00:20.1", call: "human-gate", io: "⏸ awaiting sign-off — committee chair", paused: true },
-];
+interface LiveLogEntry {
+  id: string;
+  ts: string;
+  tool: string;
+  runId?: string;
+  inputs: unknown;
+  outputs: unknown;
+  status: string;
+}
 
 const TICKS = [
   "Findings written in committee language, not model output",
@@ -88,6 +42,18 @@ const TICKS = [
   "Flags separated from clear items — nothing buried in prose",
   "The gate chip stays open until a human signs",
 ];
+
+const SEVERITY_TONE = { HIGH: "red", MEDIUM: "amber", LOW: "green" } as const;
+
+function short(value: unknown, max = 90): string {
+  const s = typeof value === "string" ? value : JSON.stringify(value) ?? "";
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+function clock(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleTimeString("en-GB", { hour12: false });
+}
 
 function SeverityChip({ severity, tag }: { severity: "red" | "amber" | "green"; tag: string }) {
   return (
@@ -120,11 +86,53 @@ function Annotation({ children, className }: { children: React.ReactNode; classN
 }
 
 /**
- * The output — an annotated, interactive mock of the sourced report
- * Quorum hands to the committee: report, flag register and audit log.
+ * The output — the sourced report Quorum hands to the committee, read live
+ * from the latest run and the audit log on the quorum-mcp sidecar.
  */
 export function ReportMock() {
   const [tab, setTab] = useState<TabId>("report");
+  const [run, setRun] = useState<LiveRun | null>(null);
+  const [log, setLog] = useState<LiveLogEntry[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const pull = async () => {
+      try {
+        const [runsRes, logRes] = await Promise.all([
+          fetch("/api/runs?XTransformPort=3031"),
+          fetch("/api/log?limit=40&XTransformPort=3031"),
+        ]);
+        const runsJson = (await runsRes.json()) as { runs?: LiveRun[] };
+        const logJson = (await logRes.json()) as { entries?: LiveLogEntry[] };
+        if (!alive) return;
+        const runs = runsJson.runs ?? [];
+        /* Newest run that has produced findings; otherwise the newest run. */
+        setRun(runs.find((r) => r.findings.length > 0) ?? runs[0] ?? null);
+        setLog(logJson.entries ?? []);
+      } catch {
+        /* sidecar unreachable — keep the last snapshot */
+      } finally {
+        if (alive) setLoaded(true);
+      }
+    };
+    void pull();
+    const id = setInterval(() => void pull(), 5000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  const findings = run?.findings ?? [];
+  const flags = findings.filter((f) => f.severity === "HIGH");
+  const auditRows = run ? log.filter((e) => e.runId === run.id).reverse() : [];
+
+  const TABS: { id: TabId; label: string; count: number }[] = [
+    { id: "report", label: "REPORT", count: findings.length },
+    { id: "flags", label: "FLAGS", count: flags.length },
+    { id: "audit", label: "AUDIT LOG", count: auditRows.length },
+  ];
 
   return (
     <section id="report" className="scroll-mt-20 border-y border-ink-100 bg-sand/60">
@@ -183,15 +191,19 @@ export function ReportMock() {
                 {/* Doc header */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4 sm:px-7">
                   <p className="font-code text-[10px] font-bold tracking-[0.2em] text-ink-950">
-                    SOURCED REPORT · TENDER KE-NCB-104293
+                    {run ? `SOURCED REPORT · TENDER ${run.tenderId}` : "SOURCED REPORT"}
                   </p>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 px-3 py-1 font-code text-[9px] font-bold tracking-[0.14em] text-brand-700">
-                    <CirclePause className="h-3 w-3" aria-hidden="true" />
-                    GATE: PENDING SIGN-OFF
-                  </span>
+                  {run && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 px-3 py-1 font-code text-[9px] font-bold tracking-[0.14em] text-brand-700">
+                      <CirclePause className="h-3 w-3" aria-hidden="true" />
+                      {run.status === "AWAITING_GATE" ? "GATE: PENDING SIGN-OFF" : `STATUS: ${run.status}`}
+                    </span>
+                  )}
                 </div>
                 <p className="border-b border-ink-100 bg-paper px-5 py-2.5 font-code text-[9.5px] tracking-[0.14em] text-ink-400 sm:px-7">
-                  4 BIDS · 16 DOCUMENTS · RUN 00:20:14 · MODEL QWEN3-32B (OPEN WEIGHTS) · EVERY CLAIM CITED
+                  {run
+                    ? `${run.requirements.length} REQUIREMENTS · ${findings.length} FINDINGS · ${run.drafts.length} DRAFTS · EVERY CLAIM CITED`
+                    : "NO RUN YET · EVERY CLAIM CITED"}
                 </p>
 
                 {/* Tabs */}
@@ -229,22 +241,32 @@ export function ReportMock() {
 
                 {/* Panes */}
                 <div className="min-h-[352px] px-5 py-5 sm:px-7">
-                  {tab === "report" && (
+                  {!run && (
+                    <p className="pt-10 text-center font-code text-[11px] tracking-[0.12em] text-ink-400">
+                      {loaded
+                        ? "NO REVIEW RUN YET — THE REPORT APPEARS HERE ONCE THE AGENT FILES A RUN."
+                        : "LOADING FROM THE QUORUM AGENT…"}
+                    </p>
+                  )}
+
+                  {run && tab === "report" && (
                     <div role="tabpanel" id="pane-report" aria-labelledby="tab-report" className="relative divide-y divide-ink-100">
-                      <Annotation className="-right-2 top-1">
-                        every claim cited to a page
-                      </Annotation>
-                      {FINDINGS.map((f) => (
-                        <div key={f.tag + f.cite} className="relative flex flex-col gap-1.5 py-3.5 first:pt-1 last:pb-1 sm:flex-row sm:items-start sm:gap-3">
-                          <SeverityChip severity={f.severity} tag={f.tag} />
+                      <Annotation className="-right-2 top-1">every claim cited to a page</Annotation>
+                      {findings.length === 0 && (
+                        <p className="py-6 font-code text-[11px] text-ink-400">NO FINDINGS RAISED IN THIS RUN.</p>
+                      )}
+                      {findings.map((f) => (
+                        <div key={f.id} className="relative flex flex-col gap-1.5 py-3.5 first:pt-1 last:pb-1 sm:flex-row sm:items-start sm:gap-3">
+                          <SeverityChip severity={SEVERITY_TONE[f.severity]} tag={f.rule} />
                           <div className="min-w-0 flex-1">
-                            <p className="text-[13.5px] font-medium leading-snug text-ink-800">{f.text}</p>
+                            <p className="text-[13.5px] font-medium leading-snug text-ink-800">
+                              <span className="font-semibold text-ink-900">{f.item}</span> — {f.evidence}
+                            </p>
                             <p className="mt-1.5 flex flex-wrap items-center gap-2">
                               <span className="inline-flex items-center gap-1.5 rounded border border-ink-200 bg-paper px-1.5 py-0.5 font-code text-[9.5px] tracking-[0.06em] text-ink-500">
                                 <FileText className="h-2.5 w-2.5" aria-hidden="true" />
-                                {f.cite}
+                                {f.citation}
                               </span>
-                              {f.note && <span className="font-code text-[9.5px] italic text-brand-600">{f.note}</span>}
                             </p>
                           </div>
                         </div>
@@ -252,21 +274,22 @@ export function ReportMock() {
                     </div>
                   )}
 
-                  {tab === "flags" && (
+                  {run && tab === "flags" && (
                     <div role="tabpanel" id="pane-flags" aria-labelledby="tab-flags" className="relative space-y-3">
-                      <Annotation className="-right-2 top-0">
-                        nothing buried in prose
-                      </Annotation>
-                      {FLAGS.map((f) => (
-                        <div key={f.code} className="relative rounded-xl border border-ink-100 bg-paper p-4">
+                      <Annotation className="-right-2 top-0">nothing buried in prose</Annotation>
+                      {flags.length === 0 && (
+                        <p className="py-6 font-code text-[11px] text-ink-400">NO HIGH-SEVERITY FLAGS IN THIS RUN.</p>
+                      )}
+                      {flags.map((f, i) => (
+                        <div key={f.id} className="relative rounded-xl border border-ink-100 bg-paper p-4">
                           <div className="flex flex-wrap items-center gap-2.5">
-                            <span className="font-code text-[10px] font-bold text-ink-400">{f.code}</span>
+                            <span className="font-code text-[10px] font-bold text-ink-400">FLAG-{String(i + 1).padStart(2, "0")}</span>
                             <span className="inline-flex items-center rounded bg-brand-600/12 px-1.5 py-0.5 font-code text-[9px] font-bold tracking-[0.12em] text-brand-700">
-                              {f.level}
+                              {f.rule}
                             </span>
                           </div>
-                          <p className="mt-2 text-[13.5px] font-semibold text-ink-900">{f.text}</p>
-                          <p className="mt-1 text-[12.5px] text-ink-500">{f.action}</p>
+                          <p className="mt-2 text-[13.5px] font-semibold text-ink-900">{f.item}</p>
+                          <p className="mt-1 text-[12.5px] text-ink-500">{f.evidence}</p>
                         </div>
                       ))}
                       <p className="pt-1 font-code text-[9.5px] tracking-[0.14em] text-ink-400">
@@ -275,33 +298,30 @@ export function ReportMock() {
                     </div>
                   )}
 
-                  {tab === "audit" && (
+                  {run && tab === "audit" && (
                     <div role="tabpanel" id="pane-audit" aria-labelledby="tab-audit" className="relative space-y-1.5">
-                      <Annotation className="-right-2 top-0">
-                        inputs, outputs, timestamps
-                      </Annotation>
-                      {AUDIT.map((a) => (
-                        <p
-                          key={a.call}
-                          className={cn(
-                            "flex flex-wrap items-baseline gap-x-3 font-code text-[10.5px] leading-relaxed sm:text-[11px]",
-                            a.paused ? "rounded-lg border-l-2 border-brand-500 bg-brand-600/10 px-3 py-2" : "text-ink-600"
-                          )}
-                        >
-                          <span className="tabular text-ink-400">{a.t}</span>
-                          <span className={cn("font-bold", a.paused ? "text-brand-700" : "text-brand-600")}>{a.call}</span>
-                          <span className={a.paused ? "text-brand-800" : "text-ink-500"}>{a.io}</span>
-                        </p>
-                      ))}
-                      <div className="flex flex-wrap items-center gap-2 pt-3">
-                        <span className="rounded border border-ink-200 bg-paper px-2 py-1 font-code text-[9.5px] text-ink-500">
-                          sha256 : 9f3c…a41b
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 rounded border border-ink-200 bg-paper px-2 py-1 font-code text-[9.5px] font-semibold text-ink-700">
-                          <Download className="h-2.5 w-2.5" aria-hidden="true" />
-                          export audit.json
-                        </span>
-                      </div>
+                      <Annotation className="-right-2 top-0">inputs, outputs, timestamps</Annotation>
+                      {auditRows.length === 0 && (
+                        <p className="py-6 font-code text-[11px] text-ink-400">NO TOOL CALLS LOGGED FOR THIS RUN YET.</p>
+                      )}
+                      {auditRows.map((a) => {
+                        const paused = a.status === "PENDING_GATE";
+                        return (
+                          <p
+                            key={a.id}
+                            className={cn(
+                              "flex flex-wrap items-baseline gap-x-3 font-code text-[10.5px] leading-relaxed sm:text-[11px]",
+                              paused ? "rounded-lg border-l-2 border-brand-500 bg-brand-600/10 px-3 py-2" : "text-ink-600"
+                            )}
+                          >
+                            <span className="tabular text-ink-400">{clock(a.ts)}</span>
+                            <span className={cn("font-bold", paused ? "text-brand-700" : "text-brand-600")}>{a.tool}</span>
+                            <span className={paused ? "text-brand-800" : "text-ink-500"}>
+                              {paused ? "⏸ awaiting sign-off — committee chair" : `in: ${short(a.inputs)}  →  out: ${short(a.outputs)}`}
+                            </span>
+                          </p>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -309,7 +329,7 @@ export function ReportMock() {
                 {/* Doc footer */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 px-5 py-3 sm:px-7">
                   <p className="font-code text-[9px] tracking-[0.18em] text-ink-400">
-                    PAGE 1 OF 1 · GENERATED 00:20:14 · QUORUM
+                    {run ? `UPDATED ${clock(run.updatedAt)} · QUORUM` : "QUORUM"}
                   </p>
                   <p className="font-code text-[9px] tracking-[0.18em] text-brand-600">
                     THE COMMITTEE SIGNS — THE AGENT NEVER DOES

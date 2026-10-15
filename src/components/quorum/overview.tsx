@@ -1,5 +1,9 @@
+"use client";
+
+import { motion, useReducedMotion } from "framer-motion";
 import { CirclePause, ScrollText } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/quorum/reveal";
+import { Aurora } from "@/components/quorum/motion-kit";
 
 const TASKS = [
   "Sorting bids",
@@ -9,14 +13,19 @@ const TASKS = [
   "Writing the report",
 ];
 
+const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
 /**
- * Overview — the job in numbers: 26 days of committee work vs ~20 minutes
- * of Quorum work, ending at a hard human gate.
+ * Overview — the committee's manual work vs Quorum's review run, ending at
+ * a hard human gate.
  */
 export function Overview() {
+  const reduce = useReducedMotion();
   return (
-    <section id="overview" className="scroll-mt-20 border-y border-ink-100 bg-sand/60">
-      <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+    <section id="overview" className="relative scroll-mt-20 overflow-hidden border-y border-ink-100 bg-sand/60">
+      <Aurora tone="soft" className="-right-40 top-0 h-[480px] w-[480px] opacity-80" />
+      <Aurora tone="soft" slow className="-left-40 bottom-0 h-[420px] w-[420px] opacity-70" />
+      <div className="relative mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="grid gap-12 lg:grid-cols-12 lg:gap-14">
           {/* Copy */}
           <div className="min-w-0 lg:col-span-5">
@@ -32,12 +41,12 @@ export function Overview() {
               <p className="mt-6 text-[16.5px] leading-relaxed text-ink-600">
                 Sorting bids, ticking off documents, checking each bidder, comparing prices and
                 writing the report is{" "}
-                <span className="font-semibold text-ink-900">26 days of committee work today</span>.
-                Quorum does the same work in about twenty minutes — and then stops.
+                <span className="font-semibold text-ink-900">committee work, done by hand</span>.
+                Quorum does the same work in a single review run — and then stops.
               </p>
             </Reveal>
             <Reveal delay={0.18}>
-              <div className="mt-8 flex items-start gap-4 rounded-2xl border border-brand-200 bg-white p-5 shadow-sm">
+              <div className="mt-8 flex items-start gap-4 rounded-2xl border border-brand-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(217,38,22,0.12)]">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 ring-1 ring-brand-200">
                   <ScrollText className="h-5 w-5 text-brand-600" aria-hidden="true" />
                 </span>
@@ -63,50 +72,63 @@ export function Overview() {
                 <p className="font-code text-[10px] tracking-[0.18em] text-ink-400">FIG. 01 — THE CLOCK</p>
               </div>
 
-              {/* Proportional bar — the red slice is drawn true to scale */}
+              {/* Bar — draws in from the left; the red sliver marks Quorum's share */}
               <div className="relative mt-14">
-                {/* Callout flag above the sliver */}
-                <div className="absolute -top-12 right-0 flex flex-col items-end" aria-hidden="true">
-                  <span className="rounded-md bg-brand-600 px-2.5 py-1 font-code text-[9.5px] font-bold tracking-[0.12em] text-white shadow-[0_6px_16px_rgba(217,38,22,0.35)]">
-                    QUORUM · ~20 MIN
-                  </span>
-                  <span className="mr-px h-4 w-px bg-brand-600/70" />
-                </div>
-                <div className="relative flex h-14 w-full items-stretch overflow-hidden rounded-xl bg-ink-950 sm:h-16">
+                <motion.div
+                  className="relative flex h-14 w-full items-stretch overflow-hidden rounded-xl bg-ink-950 sm:h-16"
+                  initial={reduce ? false : { clipPath: "inset(0 100% 0 0 round 12px)" }}
+                  whileInView={{ clipPath: "inset(0 0% 0 0 round 12px)" }}
+                  viewport={{ once: true, margin: "-60px" }}
+                  transition={{ duration: 1.2, ease: EASE }}
+                >
                   <div className="bg-grid-dark absolute inset-0 opacity-60" aria-hidden="true" />
                   <p className="relative flex-1 self-center truncate px-4 font-code text-[10.5px] font-semibold tracking-[0.18em] text-ink-200 sm:text-[11.5px]">
-                    26 DAYS — COMMITTEE WORK TODAY
+                    COMMITTEE WORK, BY HAND
                   </p>
-                  <span
-                    className="relative h-full w-[3px] shrink-0 bg-brand-600"
+                  <motion.span
+                    className="relative h-full w-[3px] shrink-0 bg-brand-600 shadow-[0_0_14px_rgba(232,56,42,0.9)]"
                     role="img"
-                    aria-label="The red slice: about twenty minutes, drawn to scale"
+                    aria-label="The red sliver: Quorum's share of the work"
+                    initial={reduce ? false : { opacity: 0 }}
+                    whileInView={{ opacity: [0, 1, 0.4, 1] }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 1.1, duration: 1.2 }}
                   />
-                </div>
+                </motion.div>
               </div>
 
               {/* Task chips over the committee segment */}
               <div className="mt-5 flex flex-wrap gap-2">
                 {TASKS.map((t, i) => (
-                  <span
+                  <motion.span
                     key={t}
-                    className="inline-flex items-center gap-2 rounded-full border border-ink-100 bg-paper px-3 py-1.5 text-[12px] font-medium text-ink-700"
+                    initial={reduce ? false : { opacity: 0, y: 10, scale: 0.94 }}
+                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.15 + i * 0.09, duration: 0.5, ease: EASE }}
+                    className="inline-flex items-center gap-2 rounded-full border border-ink-100 bg-paper px-3 py-1.5 text-[12px] font-medium text-ink-700 transition-colors hover:border-brand-300 hover:bg-brand-50"
                   >
                     <span className="font-code text-[9.5px] font-semibold text-brand-600 tabular">
                       {String(i + 1).padStart(2, "0")}
                     </span>
                     {t}
-                  </span>
+                  </motion.span>
                 ))}
               </div>
               <p className="mt-2.5 font-code text-[10px] tracking-[0.14em] text-ink-400">
-                ↑ WHAT THE COMMITTEE DOES BY HAND · THE RED SLICE — QUORUM&apos;S SHARE, DRAWN TO SCALE ↑
+                ↑ WHAT THE COMMITTEE DOES BY HAND · THE RED SLICE — QUORUM&apos;S SHARE ↑
               </p>
 
               {/* Human gate */}
               <div className="mt-6 flex items-start gap-4 rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/60 p-4 sm:p-5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white">
-                  <CirclePause className="h-5 w-5" aria-hidden="true" />
+                <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white">
+                  {!reduce && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 animate-ping-slow rounded-xl bg-brand-500/50"
+                    />
+                  )}
+                  <CirclePause className="relative h-5 w-5" aria-hidden="true" />
                 </span>
                 <div>
                   <p className="font-code text-[10.5px] font-bold tracking-[0.22em] text-brand-700">

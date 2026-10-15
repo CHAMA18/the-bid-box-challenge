@@ -1,5 +1,9 @@
+"use client";
+
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Check } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/quorum/reveal";
+import { Aurora, Spotlight } from "@/components/quorum/motion-kit";
 import { cn } from "@/lib/utils";
 
 const TIERS = [
@@ -59,9 +63,12 @@ const TIERS = [
  * non-negotiables: every finding cited, a human gate on every award.
  */
 export function Pricing() {
+  const reduce = useReducedMotion();
   return (
-    <section id="pricing" className="scroll-mt-20 bg-paper">
-      <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+    <section id="pricing" className="relative scroll-mt-20 overflow-hidden bg-paper">
+      <Aurora tone="soft" slow className="-left-40 top-20 h-[460px] w-[460px] opacity-70" />
+      <Aurora tone="soft" className="-right-40 bottom-0 h-[420px] w-[420px] opacity-70" />
+      <div className="relative mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <Reveal>
@@ -84,12 +91,13 @@ export function Pricing() {
         <div className="mt-14 grid items-stretch gap-6 lg:grid-cols-3">
           {TIERS.map((tier, i) => (
             <Reveal key={tier.name} delay={0.08 * i} className="h-full">
+              <Spotlight className="h-full rounded-3xl">
               <article
                 className={cn(
-                  "relative flex h-full flex-col rounded-3xl p-7 sm:p-8",
+                  "relative flex h-full flex-col rounded-3xl p-7 transition-all duration-500 hover:-translate-y-1 sm:p-8",
                   tier.featured
-                    ? "border-2 border-brand-600 bg-white shadow-[0_28px_70px_rgba(217,38,22,0.18)]"
-                    : "border border-ink-100 bg-white shadow-[0_16px_40px_rgba(11,12,15,0.05)]"
+                    ? "border-2 border-brand-600 bg-white shadow-[0_28px_70px_rgba(217,38,22,0.18)] hover:shadow-[0_36px_80px_rgba(217,38,22,0.26)]"
+                    : "border border-ink-100 bg-white shadow-[0_16px_40px_rgba(11,12,15,0.05)] hover:shadow-[0_24px_54px_rgba(11,12,15,0.10)]"
                 )}
               >
                 {tier.featured && (
@@ -114,8 +122,14 @@ export function Pricing() {
                 <p className="mt-4 text-[14.5px] leading-relaxed text-ink-600">{tier.blurb}</p>
 
                 <ul className="mt-6 space-y-3 border-t border-ink-100 pt-6">
-                  {tier.features.map((f) => (
-                    <li key={f} className="flex items-start gap-3 text-[14px] font-medium text-ink-800">
+                  {tier.features.map((f, fi) => (
+                    <motion.li
+                      key={f}
+                      initial={reduce ? false : { opacity: 0, x: -10 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true, margin: "-40px" }}
+                      transition={{ delay: 0.12 + 0.07 * fi, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                      className="flex items-start gap-3 text-[14px] font-medium text-ink-800">
                       <span
                         className={cn(
                           "mt-0.5 grid h-4.5 w-4.5 shrink-0 place-items-center rounded-full",
@@ -125,7 +139,7 @@ export function Pricing() {
                         <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden="true" />
                       </span>
                       {f}
-                    </li>
+                    </motion.li>
                   ))}
                 </ul>
 
@@ -145,6 +159,7 @@ export function Pricing() {
                   />
                 </a>
               </article>
+              </Spotlight>
             </Reveal>
           ))}
         </div>

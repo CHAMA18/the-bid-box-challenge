@@ -103,7 +103,7 @@ export function GetStarted({
             </Reveal>
             <Reveal delay={0.16}>
               <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-white/85">
-                Your first run takes about twenty minutes — on a real portal, with real notices.
+                Your first run reads the tender end to end, on a real portal, with real notices.
               </p>
             </Reveal>
             <Reveal delay={0.22}>
@@ -236,7 +236,7 @@ export function GetStarted({
               >
                 {ready
                   ? "FIVE FOR FIVE — READY FOR YOUR FIRST RUN"
-                  : "TICK ALL FIVE — YOUR FIRST RUN TAKES ABOUT TWENTY MINUTES"}
+                  : "TICK ALL FIVE — THEN LAUNCH YOUR FIRST RUN"}
               </p>
             </div>
           </Reveal>
