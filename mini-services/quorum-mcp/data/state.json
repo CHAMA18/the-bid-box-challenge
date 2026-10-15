@@ -1,6 +1,29 @@
 {
   "gates": [
     {
+      "id": "gate_7b9kcn",
+      "runId": "run_9160fb8e",
+      "tenderId": "KE-NCB-104293",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "MEDIQUEAST",
+        "value": "KES 412,600,000",
+        "attachments": 7,
+        "findings": [
+          "F-01",
+          "F-02",
+          "F-03",
+          "F-04"
+        ],
+        "drafts": [
+          "draft_2jpl3x",
+          "draft_ik91t4"
+        ]
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-16T13:51:43.129Z"
+    },
+    {
       "id": "gate_11fzu9",
       "runId": "run_ca3ccb30",
       "tenderId": "KE-KCS-2026-042",
@@ -304,6 +327,160 @@
     }
   ],
   "runs": [
+    {
+      "id": "run_9160fb8e",
+      "tenderId": "KE-NCB-104293",
+      "status": "AWAITING_GATE",
+      "startedAt": "2026-10-16T13:51:43.103Z",
+      "updatedAt": "2026-10-16T13:51:43.130Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KE-NCB-104293",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 3 documents read · 2 bids · 0 awards · 0 OCDS records",
+        "▸ plan_review — heuristic · value parsing DEEP (markdown + OCDS) · focus OVER-BUDGET > VALUE-OUTLIER > PRICE-OUTLIER > DOC-MISSING > SPEC-DEVIATION · maxDrafts 2",
+        "▸ extract_requirements — 8 SHALL/must clauses pinned",
+        "▸ flag_finding — 4 findings flagged, each cited",
+        "▸ verify_findings — 4/4 confirmed in their cited document",
+        "▸ draft_redline — template (no model configured) for R-PRICE-OUTLIER",
+        "▸ draft_redline — template (no model configured) for R-PRICE-OUTLIER",
+        "▸ 2 redline draft(s) ready for committee (plan: maxDrafts 2, focus OVER-BUDGET, VALUE-OUTLIER, PRICE-OUTLIER) · 0 from the model, 2 template · 0 tokens",
+        "⏸ human gate raised (gate_7b9kcn) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate"
+      ],
+      "requirements": [
+        {
+          "id": "REQ-01",
+          "clause": "SHALL deliver MRI 1.5T scanners with full coil suite conforming to the technical specifications in Annex A",
+          "page": 1
+        },
+        {
+          "id": "REQ-02",
+          "clause": "SHALL install and commission each unit within ninety (90) days of contract signature",
+          "page": 1
+        },
+        {
+          "id": "REQ-03",
+          "clause": "SHALL provide five (5) years comprehensive maintenance, including helium refills",
+          "page": 1
+        },
+        {
+          "id": "REQ-04",
+          "clause": "SHALL train at least twelve (12) radiographers per county",
+          "page": 1
+        },
+        {
+          "id": "REQ-05",
+          "clause": "SHALL cite the country of manufacture for every line item",
+          "page": 1
+        },
+        {
+          "id": "REQ-06",
+          "clause": "must hold a valid tax compliance certificate at submission",
+          "page": 1
+        },
+        {
+          "id": "REQ-07",
+          "clause": "must submit audited accounts for the last three (3) financial years",
+          "page": 1
+        },
+        {
+          "id": "REQ-08",
+          "clause": "must declare any single-source supply arrangements exceeding 30% of the bid value",
+          "page": 1
+        }
+      ],
+      "findings": [
+        {
+          "id": "F-01",
+          "rule": "R-PRICE-OUTLIER",
+          "severity": "HIGH",
+          "item": "MRI 1.5T scanner with full coil suite × 2 — MEDIQUEAST",
+          "evidence": "Unit price KES 118,400,000 vs peer median KES 52,900,000 (2.2×) on line item \"mri 1.5t scanner\".",
+          "citation": "02-bid-mediqueast.md, price schedule"
+        },
+        {
+          "id": "F-02",
+          "rule": "R-PRICE-OUTLIER",
+          "severity": "HIGH",
+          "item": "Coil, phased array knee × 4 — MEDIQUEAST",
+          "evidence": "Unit price KES 4,850,000 vs peer median KES 1,950,000 (2.5×) on line item \"coil, phased array\".",
+          "citation": "02-bid-mediqueast.md, price schedule"
+        },
+        {
+          "id": "F-03",
+          "rule": "R-SPEC-DEVIATION",
+          "severity": "HIGH",
+          "item": "MEDIQUEAST",
+          "evidence": "Note: alternative offered for the cooling system — chiller specification deviation requested (see annex C).",
+          "citation": "02-bid-mediqueast.md, specifications matrix"
+        },
+        {
+          "id": "F-04",
+          "rule": "R-DOC-MISSING",
+          "severity": "MEDIUM",
+          "item": "MEDIQUEAST — manufacturer authorization letter",
+          "evidence": "Tender notice lists \"manufacturer authorization letter\" as REQUIRED; the bid does not reference it.",
+          "citation": "01-tender-notice.md, eligibility checklist"
+        }
+      ],
+      "drafts": [
+        {
+          "id": "draft_2jpl3x",
+          "findingId": "F-01",
+          "original": "Unit price KES 118,400,000 vs peer median KES 52,900,000 (2.2×) on line item \"mri 1.5t scanner\".",
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-PRICE-OUTLIER on MRI 1.5T scanner with full coil suite × 2 — MEDIQUEAST prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (LLM_BASE_URL and LLM_MODEL are not set); template guard applied so the run never stalls.",
+          "model": "template (no model configured)",
+          "source": "template",
+          "usage": {
+            "promptTokens": 0,
+            "completionTokens": 0
+          },
+          "latencyMs": 0
+        },
+        {
+          "id": "draft_ik91t4",
+          "findingId": "F-02",
+          "original": "Unit price KES 4,850,000 vs peer median KES 1,950,000 (2.5×) on line item \"coil, phased array\".",
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-PRICE-OUTLIER on Coil, phased array knee × 4 — MEDIQUEAST prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (LLM_BASE_URL and LLM_MODEL are not set); template guard applied so the run never stalls.",
+          "model": "template (no model configured)",
+          "source": "template",
+          "usage": {
+            "promptTokens": 0,
+            "completionTokens": 0
+          },
+          "latencyMs": 0
+        }
+      ],
+      "usage": {
+        "drafts": 2,
+        "llmDrafts": 0,
+        "promptTokens": 0,
+        "completionTokens": 0
+      },
+      "plan": {
+        "pack": {
+          "files": 3,
+          "bids": 2,
+          "ocdsRecords": 0,
+          "markdownValueBids": 2,
+          "ocdsValueBids": 0
+        },
+        "parseMarkdownValues": true,
+        "focusRules": [
+          "OVER-BUDGET",
+          "VALUE-OUTLIER",
+          "PRICE-OUTLIER",
+          "DOC-MISSING",
+          "SPEC-DEVIATION"
+        ],
+        "maxDrafts": 2,
+        "note": "heuristic: 2 markdown bid value(s) + published ceiling — deep-value parsing on",
+        "source": "heuristic"
+      },
+      "gateId": "gate_7b9kcn"
+    },
     {
       "id": "run_ca3ccb30",
       "tenderId": "KE-KCS-2026-042",
@@ -1457,5 +1634,5 @@
       "status": "PENDING"
     }
   ],
-  "seq": 148
+  "seq": 161
 }
