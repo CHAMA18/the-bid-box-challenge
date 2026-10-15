@@ -24,13 +24,16 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Quorum — Agentic tender review for public procurement",
+  title: "Quorum — Agentic tender review for public health procurement",
   description:
-    "Quorum reads a public tender end to end — sorts the bids, ticks off the documents, checks each bidder, compares prices and writes the report, every finding cited. Then it stops: the committee decides.",
+    "Quorum reads a public health tender end to end — specs against clinical need, quantities against real consumption, prices against other buyers, every finding cited. Then it stops: the committee decides.",
   keywords: [
     "Quorum",
     "agentic AI",
     "public procurement",
+    "health procurement",
+    "health commodity tenders",
+    "medical supplies",
     "tender review",
     "MCP",
     "Model Context Protocol",
@@ -40,7 +43,7 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "Quorum" }],
   openGraph: {
-    title: "Quorum — Agentic tender review for public procurement",
+    title: "Quorum — Agentic tender review for public health procurement",
     description:
       "Twenty-six days of committee work in twenty minutes of agent work — with every finding cited, and a hard stop before the award.",
     siteName: "Quorum",
@@ -48,9 +51,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Quorum — Agentic tender review for public procurement",
+    title: "Quorum — Agentic tender review for public health procurement",
     description:
-      "Agents prepare the file, committees award the tender. Agentic procurement software, built for Africa.",
+      "Agents prepare the file, committees award the tender. Agentic procurement for public health supply chains, built for Africa.",
   },
 };
 

@@ -7,7 +7,7 @@ import { Eyebrow } from "@/components/quorum/reveal";
 
 const STATS = [
   { value: "20", suffix: " min", label: "from tender notices to a decision-ready file" },
-  { value: "3", suffix: "+", label: "checks on every bid — documents, bidder, price" },
+  { value: "3", suffix: "+", label: "checks on every bid — specs, bidders, prices" },
   { value: "100", suffix: "%", label: "of findings cited to a source document" },
   { value: "1", suffix: "", label: "human gate before anything irreversible" },
 ];
@@ -28,7 +28,7 @@ export function Hero({ onGetStarted }: { onGetStarted: () => void }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
             >
-              <Eyebrow>Agentic tender review for public procurement</Eyebrow>
+              <Eyebrow>Agentic tender review for public health procurement</Eyebrow>
             </motion.div>
 
             <motion.h1
@@ -58,9 +58,9 @@ export function Hero({ onGetStarted }: { onGetStarted: () => void }) {
               transition={{ duration: 0.7, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
               className="mt-6 max-w-xl text-[17px] leading-relaxed text-ink-600"
             >
-              Quorum reads a public tender end to end — sorts the bids, ticks off the
-              documents, checks each bidder, compares prices and writes the report. Every
-              finding cited. Then it stops and hands over:{" "}
+              Quorum reads a health tender end to end — specs against clinical need, quantities
+              against real consumption, prices against other buyers. Every finding cited. Then it
+              stops and hands over:{" "}
               <span className="font-semibold text-ink-900">the committee decides.</span>
             </motion.p>
 
@@ -73,7 +73,7 @@ export function Hero({ onGetStarted }: { onGetStarted: () => void }) {
             >
               <span className="inline-flex items-center gap-2.5 rounded-full border border-brand-200 bg-brand-50 px-4 py-2 text-[13.5px] font-semibold text-brand-700">
                 <Landmark className="h-4 w-4" aria-hidden="true" />
-                Built for procurement teams &amp; oversight bodies
+                Built for ministries, medical stores &amp; oversight bodies
               </span>
             </motion.div>
 
