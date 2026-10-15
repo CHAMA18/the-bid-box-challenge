@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Check, Gauge } from "lucide-react";
+import { ArrowRight, Check, Gauge, Send } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/bidbox/reveal";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const CHECKLIST = [
@@ -13,17 +14,62 @@ const CHECKLIST = [
   { id: "gate", label: "Sign the gate — the committee awards" },
 ];
 
+type FormState = "idle" | "sending" | "sent" | "error";
+
 /**
  * Get started — the product path from portal to first sourced report,
- * with an interactive first-run readiness checklist.
+ * an interactive first-run readiness checklist, and a pilot-request
+ * form persisted through /api/contact.
  */
 export function GetStarted() {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [form, setForm] = useState({ name: "", email: "", institution: "" });
+  const [state, setState] = useState<FormState>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
   const count = CHECKLIST.filter((c) => checked[c.id]).length;
   const ready = count === CHECKLIST.length;
 
   function toggle(id: string) {
     setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+    if (form.name.trim().length < 2 || !emailOk) {
+      setError("Please give a name and a valid work email.");
+      return;
+    }
+
+    setState("sending");
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          company: form.institution.trim() || undefined,
+          message: `Pilot request — institution: ${form.institution.trim() || "not specified"}.`,
+        }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error ?? "Could not send your request.");
+      }
+      setState("sent");
+      toast({
+        title: "Request received",
+        description: "We'll reply within one working day with your pilot portal list.",
+      });
+    } catch (err) {
+      setState("error");
+      setError(err instanceof Error ? err.message : "Could not send your request.");
+    }
   }
 
   return (
@@ -60,10 +106,10 @@ export function GetStarted() {
                   />
                 </a>
                 <a
-                  href="#platform"
+                  href="#pricing"
                   className="inline-flex h-[52px] items-center rounded-full border border-white/35 px-7 text-[15px] font-semibold text-white transition-all hover:border-white hover:bg-white/10"
                 >
-                  Under the hood
+                  Compare tiers
                 </a>
               </div>
             </Reveal>
@@ -169,6 +215,118 @@ export function GetStarted() {
             </div>
           </Reveal>
         </div>
+
+        {/* Pilot request form */}
+        <Reveal delay={0.1}>
+          <div className="mx-auto mt-12 w-full max-w-4xl rounded-3xl bg-white p-6 shadow-[0_32px_80px_rgba(11,12,15,0.35)] sm:p-8">
+            {state === "sent" ? (
+              <div className="flex flex-col items-center gap-4 py-6 text-center" aria-live="polite">
+                <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-600 text-white">
+                  <Check className="h-7 w-7" strokeWidth={3} aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="font-display text-[22px] font-black tracking-tight text-ink-950">
+                    Request received.
+                  </p>
+                  <p className="mt-1.5 text-[14.5px] text-ink-600">
+                    We&apos;ll reply within one working day with your pilot portal list.
+                  </p>
+                </div>
+                <p className="font-code text-[9.5px] tracking-[0.18em] text-brand-600">
+                  GATE RULE APPLIES TO US TOO — A HUMAN REPLIES, NOT A BOT
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-code text-[9.5px] font-semibold tracking-[0.24em] text-brand-700">
+                      REQUEST A PILOT
+                    </p>
+                    <p className="mt-1 text-[15px] font-semibold text-ink-950">
+                      Three tenders, free — on your own portals.
+                    </p>
+                  </div>
+                  <p className="font-code text-[9px] tracking-[0.16em] text-ink-400">
+                    NO CARD · NO DECK · A REAL RUN
+                  </p>
+                </div>
+
+                <form onSubmit={submit} className="mt-5 grid gap-3 sm:grid-cols-[1fr_1.2fr_1fr_auto]" noValidate>
+                  <div>
+                    <label htmlFor="pilot-name" className="mb-1 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+                      NAME
+                    </label>
+                    <input
+                      id="pilot-name"
+                      type="text"
+                      value={form.name}
+                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder="Amina Mwangi"
+                      autoComplete="name"
+                      className="h-12 w-full rounded-xl border border-ink-200 bg-paper px-4 text-[14px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-600/15"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="pilot-email" className="mb-1 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+                      WORK EMAIL
+                    </label>
+                    <input
+                      id="pilot-email"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                      placeholder="a.mwangi@county.go.ke"
+                      autoComplete="email"
+                      className="h-12 w-full rounded-xl border border-ink-200 bg-paper px-4 text-[14px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-600/15"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="pilot-org" className="mb-1 block font-code text-[9px] font-semibold tracking-[0.18em] text-ink-500">
+                      INSTITUTION · OPTIONAL
+                    </label>
+                    <input
+                      id="pilot-org"
+                      type="text"
+                      value={form.institution}
+                      onChange={(e) => setForm((f) => ({ ...f, institution: e.target.value }))}
+                      placeholder="County health agency"
+                      autoComplete="organization"
+                      className="h-12 w-full rounded-xl border border-ink-200 bg-paper px-4 text-[14px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-600/15"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      disabled={state === "sending"}
+                      className="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-ink-950 px-6 text-[14.5px] font-semibold text-white transition-all hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                    >
+                      {state === "sending" ? (
+                        <>
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden="true" />
+                          Sending
+                        </>
+                      ) : (
+                        <>
+                          Request pilot
+                          <Send className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+
+                <div aria-live="polite">
+                  {error && (
+                    <p role="alert" className="mt-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 text-[13px] font-semibold text-brand-800">
+                      {error}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </Reveal>
       </div>
     </section>
   );

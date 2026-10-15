@@ -11,7 +11,7 @@ const NAV = [
   { label: "Overview", href: "#overview" },
   { label: "Use cases", href: "#use-cases" },
   { label: "Platform", href: "#platform" },
-  { label: "Inside the box", href: "#inside" },
+  { label: "Pricing", href: "#pricing" },
 ];
 
 export function SiteHeader() {

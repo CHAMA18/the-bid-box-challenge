@@ -63,18 +63,25 @@ export function Overview() {
                 <p className="font-code text-[10px] tracking-[0.18em] text-ink-400">FIG. 01 — THE CLOCK</p>
               </div>
 
-              {/* Proportional bar */}
-              <div className="mt-6 flex h-14 w-full items-stretch gap-1 overflow-hidden rounded-xl sm:h-16">
-                <div className="relative flex min-w-0 flex-[100] items-center overflow-hidden rounded-l-lg bg-ink-950 px-4">
+              {/* Proportional bar — the red slice is drawn true to scale */}
+              <div className="relative mt-14">
+                {/* Callout flag above the sliver */}
+                <div className="absolute -top-12 right-0 flex flex-col items-end" aria-hidden="true">
+                  <span className="rounded-md bg-brand-600 px-2.5 py-1 font-code text-[9.5px] font-bold tracking-[0.12em] text-white shadow-[0_6px_16px_rgba(217,38,22,0.35)]">
+                    BID BOX · ~20 MIN
+                  </span>
+                  <span className="mr-px h-4 w-px bg-brand-600/70" />
+                </div>
+                <div className="relative flex h-14 w-full items-stretch overflow-hidden rounded-xl bg-ink-950 sm:h-16">
                   <div className="bg-grid-dark absolute inset-0 opacity-60" aria-hidden="true" />
-                  <p className="relative truncate font-code text-[10.5px] font-semibold tracking-[0.18em] text-ink-200 sm:text-[11.5px]">
+                  <p className="relative flex-1 self-center truncate px-4 font-code text-[10.5px] font-semibold tracking-[0.18em] text-ink-200 sm:text-[11.5px]">
                     26 DAYS — COMMITTEE WORK TODAY
                   </p>
-                </div>
-                <div className="relative flex min-w-[64px] flex-[1.5] items-center justify-center overflow-hidden rounded-r-lg bg-brand-600 px-2">
-                  <p className="text-center font-code text-[10.5px] font-bold tracking-[0.12em] text-white sm:text-[11.5px]">
-                    ~20 MIN
-                  </p>
+                  <span
+                    className="relative h-full w-[3px] shrink-0 bg-brand-600"
+                    role="img"
+                    aria-label="The red slice: about twenty minutes, drawn to scale"
+                  />
                 </div>
               </div>
 
@@ -93,7 +100,7 @@ export function Overview() {
                 ))}
               </div>
               <p className="mt-2.5 font-code text-[10px] tracking-[0.14em] text-ink-400">
-                ↑ WHAT THE COMMITTEE DOES BY HAND · WHAT BID BOX TAKES: THE RED SLICE ↑
+                ↑ WHAT THE COMMITTEE DOES BY HAND · THE RED SLICE — BID BOX&apos;S SHARE, DRAWN TO SCALE ↑
               </p>
 
               {/* Human gate */}

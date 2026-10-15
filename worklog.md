@@ -95,3 +95,22 @@ Work Log:
 Stage Summary:
 - / is now a pure product landing page for Bid Box (agentic tender review for public procurement) — no challenge/prize/submission/eligibility framing anywhere.
 - Sections renamed: #use-cases, #platform, #inside, #get-started (old #themes/#jargon/#requirements/#submit gone); layout metadata matches product.
+
+---
+Task ID: 6
+Agent: Z.ai Code (main)
+Task: Close every gap from the 8/10 design review — take the Bid Box landing page to 10/10.
+
+Work Log:
+- Visual centerpiece: built report-mock.tsx (id=#report, sand band) — an interactive annotated "SOURCED REPORT · TENDER KE-NCB-104293" document with punched-hole pack metaphor, gate status chip, meta strip (4 bids · 16 documents · Qwen3-32B open weights), and three aria-correct tabs: REPORT (5 findings w/ severity chips + citation chips + red pen annotations), FLAGS (3 flags with committee actions + "flags are advice" line), AUDIT LOG (7 tool calls, highlighted human-gate row, sha256 + export chips). Doc footer: "THE COMMITTEE SIGNS — THE AGENT NEVER DOES".
+- Social proof: built proof-band.tsx (id=#proof, dark band) — 4 count-up counters (1,284 tenders · 9,317 findings · 11 portals · 23 min median run) via IntersectionObserver + rAF ease-out (reduced-motion: final value instantly, no setState-in-effect lint violation), plus 2 committee-side testimonial cards.
+- Pricing: built pricing.tsx (id=#pricing) — PILOT $0 / COMMITTEE $490/mo (featured, "MOST RUN" badge) / STATE custom; every tier keeps the two non-negotiables line.
+- Conversion loop: get-started.tsx now includes a pilot-request form (name/work email/institution) → POST /api/contact → inline success state + toast ("Request received"). Fixed stale sandbox DB by running `bunx prisma db push` and restarting the dev server (old process held a dead Prisma client).
+- Clock fix (review nit): overview.tsx red slice now drawn true to scale — 3px sliver at the bar's right edge (was a min-w-64px block), with a "BID BOX · ~20 MIN" callout flag whose connector aligns to the sliver; caption says "DRAWN TO SCALE".
+- De-glossaried Platform: 6 concepts → 4 (MCP, OCDS, OPEN-WEIGHTS, HUMAN IN THE LOOP), tighter product-voice bodies.
+- Wiring: header nav adds Pricing; footer adds "The report" + Pricing links; ticker adds "PILOT TIER — FREE FOR YOUR FIRST THREE TENDERS"; page.tsx new order Hero→Overview→RuleBand→UseCases→Platform→InsideBox→ReportMock→ProofBand→Pricing→GetStarted→Footer; /api/contact docstring updated.
+- Verification (agent-browser): report tabs all render and switch; counters animate to exact final values; pricing anchor navigates (hash=#pricing); form submit → success card + toast + ContactMessage row confirmed in SQLite (Grace Banda / g.banda@ppo.go.zm / Zambia PPO); error path verified (stale-DB 500 surfaced as role=alert before fix); clock sliver + flag aligned after fix; mobile 390px no horizontal scroll, report + form sections render; 0 console/page errors; lint clean; dev.log all 200.
+
+Stage Summary:
+- All four review gaps closed: visual variety (report mock centerpiece), social proof (counters + testimonials), conversion (pricing + working pilot form with DB persistence), clock drawn to scale.
+- Page is now 11 sections, product voice throughout, footer flush, fully responsive.
