@@ -9,7 +9,7 @@ const ContactSchema = z.object({
   message: z.string().min(10).max(4000),
 });
 
-/** POST /api/contact — merchant enquiry intake. */
+/** POST /api/contact — pilot request & enquiry intake. */
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {

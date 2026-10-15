@@ -1,4 +1,4 @@
-import { Braces, Crosshair, FileSearch, Globe, Scale, Timer } from "lucide-react";
+import { Braces, Crosshair, FileSearch, Globe, Scale, Ticket, Timer } from "lucide-react";
 
 const ITEMS = [
   { icon: Globe, text: "BUILT FOR PUBLIC PROCUREMENT ACROSS AFRICA" },
@@ -6,6 +6,7 @@ const ITEMS = [
   { icon: FileSearch, text: "EVERY FINDING CITED, OR IT DOESN'T COUNT" },
   { icon: Timer, text: "26 DAYS OF COMMITTEE WORK · ~20 MINUTES OF AGENT WORK" },
   { icon: Braces, text: "OCDS IN · SOURCED REPORT OUT" },
+  { icon: Ticket, text: "PILOT TIER — FREE FOR YOUR FIRST THREE TENDERS" },
   { icon: Crosshair, text: "THREE TOOLS THAT WORK BEAT NINE THAT HALF-WORK" },
 ];
 

@@ -5,22 +5,12 @@ const CONCEPTS = [
   {
     term: "MCP",
     full: "Model Context Protocol",
-    body: "An open standard for exposing tools to an AI model. Bid Box runs a small server; any agent can call its tools.",
-  },
-  {
-    term: "AGENTIC",
-    full: null,
-    body: "Plans a multi-step task, calls tools, checks itself, recovers from failure. Not a chatbot.",
+    body: "The open standard Bid Box's tools speak. Logged, inspectable, swappable.",
   },
   {
     term: "OCDS",
     full: "Open Contracting Data Standard",
     body: "The shared JSON schema every procurement portal below publishes in.",
-  },
-  {
-    term: "TENDER / BID",
-    full: null,
-    body: "A public invitation to supply something; a bid is one supplier's response.",
   },
   {
     term: "OPEN-WEIGHTS",
@@ -42,7 +32,7 @@ const PORTALS = [
 ];
 
 /**
- * Platform — the concepts under the hood, plus the OCDS portals
+ * Platform — the four concepts under the hood, plus the OCDS portals
  * the data comes from.
  */
 export function Platform() {
@@ -62,15 +52,15 @@ export function Platform() {
           </div>
           <Reveal delay={0.12}>
             <p className="max-w-sm text-[15px] leading-relaxed text-ink-500">
-              No buzzword soup: these are the words behind every finding, so the report reads the
-              same to auditors, suppliers and citizens.
+              No buzzword soup: four words carry the whole product, and every finding cites its
+              source — auditors, suppliers and citizens read the same report.
             </p>
           </Reveal>
         </div>
 
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {CONCEPTS.map((t, i) => (
-            <Reveal key={t.term} delay={0.06 * (i % 3)} className="h-full">
+            <Reveal key={t.term} delay={0.06 * i} className="h-full">
               <article className="flex h-full flex-col rounded-2xl border border-ink-100 bg-white p-6 transition-all duration-300 hover:border-brand-300 hover:shadow-[0_16px_36px_rgba(11,12,15,0.08)]">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <h3 className="font-code text-[15px] font-bold tracking-[0.08em] text-brand-700">{t.term}</h3>
