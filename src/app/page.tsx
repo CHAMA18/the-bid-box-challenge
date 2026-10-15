@@ -9,6 +9,7 @@ import { Overview } from "@/components/quorum/overview";
 import { RuleBand } from "@/components/quorum/rule-band";
 import { UseCases } from "@/components/quorum/use-cases";
 import { Platform } from "@/components/quorum/platform";
+import { Film } from "@/components/quorum/film";
 import { InsideRun } from "@/components/quorum/inside-box";
 import { ReportMock } from "@/components/quorum/report-mock";
 import { ProofBand } from "@/components/quorum/proof-band";
@@ -205,6 +206,7 @@ export default function Home() {
                 <RuleBand />
                 <UseCases />
                 <Platform />
+                <Film />
                 <InsideRun />
                 <ReportMock />
                 <ProofBand />

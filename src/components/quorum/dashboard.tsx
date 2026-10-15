@@ -23,6 +23,7 @@ import {
   Radio,
   RefreshCw,
   Search,
+  ServerCog,
   ShieldCheck,
   Stamp,
   Terminal,
@@ -31,6 +32,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { QuorumLogo } from "@/components/quorum/logo";
+import { StackConsole } from "@/components/quorum/stack-console";
 import type { AuthUser } from "@/lib/auth-types";
 import { cn } from "@/lib/utils";
 
@@ -124,7 +126,8 @@ type SectionId =
   | "mc-sources"
   | "mc-ledger"
   | "mc-committee"
-  | "mc-rules";
+  | "mc-rules"
+  | "mc-stack";
 
 type NavBadge = "runs" | "gates" | "findings";
 
@@ -158,7 +161,10 @@ const NAV_GROUPS: {
   },
   {
     group: "SYSTEM",
-    items: [{ id: "mc-rules", label: "RULES & GUARDS", icon: ShieldCheck }],
+    items: [
+      { id: "mc-stack", label: "AGENT STACK", icon: ServerCog },
+      { id: "mc-rules", label: "RULES & GUARDS", icon: ShieldCheck },
+    ],
   },
 ];
 
@@ -2475,6 +2481,8 @@ export function Dashboard({
         return <CommitteeView firstName={firstName} onToast={onToast} />;
       case "mc-rules":
         return <RulesView onToast={onToast} />;
+      case "mc-stack":
+        return <StackConsole onToast={onToast} />;
       default:
         return null;
     }
