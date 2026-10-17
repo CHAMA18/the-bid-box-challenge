@@ -48,7 +48,7 @@ No vector database, no RAG — memory is **durable, structured state**, which is
 
 **LangGraph.js** orchestration, with the safety wired into the graph topology itself:
 
-- The review run is a 6-node graph: `load → extract_requirements → flag_findings → verify_findings → draft_redlines → propose_gate`.
+- The review run is an 8-node graph: `load_documents → plan_review → extract_requirements → flag_findings → verify_findings ⇄ revise_findings → draft_redlines → propose_gate`. `plan_review` decides the review depth for the pack (deep value parsing, rule focus, draft count) — model-led when an LLM is configured, deterministic otherwise; `revise_findings` is a bounded reason-and-retry loop (max 2 passes) that re-anchors refused findings and re-verifies them.
 - `propose_gate` is a **terminal state** — the edge from the gate to filing **does not exist in the graph**. Nothing the agent does can follow a path it isn't given.
 - Filing lives in a **separate, disconnected 2-node graph** (`filing_graph`: `seal_bundle → transmit_submission`), reachable only from the human gate-decision endpoint.
 - So: no prompt injection, no runaway loop, no "creative" tool answer can ever reach the irreversible action.
@@ -121,7 +121,7 @@ Three storage layers, each with a clear role:
 | Databases | One dependency-free JSON file for the web app (users/roster/settings) + file-backed state & append-only audit JSONL on the agent side | Small, inspectable store with no native dependencies; append-only text where it's auditable evidence |
 | Identity & storage | Firebase Auth (email/passphrase + Google) + Storage mirror | Real authentication without building a password system; documents mirrored both sides |
 | Infra | nginx (reverse proxy), systemd (process supervision), one `t4g.small` EC2 in `af-south-1`, Route 53 zone | Small, boring, cheap to run — everything reproducible from the repo |
-| Tests | Bun test runner (`engine.test.ts`, 39 tests: green) | The agent safety rules (roster fail-closed, citations required) are enforced by tests, not only by docs |
+| Tests | Bun test runner (`engine.test.ts`, 49 tests: green) | The agent safety rules (roster fail-closed, citations required) are enforced by tests, not only by docs |
 
 **Non-negotiables across the whole stack:**
 

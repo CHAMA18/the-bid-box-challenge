@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { findUserByEmail, markUserVerified } from "@/lib/db";
+import { createUser, findUserByEmail, markUserVerified } from "@/lib/db";
 import {
   clientKey,
   createSession,
@@ -14,7 +14,14 @@ import { verifyFirebaseIdToken } from "@/lib/firebase-identity";
  * POST /api/auth/verify-email — the user clicked the Firebase verification link.
  * Body: { idToken } (fresh Firebase ID token for the verified address)
  * 200 → { user } + httpOnly session cookie
- * 401 → token rejected  403 → address not verified yet  404 → no account for it
+ * 401 → token rejected  403 → address not verified yet
+ *
+ * If the verified address has no local account — e.g. the store was rebuilt
+ * while the Firebase identity survived — the account is restored here: the
+ * ID token is Firebase-vouched proof of inbox control, which is exactly the
+ * bar registration's verify gate enforces. The local passphrase field gets
+ * a non-hashable marker (verifyPassword rejects it) until the next
+ * passphrase sign-in re-syncs the hash via Firebase.
  */
 export async function POST(req: NextRequest) {
   if (!rateLimit(clientKey(req, "verify-email"), 20, 15 * 60_000)) {
@@ -39,10 +46,15 @@ export async function POST(req: NextRequest) {
 
   let user = findUserByEmail(identity.email);
   if (!user) {
-    return NextResponse.json(
-      { error: "No Quorum account exists for this email. Create one first." },
-      { status: 404 }
-    );
+    /* Verified at Firebase but missing locally (store rebuild): restore.
+     * The password placeholder is intentionally NOT a valid scrypt hash —
+     * the real passphrase is re-synced by the login fallback. */
+    user = createUser({
+      name: identity.name.trim() || identity.email.split("@")[0],
+      email: identity.email,
+      password: "firebase:verified",
+      emailVerified: true,
+    });
   }
   if (!user.emailVerified) {
     user = markUserVerified(user.id) ?? user;

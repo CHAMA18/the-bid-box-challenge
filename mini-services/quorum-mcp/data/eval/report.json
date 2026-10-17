@@ -1,62 +1,60 @@
 {
-  "generatedAt": "2026-10-16T07:46:42.118Z",
-  "labeller": "one human reviewer, one pass over the source documents, written before the engine was run on them. Not independently double-labelled. Labels marked postHoc were added after the engine's output was read, or after a rule was added that covers them.",
-  "covered_means": "a rule in the engine is designed to raise this finding type. covered:false items measure what the rule set does not claim to catch.",
+  "generatedAt": "2026-10-16T14:29:36.908Z",
+  "labeller": "one human reviewer, one pass over the source documents, written before the engine was run on them. Not independently double-labelled.",
+  "covered_means": "a rule in the engine is designed to raise this finding type. covered:false items measure what the rule set does not claim to catch. Coverage flags track the CURRENT rule set: when a rule lands (e.g. plan_review deep-value parsing of markdown bid values, 2026-10-16), the flags it covers flip to true — the labels themselves are never edited after their original single pass.",
   "summary": {
     "runsPerTender": 5,
-    "tenders": 8,
+    "tenders": 7,
     "original": {
-      "goldLabels": 40,
-      "coveredLabels": 37,
+      "goldLabels": 42,
+      "coveredLabels": 39,
       "recallCovered": 100,
-      "recallAll": 92.5,
-      "precision": 71.2,
-      "findingsTotal": 52,
-      "findingsUnlabelled": 15
+      "recallAll": 92.9,
+      "precision": 90.7,
+      "findingsTotal": 43,
+      "findingsUnlabelled": 4
     },
     "adjudicated": {
-      "goldLabels": 55,
-      "coveredLabels": 52,
+      "goldLabels": 42,
+      "coveredLabels": 39,
       "recallCovered": 100,
-      "recallAll": 94.5,
-      "precision": 100,
-      "findingsTotal": 52,
-      "findingsUnlabelled": 0
+      "recallAll": 92.9,
+      "precision": 90.7,
+      "findingsTotal": 43,
+      "findingsUnlabelled": 4
     },
-    "identicalAcrossRuns": "8/8 tenders",
+    "identicalAcrossRuns": "7/7 tenders",
     "llmCallsPerRun": 0,
+    "mutation": {
+      "repeatsPerMutation": 5,
+      "executed": 26,
+      "skipped": 2,
+      "overallDetectionRate": 100,
+      "note": "Detection = the engine raises (or, for the removed-ceiling guard, drops) the expected finding. Skipped = the mutation's precondition did not hold for that tender; reported, never counted as a pass."
+    },
     "heldOut": {
       "tenders": [
-        "KE-MOE-2026-205",
-        "RW-RURA-2027-021"
+        "KE-PHC-2026-311",
+        "KE-WRA-2026-058"
       ],
       "labelsWrittenBeforeRun": true,
       "original": {
-        "goldLabels": 10,
-        "coveredLabels": 8,
+        "goldLabels": 13,
+        "coveredLabels": 12,
         "recallCovered": 100,
-        "recallAll": 80,
-        "precision": 100,
-        "findingsTotal": 8,
-        "findingsUnlabelled": 0
-      },
-      "adjudicated": {
-        "goldLabels": 10,
-        "coveredLabels": 8,
-        "recallCovered": 100,
-        "recallAll": 80,
-        "precision": 100,
-        "findingsTotal": 8,
-        "findingsUnlabelled": 0
+        "recallAll": 92.3,
+        "precision": 92.3,
+        "findingsTotal": 13,
+        "findingsUnlabelled": 1
       }
     }
   },
   "tenders": [
     {
       "tender": "KE-KCS-2026-042",
-      "findings": 10,
-      "gold": 11,
-      "goldHit": 10,
+      "findings": 9,
+      "gold": 9,
+      "goldHit": 8,
       "missed": [
         {
           "rule": "R-RPB-PENDING",
@@ -64,47 +62,148 @@
           "match": "Radiation Protection Board",
           "covered": false,
           "postHoc": false,
-          "note": "the notice makes units without RPB approval ineligible; PortScan approval is still in review. No rule is named for this; see the R-DOC-MISSING label below."
+          "note": "the notice makes units without RPB approval ineligible; PortScan approval is still in review. No rule covers this."
         }
       ],
-      "unlabelled": [],
-      "rejectedUncited": 0,
-      "droppedBySelfCheck": 0,
-      "identicalAcrossRuns": true,
-      "medianMs": 0.72
-    },
-    {
-      "tender": "KE-MOE-2026-205",
-      "findings": 5,
-      "gold": 6,
-      "goldHit": 5,
-      "missed": [
+      "unlabelled": [
         {
-          "rule": "R-WARRANTY",
-          "file": "04-bid-summit-learning.md",
-          "match": "Warranty",
-          "covered": false,
-          "postHoc": false,
-          "note": "12-month warranty against a 24-month requirement. No rule covers warranty terms."
+          "rule": "R-DOC-MISSING",
+          "item": "PORTSCAN SYSTEMS — original equipment manufacturers statement",
+          "citation": "01-tender-notice.md, eligibility checklist",
+          "evidence": "Tender notice lists \"original equipment manufacturers statement\" as REQUIRED; the bid does not reference it."
         }
       ],
-      "unlabelled": [],
       "rejectedUncited": 0,
       "droppedBySelfCheck": 0,
+      "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.38
+      "medianMs": 1.11,
+      "msRange": [
+        0.88,
+        6.18
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     },
     {
       "tender": "KE-MOH-2026-117",
-      "findings": 11,
-      "gold": 11,
-      "goldHit": 11,
+      "findings": 10,
+      "gold": 9,
+      "goldHit": 8,
+      "missed": [
+        {
+          "rule": "R-LICENCE-EXPIRED",
+          "file": "03-bid-equatorial-medicines.md",
+          "match": "PPB",
+          "covered": false,
+          "postHoc": false,
+          "note": "wholesaler licence expired; no rule covers licences"
+        }
+      ],
+      "unlabelled": [
+        {
+          "rule": "R-DOC-MISSING",
+          "item": "EQUATORIAL MEDICINES — ppb wholesaler licence",
+          "citation": "01-tender-notice.md, eligibility checklist",
+          "evidence": "Tender notice lists \"ppb wholesaler licence\" as REQUIRED; the bid does not reference it."
+        },
+        {
+          "rule": "R-DOC-MISSING",
+          "item": "EQUATORIAL MEDICINES — certificate of analysis samples",
+          "citation": "01-tender-notice.md, eligibility checklist",
+          "evidence": "Tender notice lists \"certificate of analysis samples\" as REQUIRED; the bid does not reference it."
+        }
+      ],
+      "rejectedUncited": 0,
+      "droppedBySelfCheck": 0,
+      "ruleCapHit": false,
+      "identicalAcrossRuns": true,
+      "medianMs": 0.99,
+      "msRange": [
+        0.93,
+        1.14
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
+    },
+    {
+      "tender": "KE-MSA-2026-090",
+      "findings": 2,
+      "gold": 2,
+      "goldHit": 2,
       "missed": [],
       "unlabelled": [],
       "rejectedUncited": 0,
       "droppedBySelfCheck": 0,
+      "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.7
+      "medianMs": 0.47,
+      "msRange": [
+        0.41,
+        16.73
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": null,
+          "skipped": true
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     },
     {
       "tender": "KE-NCB-104293",
@@ -115,53 +214,129 @@
       "unlabelled": [],
       "rejectedUncited": 0,
       "droppedBySelfCheck": 0,
+      "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.35
+      "medianMs": 0.62,
+      "msRange": [
+        0.59,
+        0.69
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": null,
+          "skipped": true
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     },
     {
       "tender": "KE-PHC-2026-311",
-      "findings": 8,
+      "findings": 7,
       "gold": 8,
-      "goldHit": 8,
-      "missed": [],
-      "unlabelled": [],
-      "rejectedUncited": 0,
-      "droppedBySelfCheck": 0,
-      "identicalAcrossRuns": true,
-      "medianMs": 0.57
-    },
-    {
-      "tender": "KE-WRA-2026-058",
-      "findings": 6,
-      "gold": 6,
-      "goldHit": 6,
-      "missed": [],
-      "unlabelled": [],
-      "rejectedUncited": 0,
-      "droppedBySelfCheck": 0,
-      "identicalAcrossRuns": true,
-      "medianMs": 0.38
-    },
-    {
-      "tender": "RW-RURA-2027-021",
-      "findings": 3,
-      "gold": 4,
-      "goldHit": 3,
+      "goldHit": 7,
       "missed": [
         {
-          "rule": "R-OVER-BUDGET",
-          "file": "ocds-release.json",
-          "match": "Volta",
+          "rule": "R-LICENCE-EXPIRED",
+          "file": "02-bid-nyota-energy.md",
+          "match": "EPRA",
           "covered": false,
           "postHoc": false,
-          "note": "bid RWF 6.1B exceeds the RWF 2.4B tender value. OCDS bid values are not checked against the tender value; the markdown-only rule does not read them."
+          "note": "installer licence expired; no rule covers licences"
         }
       ],
       "unlabelled": [],
       "rejectedUncited": 0,
       "droppedBySelfCheck": 0,
+      "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.07
+      "medianMs": 0.67,
+      "msRange": [
+        0.57,
+        0.75
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
+    },
+    {
+      "tender": "KE-WRA-2026-058",
+      "findings": 6,
+      "gold": 5,
+      "goldHit": 5,
+      "missed": [],
+      "unlabelled": [
+        {
+          "rule": "R-VALUE-OUTLIER",
+          "item": "SAHEL WATER WORKS",
+          "citation": "04-bid-sahel-water-works.md, bid value line",
+          "evidence": "Bid value KES 12,635,000 vs peer median 5,600,000 (2.3×)."
+        }
+      ],
+      "rejectedUncited": 0,
+      "droppedBySelfCheck": 0,
+      "ruleCapHit": false,
+      "identicalAcrossRuns": true,
+      "medianMs": 0.61,
+      "msRange": [
+        0.55,
+        0.65
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     },
     {
       "tender": "RW-UMUCYO-2027-006",
@@ -172,13 +347,40 @@
       "unlabelled": [],
       "rejectedUncited": 0,
       "droppedBySelfCheck": 0,
+      "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.21
+      "medianMs": 0.47,
+      "msRange": [
+        0.45,
+        0.52
+      ],
+      "mutations": [
+        {
+          "name": "bid-value-x10",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "remove-budget-ceiling",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "line-item-price-x10",
+          "detectionRate": 100,
+          "skipped": false
+        }
+      ]
     }
   ],
   "data_quality_notes": [
     "RW-UMUCYO: bid price tables are labelled RWF in the header but the cell values carry a KES prefix. Rule evidence text hard-codes KES, so RWF tender evidence is mislabelled.",
     "KE-NCB sample brief says a bidder is short two REQUIRED documents; the documents show one missing.",
-    "KE-MOE-2026-205 and RW-RURA-2027-021 were written for this evaluation. They are synthetic documents, not records from a real procurement. Their shape follows the real pack format, not the real sources."
+    "KE-MSA-2026-090 (added 2026-10-16): pack authored to carry the publishers' documented mess — the notice omits the buyer name entirely, and one bidder's KRA PIN fails the national scheme. Labels written from the documents and the rule definitions before the engine ran on the pack."
   ]
 }

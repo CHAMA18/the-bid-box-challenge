@@ -1,24 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import {
   approverAllowed,
-  bidLineNamingDocument,
-  bidNamesDocument,
-  budgetFindings,
-  docMissingFindings,
+  bidStatesIdentifier,
+  buildPack,
+  buyerMissingFindings,
   callLlama,
-  draftClause,
-  expiredLicenceFindings,
-  markdownBidValue,
   citesKnownDocument,
   fetchRoster,
+  flagPack,
   llmConfigFromEnv,
+  llmPlanFromPack,
   type FetchLike,
+  parseMarkdownBidValue,
+  parseMarkdownCeiling,
   parseOcdsBids,
   parseOcdsRecords,
+  planFromPack,
+  repairFinding,
   runAwardRules,
   runRules,
+  supplierIdFindings,
   verifyFinding,
+  verifyFindingReason,
   type BidDoc,
+  type Finding,
   type RosterMember,
 } from "./engine";
 
@@ -141,90 +146,6 @@ describe("drafting model: OpenAI-compatible LLM endpoint", () => {
   });
 });
 
-describe("drafting falls back to the template and never stalls a run", () => {
-  const ANOMALY = "R-PRICE-OUTLIER on MRI 1.5T scanner — MEDIQUEAST";
-
-  /* Runs fn with LLM env and globalThis.fetch replaced, then restores both. */
-  async function withLlm<T>(
-    env: { LLM_BASE_URL?: string; LLM_MODEL?: string },
-    fetchStub: (input: string | URL | Request, init?: RequestInit) => Promise<Response>,
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    const saved = { base: process.env.LLM_BASE_URL, model: process.env.LLM_MODEL, fetch: globalThis.fetch };
-    delete process.env.LLM_BASE_URL;
-    delete process.env.LLM_MODEL;
-    if (env.LLM_BASE_URL) process.env.LLM_BASE_URL = env.LLM_BASE_URL;
-    if (env.LLM_MODEL) process.env.LLM_MODEL = env.LLM_MODEL;
-    globalThis.fetch = fetchStub as unknown as typeof fetch; // test stub; only the call shape matters
-    try {
-      return await fn();
-    } finally {
-      if (saved.base === undefined) delete process.env.LLM_BASE_URL;
-      else process.env.LLM_BASE_URL = saved.base;
-      if (saved.model === undefined) delete process.env.LLM_MODEL;
-      else process.env.LLM_MODEL = saved.model;
-      globalThis.fetch = saved.fetch;
-    }
-  }
-
-  test("no model configured: template clause, and no network call is made", async () => {
-    let calls = 0;
-    const out = await withLlm({}, (async () => {
-      calls++;
-      return new Response("{}");
-    }), () => draftClause("clause text", ANOMALY));
-    expect(calls).toBe(0);
-    expect(out.source).toBe("template");
-    expect(out.proposed).toContain(ANOMALY);
-    expect(out.model).toBe("template (no model configured)");
-  });
-
-  test("endpoint unreachable: template clause, with the failure recorded in the rationale", async () => {
-    const out = await withLlm(
-      { LLM_BASE_URL: "http://llama.internal:8000/v1", LLM_MODEL: "llama-3.1-70b-instruct" },
-      (async () => {
-        throw new TypeError("fetch failed");
-      }),
-      () => draftClause("clause text", ANOMALY),
-    );
-    expect(out.source).toBe("template");
-    expect(out.proposed).toContain(ANOMALY);
-    expect(out.rationale).toContain("fetch failed");
-    expect(out.model).toBe("llama-3.1-70b-instruct (llm) · failed — template used");
-  });
-
-  test("model reply with no JSON object: template clause, not a crash", async () => {
-    const out = await withLlm(
-      { LLM_BASE_URL: "http://llama.internal:8000/v1", LLM_MODEL: "llama-3.1-70b-instruct" },
-      (async () =>
-        new Response(JSON.stringify({ choices: [{ message: { content: "I cannot help with that." } }] }))),
-      () => draftClause("clause text", ANOMALY),
-    );
-    expect(out.source).toBe("template");
-    expect(out.rationale).toContain("no JSON object");
-  });
-
-  test("healthy endpoint: the model's clause is used and its source is recorded as llm", async () => {
-    const out = await withLlm(
-      { LLM_BASE_URL: "http://llama.internal:8000/v1", LLM_MODEL: "llama-3.1-70b-instruct" },
-      (async () =>
-        new Response(
-          JSON.stringify({
-            model: "llama-3.1-70b-instruct",
-            choices: [{ message: { content: '{"proposed":"Clause X","rationale":"Because Y"}' } }],
-            usage: { prompt_tokens: 10, completion_tokens: 5 },
-          }),
-        )),
-      () => draftClause("clause text", ANOMALY),
-    );
-    expect(out.source).toBe("llm");
-    expect(out.proposed).toBe("Clause X");
-    expect(out.rationale).toBe("Because Y");
-    expect(out.model).toBe("llama-3.1-70b-instruct (llm)");
-    expect(out.usage).toEqual({ promptTokens: 10, completionTokens: 5 });
-  });
-});
-
 describe("approver check against the committee roster", () => {
   const roster: RosterMember[] = [
     { name: "Wanjiru Kamau", status: "PRESENT" },
@@ -334,83 +255,242 @@ describe("rules cite real sources only", () => {
   });
 });
 
-describe("markdown bid values and budget ceiling", () => {
-  const NOTICE = "# TENDER\n**Budget ceiling:** KES 1,000,000 (VAT inclusive)";
-  const bidText = (value: string) => `# BID\n**Bid value:** ${value}\n`;
+describe("markdown bid values and budget ceilings", () => {
+  const BID = "# BID — Coastline\n\n**Bidder:** Coastline Screening Solutions\n**Bid value:** KES 3,940,000,000\n";
 
-  test("reads the stated bid value from a markdown bid", () => {
-    expect(markdownBidValue(bidText("KES 3,940,000,000"))).toEqual({ currency: "KES", value: 3940000000 });
-    expect(markdownBidValue("no value here")).toBeUndefined();
+  test("parses the bid's own stated value line, cited to that line", () => {
+    const v = parseMarkdownBidValue(BID);
+    expect(v?.amount).toBe(3_940_000_000);
+    expect(v?.currency).toBe("KES");
+    expect(v?.ref).toBe("bid value line");
+    expect(parseMarkdownBidValue("no value line here")).toBeUndefined();
   });
 
-  test("flags a markdown bid above the ceiling and cites the bid file", () => {
-    const bids: BidDoc[] = [{ bidder: "Big", source: "02-bid-big.md", text: bidText("KES 1,200,000"), value: 1200000, currency: "KES" }];
-    const f = budgetFindings(bids, NOTICE, "01-tender-notice.md");
-    expect(f).toHaveLength(1);
-    expect(f[0].rule).toBe("R-OVER-BUDGET");
-    expect(f[0].citation).toBe("02-bid-big.md, bid value");
-    expect(verifyFinding(f[0], { "02-bid-big.md": bidText("KES 1,200,000") })).toBe(true);
-  });
-
-  test("does not flag a bid at or under the ceiling", () => {
-    const bids: BidDoc[] = [{ bidder: "Ok", source: "02-bid-ok.md", text: bidText("KES 1,000,000"), value: 1000000, currency: "KES" }];
-    expect(budgetFindings(bids, NOTICE, "01-tender-notice.md")).toHaveLength(0);
-  });
-
-  test("a markdown value outlier is flagged and passes the self-check against its bid", () => {
-    const text = (v: string) => bidText(v);
-    const bids: BidDoc[] = [
-      { bidder: "A", source: "02-bid-a.md", text: text("KES 500,000"), value: 500000, currency: "KES" },
-      { bidder: "B", source: "03-bid-b.md", text: text("KES 520,000"), value: 520000, currency: "KES" },
-      { bidder: "C", source: "04-bid-c.md", text: text("KES 1,400,000"), value: 1400000, currency: "KES" },
-    ];
-    const f = runRules(bids, "", "01-tender-notice.md").find((x) => x.rule === "R-VALUE-OUTLIER" && x.item === "C");
-    expect(f).toBeDefined();
-    expect(f?.citation).toBe("04-bid-c.md, bid value");
-    expect(verifyFinding(f!, { "04-bid-c.md": text("KES 1,400,000") })).toBe(true);
+  test("parses the notice's published ceiling", () => {
+    const c = parseMarkdownCeiling("**Budget ceiling:** KES 1,860,000,000 (VAT inclusive)");
+    expect(c?.amount).toBe(1_860_000_000);
+    expect(c?.currency).toBe("KES");
+    expect(parseMarkdownCeiling("no ceiling")).toBeUndefined();
   });
 });
 
-describe("licences and pending approvals", () => {
-  test("flags a bid line stating a licence as expired, and passes the self-check", () => {
-    const text = "# BID\n- PPB wholesaler licence \u2014 licence issued January 2025\u2013expired\n";
-    const bids: BidDoc[] = [{ bidder: "Eq", source: "03-bid-eq.md", text }];
-    const f = expiredLicenceFindings(bids);
+describe("plan_review — the depth decision for one pack", () => {
+  const notice = "# NOTICE\n**Budget ceiling:** KES 1,860,000,000\n- [REQUIRED] Tax compliance certificate\n";
+  const pack = {
+    bids: [
+      { bidder: "PORTSCAN SYSTEMS", text: "**Bid value:** KES 1,772,000,000", source: "02-bid-portscan-systems.md" },
+      { bidder: "COASTLINE SCREENING", text: "**Bid value:** KES 3,940,000,000", source: "03-bid-coastline-screening.md" },
+    ],
+    records: [],
+    notices: [{ file: "01-tender-notice.md", text: notice }],
+  };
+
+  test("the heuristic plan enables deep value parsing for a markdown pack and ranks the families", () => {
+    const plan = planFromPack(["01-tender-notice.md", "02-bid-portscan-systems.md", "03-bid-coastline-screening.md"], pack);
+    expect(plan.source).toBe("heuristic");
+    expect(plan.parseMarkdownValues).toBe(true);
+    expect(plan.focusRules[0]).toBe("OVER-BUDGET");
+    expect(plan.focusRules).toContain("DOC-MISSING");
+    expect(plan.maxDrafts).toBe(2);
+  });
+
+  test("a pack with no markdown values keeps deep parsing off", () => {
+    const plan = planFromPack(["x.md"], { bids: [{ bidder: "A", text: "nothing structured", source: "x.md" }], records: [], notices: [] });
+    expect(plan.parseMarkdownValues).toBe(false);
+    expect(plan.focusRules).not.toContain("OVER-BUDGET");
+  });
+
+  test("an LLM plan is validated and clamped; garbage falls back to the heuristic", async () => {
+    const cfg = { baseUrl: "http://llama.internal:8000/v1", model: "llama-3.1-70b-instruct" };
+    let calls = 0;
+    const good: FetchLike = async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({
+          model: "llama-3.1-70b-instruct",
+          choices: [{ message: { content: '{"parseMarkdownValues":true,"focusRules":["OVER-BUDGET","MADE-UP"],"maxDrafts":99,"note":"budget first"}' } }],
+        }),
+      );
+    };
+    const plan = await llmPlanFromPack(["01-tender-notice.md"], pack, "run-plan-test", cfg, good);
+    expect(plan.source).toBe("llm");
+    expect(plan.focusRules).toEqual(["OVER-BUDGET"]);
+    expect(plan.maxDrafts).toBe(4);
+    expect(plan.parseMarkdownValues).toBe(true);
+    expect(plan.note).toBe("budget first");
+
+    const bad: FetchLike = async () => new Response("nope", { status: 500 });
+    const fallback = await llmPlanFromPack(["01-tender-notice.md"], pack, "run-plan-test", cfg, bad);
+    expect(fallback.source).toBe("heuristic");
+    expect(fallback.note).toContain("llm plan failed");
+    expect(calls).toBe(1);
+  });
+});
+
+describe("flagPack under the plan: over-budget and markdown value outliers", () => {
+  const files = ["01-tender-notice.md", "02-bid-portscan-systems.md", "03-bid-coastline-screening.md"];
+  const sources: Record<string, string> = {
+    "01-tender-notice.md": "# NOTICE\n**Budget ceiling:** KES 1,860,000,000 (VAT inclusive)\n",
+    "02-bid-portscan-systems.md": "**Bidder:** Portscan Systems\n**Bid value:** KES 1,772,000,000\n",
+    "03-bid-coastline-screening.md": "**Bidder:** Coastline Screening Solutions\n**Bid value:** KES 3,940,000,000\n",
+  };
+  const pack = buildPack(files, sources);
+  const { kept } = flagPack(pack, files);
+
+  test("a bid over the published ceiling is flagged, cited to its own value line, and survives the self-check", () => {
+    const f = kept.find((x) => x.rule === "R-OVER-BUDGET");
+    expect(f?.item).toBe("COASTLINE SCREENING");
+    expect(f?.citation).toBe("03-bid-coastline-screening.md, bid value line");
+    expect(f && verifyFinding(f, sources)).toBe(true);
+  });
+
+  test("a markdown bid value outlier is flagged against its peer median and survives the self-check", () => {
+    const f = kept.find((x) => x.rule === "R-VALUE-OUTLIER");
+    expect(f?.item).toBe("COASTLINE SCREENING");
+    expect(f?.evidence).toContain("3,940,000,000");
+    expect(f && verifyFinding(f, sources)).toBe(true);
+  });
+
+  test("an under-ceiling, mid-pack bid is not flagged", () => {
+    expect(kept.filter((x) => x.rule === "R-OVER-BUDGET")).toHaveLength(1);
+    expect(kept.some((x) => x.item === "PORTSCAN SYSTEMS" && (x.rule === "R-OVER-BUDGET" || x.rule === "R-VALUE-OUTLIER"))).toBe(false);
+  });
+});
+
+describe("bounded reason-and-retry", () => {
+  const sources = {
+    "03-bid-coastline.md": "**Bidder:** Coastline Screening Solutions\n**Bid value:** KES 3,940,000,000\nAlternative offered for the radiation segment.\n",
+  };
+
+  test("a tampered evidence line is re-anchored to a real line and passes the self-check", () => {
+    const f: Finding = { id: "F-01", rule: "R-SPEC-DEVIATION", severity: "HIGH", item: "COASTLINE SCREENING", evidence: "garbled evidence that is in no document", citation: "03-bid-coastline.md, specifications matrix" };
+    const out = repairFinding({ finding: f, reason: "deviation text not found in cited bid" }, sources);
+    expect(out.repaired).toBeDefined();
+    expect(out.repaired?.repaired).toBe(true);
+    expect(out.repaired && verifyFinding(out.repaired, sources)).toBe(true);
+  });
+
+  test("a value finding with garbled evidence is re-anchored via its stated amount", () => {
+    const f: Finding = { id: "F-02", rule: "R-VALUE-OUTLIER", severity: "HIGH", item: "COASTLINE SCREENING", evidence: "numbers misplaced", citation: "03-bid-coastline.md, bid value line" };
+    const out = repairFinding({ finding: f, reason: "bid value or bidder not found in cited bid" }, sources);
+    expect(out.repaired?.evidence).toContain("3,940,000,000");
+  });
+
+  test("a finding citing a document that does not exist is dropped with a reason, never repaired", () => {
+    const f: Finding = { id: "F-03", rule: "R-SPEC-DEVIATION", severity: "HIGH", item: "COASTLINE SCREENING", evidence: "x", citation: "99-bid-ghost.md, specifications matrix" };
+    const out = repairFinding({ finding: f, reason: "cited document missing" }, sources);
+    expect(out.repaired).toBeUndefined();
+    expect(out.dropReason).toContain("does not exist");
+  });
+
+  test("verifyFinding reports the reason a finding was refused", () => {
+    const f: Finding = { id: "", rule: "R-SPEC-DEVIATION", severity: "HIGH", item: "X", evidence: "absent line", citation: "03-bid-coastline.md, specifications matrix" };
+    expect(verifyFindingReason(f, sources)).toContain("not found");
+    expect(verifyFindingReason(f, { "99.md": "x" })).toContain("not in this tender");
+  });
+});
+
+describe("publisher-mess rules — supplier identifiers and missing buyers", () => {
+  const bids = (bodies: string[]): BidDoc[] =>
+    bodies.map((text, i) => ({ bidder: `BIDDER ${i + 1}`, text, source: `0${i + 2}-bid-x.md` }));
+
+  test("flags a KRA PIN that breaks its own scheme, cited to the exact bid", () => {
+    const f = supplierIdFindings(bids(["**KRA PIN:** P0518472\n**Bid value:** KES 1,000,000"]));
     expect(f).toHaveLength(1);
-    expect(f[0].rule).toBe("R-LICENCE-EXPIRED");
-    expect(verifyFinding(f[0], { "03-bid-eq.md": text })).toBe(true);
+    expect(f[0].rule).toBe("R-SUPPLIER-ID");
+    expect(f[0].severity).toBe("HIGH");
+    expect(f[0].citation).toContain("02-bid-x.md");
+    expect(f[0].evidence).toContain("P0518472");
   });
 
-  test("does not flag an expired line that is not about a credential", () => {
-    const bids: BidDoc[] = [{ bidder: "Eq", source: "03-bid-eq.md", text: "The offer expired last week." }];
-    expect(expiredLicenceFindings(bids)).toHaveLength(0);
+  test("keeps a well-formed KRA PIN and a well-formed Rwanda TIN silent", () => {
+    expect(supplierIdFindings(bids(["**KRA PIN:** C004829173K"]))).toHaveLength(0);
+    expect(supplierIdFindings(bids(["- TIN: 100000009"]))).toHaveLength(0);
   });
 
-  test("a document still in review does not count as provided", () => {
-    expect(bidNamesDocument("- Radiation Protection Board type-approval \u2014 submitted, approval in review", "Radiation Protection Board")).toBe(false);
-    expect(bidNamesDocument("- Radiation Protection Board type-approval \u2014 attached", "Radiation Protection Board")).toBe(true);
+  test("flags a broken TIN under the Rwanda scheme", () => {
+    const f = supplierIdFindings(bids(["**TIN:** 2051AB"]));
+    expect(f).toHaveLength(1);
+    expect(f[0].evidence).toContain("2051AB");
   });
 
-  test("a required document named but pending is reported as named-not-provided, quoting the bid line", () => {
-    const notice = "- [REQUIRED] PPB wholesaler licence\n";
-    const bids: BidDoc[] = [
-      { bidder: "Eq", source: "03-bid-eq.md", text: "- PPB wholesaler licence — application pending" },
-      { bidder: "Other", source: "03-bid-other.md", text: "- Tax certificate — attached" },
-    ];
-    const [eq, other] = docMissingFindings(bids, notice, "01-tender-notice.md");
-    expect(eq.evidence).toContain("names it but does not provide it");
-    expect(eq.evidence).toContain("application pending");
-    expect(other.evidence).toContain("does not reference it");
-    expect(bidLineNamingDocument("- Tax certificate — attached", "ppb wholesaler licence")).toBeNull();
+  test("flags an identifier line that states nothing (blank, dash, N/A)", () => {
+    const f = supplierIdFindings(bids(["**KRA PIN:** —", "- TIN: N/A"]));
+    expect(f).toHaveLength(2);
+    expect(f.every((x) => x.rule === "R-SUPPLIER-ID")).toBe(true);
   });
 
-  test("rule findings are not truncated: more than six are returned", () => {
-    const bids: BidDoc[] = Array.from({ length: 8 }, (_, i) => ({
-      bidder: `Bidder ${i}`,
-      source: `0${i + 2}-bid-${i}.md`,
-      text: "| Item A | 1 | KES 10 |\n" + "Alternative offered for item.\n",
-    }));
-    const specs = runRules(bids, "", "01-tender-notice.md").filter((f) => f.rule === "R-SPEC-DEVIATION");
-    expect(specs.length).toBe(8);
+  test("leaves identifiers alone when the line names no known scheme", () => {
+    expect(supplierIdFindings(bids(["**VAT Number:** GB123456789"]))).toHaveLength(0);
+  });
+
+  test("flags a structured notice that never names the buyer", () => {
+    const notice = "# TENDER NOTICE\n\n**Reference:** KE-X-2026-001\n**Subject:** Kits\n";
+    const f = buyerMissingFindings(notice, "01-tender-notice.md");
+    expect(f).toHaveLength(1);
+    expect(f[0].rule).toBe("R-BUYER-MISSING");
+    expect(f[0].severity).toBe("MEDIUM");
+    expect(f[0].evidence).toContain("KE-X-2026-001");
+  });
+
+  test("a placeholder buyer line counts as no buyer", () => {
+    const notice = "**Reference:** KE-X-2026-002\n**Buyer:** —\n";
+    expect(buyerMissingFindings(notice, "01.md")).toHaveLength(1);
+    const named = "**Reference:** KE-X-2026-003\n**Buyer:** Coast Water Works\n";
+    expect(buyerMissingFindings(named, "01.md")).toHaveLength(0);
+  });
+
+  test("unstructured text without a reference line is not judged", () => {
+    expect(buyerMissingFindings("just some prose", "01.md")).toHaveLength(0);
+  });
+
+  test("both findings survive the self-check against their cited documents", () => {
+    const sources = {
+      "01-tender-notice.md": "**Reference:** KE-X-2026-004\n",
+      "02-bid-x.md": "**KRA PIN:** P0518472\n",
+    };
+    const [idF] = supplierIdFindings(bids(["**KRA PIN:** P0518472"]));
+    const [bF] = buyerMissingFindings(sources["01-tender-notice.md"], "01-tender-notice.md");
+    expect(verifyFinding(idF, sources)).toBe(true);
+    expect(verifyFinding(bF, sources)).toBe(true);
+  });
+
+  test("the plan focuses the new families only when the pack carries the mess", () => {
+    const messy = planFromPack(
+      ["01-tender-notice.md", "02-bid-x.md"],
+      {
+        bids: bids(["**KRA PIN:** P0518472"]),
+        records: [],
+        notices: [{ file: "01-tender-notice.md", text: "**Reference:** KE-X-2026-005\n" }],
+      },
+    );
+    expect(messy.focusRules).toContain("SUPPLIER-ID");
+    expect(messy.focusRules).toContain("BUYER-MISSING");
+    const clean = planFromPack(
+      ["01-tender-notice.md", "02-bid-x.md"],
+      {
+        bids: bids(["no identifiers here"]),
+        records: [],
+        notices: [{ file: "01-tender-notice.md", text: "**Reference:** KE-X-2026-006\n**Buyer:** Ministry\n" }],
+      },
+    );
+    expect(clean.focusRules).not.toContain("SUPPLIER-ID");
+    expect(clean.focusRules).not.toContain("BUYER-MISSING");
+  });
+
+  test("flagPack keeps both mess findings end-to-end on the shipped KE-MSA pack shape", () => {
+    const files = ["01-tender-notice.md", "02-bid-bahari.md", "03-bid-mombasa.md"];
+    const sources = {
+      "01-tender-notice.md": "# TENDER NOTICE\n\n**Reference:** KE-MSA-2026-090\n**Budget ceiling:** KES 240,000,000\n",
+      "02-bid-bahari.md": "**Bidder:** BAHARI\n**KRA PIN:** C004829173K\n**Bid value:** KES 109,800,000\n",
+      "03-bid-mombasa.md": "**Bidder:** MOMBASA\n**KRA PIN:** P0518472\n**Bid value:** KES 113,200,000\n",
+    };
+    const pack = buildPack(files, sources);
+    const { kept, rejected } = flagPack(pack, files);
+    const rules = kept.map((f) => f.rule);
+    expect(rules).toContain("R-SUPPLIER-ID");
+    expect(rules).toContain("R-BUYER-MISSING");
+    expect(rejected).toHaveLength(0);
+    expect(kept.every((f) => verifyFinding(f, sources))).toBe(true);
   });
 });

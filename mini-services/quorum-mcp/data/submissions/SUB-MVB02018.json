@@ -1,0 +1,38 @@
+{
+  "gate": {
+    "id": "gate_11fzu9",
+    "runId": "run_ca3ccb30",
+    "tenderId": "KE-KCS-2026-042",
+    "tool": "file_gate_submission",
+    "inputs": {
+      "bidder": "PORTSCAN SYSTEMS",
+      "value": "KES 1,772,000,000",
+      "attachments": 12,
+      "findings": [
+        "F-01",
+        "F-02",
+        "F-03",
+        "F-04",
+        "F-05",
+        "F-06",
+        "F-07",
+        "F-08",
+        "F-09"
+      ],
+      "drafts": [
+        "draft_vgdwwl",
+        "draft_oz0qru"
+      ]
+    },
+    "status": "APPROVED",
+    "createdAt": "2026-10-16T13:11:57.511Z",
+    "approver": "Naledi Verify",
+    "note": "Signed by the committee",
+    "decidedAt": "2026-10-16T13:24:43.805Z"
+  },
+  "receipt": {
+    "submissionId": "SUB-MVB02018",
+    "hash": "77a0020dc264b91f0bce5d3fe17cab25",
+    "portal": "egp-portal (simulated)"
+  }
+}

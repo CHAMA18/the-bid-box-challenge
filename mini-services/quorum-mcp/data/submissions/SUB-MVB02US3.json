@@ -1,0 +1,33 @@
+{
+  "gate": {
+    "id": "gate_w70b03",
+    "runId": "run_1fd74a96",
+    "tenderId": "KE-NCB-104293",
+    "tool": "file_gate_submission",
+    "inputs": {
+      "bidder": "MEDIQUEAST",
+      "value": "KES 412,600,000",
+      "attachments": 7,
+      "findings": [
+        "F-01",
+        "F-02",
+        "F-03",
+        "F-04"
+      ],
+      "drafts": [
+        "draft_gm8fou",
+        "draft_edr4e3"
+      ]
+    },
+    "status": "APPROVED",
+    "createdAt": "2026-10-16T12:51:17.255Z",
+    "approver": "Naledi Verify",
+    "note": "Signed by the committee",
+    "decidedAt": "2026-10-16T13:25:23.656Z"
+  },
+  "receipt": {
+    "submissionId": "SUB-MVB02US3",
+    "hash": "234aa65029f2c5bb541903821a054db1",
+    "portal": "egp-portal (simulated)"
+  }
+}
