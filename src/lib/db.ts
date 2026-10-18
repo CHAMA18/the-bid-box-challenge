@@ -54,6 +54,32 @@ export interface CommitteeMemberRow {
   updatedAt: Date;
 }
 
+export interface SittingAttendanceRow {
+  memberId: string; // committee member id, or "officer:<userId>" for the gavel
+  name: string;
+  role: string;
+  expected: "PRESENT" | "EXCUSED" | "OFFICER";
+  admitted: boolean;
+  admittedAt: Date | null;
+  admittedBy: string | null;
+}
+
+export interface SittingRow {
+  id: string;
+  title: string;
+  room: string; // the Jitsi room slug — meet.jit.si/<room>, minted per sitting
+  joinUrl: string;
+  agenda: string | null;
+  summonedBy: string;
+  summonedAt: Date;
+  status: "OPEN" | "CLOSED";
+  closedAt: Date | null;
+  notes: string; // the minutes, written from the Quorum desk
+  notesUpdatedAt: Date | null;
+  notesUpdatedBy: string | null;
+  attendance: SittingAttendanceRow[]; // the door list — the register, frozen into the sitting
+}
+
 export type InviteStatus = "PENDING" | "CLAIMED" | "REVOKED";
 
 export interface InviteRow {
@@ -76,6 +102,7 @@ interface StoreShape {
   sessions: SessionRow[];
   contacts: ContactRow[];
   committeeMembers: CommitteeMemberRow[];
+  sittings: SittingRow[];
   settings: Record<string, string>;
   invites: InviteRow[];
 }
@@ -94,12 +121,48 @@ function revive<T>(rows: unknown): T[] {
   });
 }
 
+/* Sitting rows carry dates two levels deep (the door list's admissions), so
+   they get a dedicated revival instead of the flat DATE_FIELDS pass. */
+function reviveSittings(rows: unknown): SittingRow[] {
+  if (!Array.isArray(rows)) return [];
+  const asDate = (v: unknown): Date | null =>
+    typeof v === "string" ? new Date(v) : v instanceof Date ? v : null;
+  return rows.map((raw) => {
+    const r = raw as Record<string, unknown>;
+    const attendance = Array.isArray(r.attendance) ? (r.attendance as Record<string, unknown>[]) : [];
+    return {
+      id: String(r.id ?? ""),
+      title: String(r.title ?? "Sitting"),
+      room: String(r.room ?? ""),
+      joinUrl: String(r.joinUrl ?? ""),
+      agenda: typeof r.agenda === "string" && r.agenda.trim() ? r.agenda : null,
+      summonedBy: String(r.summonedBy ?? "unknown"),
+      summonedAt: asDate(r.summonedAt) ?? new Date(),
+      status: r.status === "CLOSED" ? "CLOSED" : "OPEN",
+      closedAt: asDate(r.closedAt),
+      notes: typeof r.notes === "string" ? r.notes : "",
+      notesUpdatedAt: asDate(r.notesUpdatedAt),
+      notesUpdatedBy: typeof r.notesUpdatedBy === "string" ? r.notesUpdatedBy : null,
+      attendance: attendance.map((a) => ({
+        memberId: String(a.memberId ?? ""),
+        name: String(a.name ?? ""),
+        role: String(a.role ?? ""),
+        expected: a.expected === "EXCUSED" ? "EXCUSED" : a.expected === "OFFICER" ? "OFFICER" : "PRESENT",
+        admitted: a.admitted === true,
+        admittedAt: asDate(a.admittedAt),
+        admittedBy: typeof a.admittedBy === "string" ? a.admittedBy : null,
+      })),
+    };
+  });
+}
+
 function load(): StoreShape {
   const empty: StoreShape = {
     users: [],
     sessions: [],
     contacts: [],
     committeeMembers: [],
+    sittings: [],
     settings: {},
     invites: [],
   };
@@ -110,6 +173,7 @@ function load(): StoreShape {
     sessions: revive<SessionRow>(raw.sessions),
     contacts: revive<ContactRow>(raw.contacts),
     committeeMembers: revive<CommitteeMemberRow>(raw.committeeMembers),
+    sittings: reviveSittings(raw.sittings),
     settings: (raw.settings as Record<string, string>) ?? {},
     invites: revive<InviteRow>(raw.invites),
   };
@@ -119,6 +183,10 @@ function load(): StoreShape {
 const globalForStore = globalThis as unknown as { __quorumStore?: StoreShape };
 const store: StoreShape = globalForStore.__quorumStore ?? load();
 globalForStore.__quorumStore = store;
+
+/* A hot reload keeps the old store object alive across a schema addition —
+   backfill new collections so the store is never half-shaped. */
+if (!Array.isArray(store.sittings)) store.sittings = [];
 
 function persist(): void {
   mkdirSync(path.dirname(FILE), { recursive: true });
@@ -233,6 +301,46 @@ export function listCommitteeMembers(): CommitteeMemberRow[] {
   );
 }
 
+export function createCommitteeMember(data: {
+  name: string;
+  role: string;
+  isChair: boolean;
+}): CommitteeMemberRow {
+  const at = now();
+  const row: CommitteeMemberRow = {
+    id: `cmb_${randomUUID().slice(0, 8)}`,
+    name: data.name,
+    role: data.role,
+    isChair: data.isChair,
+    status: "PRESENT",
+    seatOrder: store.committeeMembers.reduce((max, m) => Math.max(max, m.seatOrder), 0) + 1,
+    createdAt: at,
+    updatedAt: at,
+  };
+  store.committeeMembers.push(row);
+  persist();
+  return row;
+}
+
+export function updateCommitteeMember(
+  id: string,
+  patch: Partial<Pick<CommitteeMemberRow, "name" | "role" | "isChair" | "status">>
+): CommitteeMemberRow | null {
+  const row = store.committeeMembers.find((m) => m.id === id);
+  if (!row) return null;
+  Object.assign(row, patch, { updatedAt: now() });
+  persist();
+  return row;
+}
+
+export function deleteCommitteeMember(id: string): boolean {
+  const idx = store.committeeMembers.findIndex((m) => m.id === id);
+  if (idx === -1) return false;
+  store.committeeMembers.splice(idx, 1);
+  persist();
+  return true;
+}
+
 export function getSetting(key: string): string | undefined {
   return store.settings[key];
 }
@@ -289,6 +397,33 @@ export function updateInvite(
   const row = findInviteById(id);
   if (!row) return null;
   Object.assign(row, patch, { updatedAt: now() });
+  persist();
+  return row;
+}
+
+/* ── Committee sittings — the meeting record (Jitsi room + minutes) ─────── */
+
+export function listSittings(take = 100): SittingRow[] {
+  return [...store.sittings]
+    .sort((a, b) => b.summonedAt.getTime() - a.summonedAt.getTime())
+    .slice(0, take);
+}
+
+export function findSittingById(id: string): SittingRow | null {
+  return store.sittings.find((s) => s.id === id) ?? null;
+}
+
+export function createSitting(data: Omit<SittingRow, "id">): SittingRow {
+  const row: SittingRow = { id: `sit_${randomUUID().slice(0, 8)}`, ...data };
+  store.sittings.push(row);
+  persist();
+  return row;
+}
+
+export function updateSitting(id: string, patch: Partial<Omit<SittingRow, "id">>): SittingRow | null {
+  const row = findSittingById(id);
+  if (!row) return null;
+  Object.assign(row, patch);
   persist();
   return row;
 }

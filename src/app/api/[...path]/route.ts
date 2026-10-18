@@ -29,11 +29,18 @@ async function proxy(req: NextRequest) {
   const target = `http://${UPSTREAM_HOST}:${port}${url.pathname}${search ? `?${search}` : ""}`;
 
   try {
+    /* Forward the content type and the actor identity the sidecar logs —
+       Caddy passes these through untouched, and the fallback gateway keeps
+       the same contract so the audit trail reads the same either way. */
+    const forward: Record<string, string> = {};
+    const contentType = req.headers.get("content-type");
+    if (contentType) forward["content-type"] = contentType;
+    const actor = req.headers.get("x-quorum-actor");
+    if (actor) forward["x-quorum-actor"] = actor;
+
     const upstream = await fetch(target, {
       method: req.method,
-      headers: req.headers.get("content-type")
-        ? { "content-type": req.headers.get("content-type") as string }
-        : undefined,
+      headers: Object.keys(forward).length > 0 ? forward : undefined,
       body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
       cache: "no-store",
     });

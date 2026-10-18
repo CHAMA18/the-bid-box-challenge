@@ -84,6 +84,7 @@
   --animate-glow-pulse: glow-pulse 2.8s ease-in-out infinite;
   --animate-aurora: aurora-drift 18s ease-in-out infinite;
   --animate-aurora-slow: aurora-drift 26s ease-in-out infinite reverse;
+  --animate-tour-pulse: tour-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 
   @keyframes shimmer {
     0% {
@@ -122,6 +123,16 @@
     }
     50% {
       box-shadow: 0 0 0 10px rgba(232, 56, 42, 0);
+    }
+  }
+  /* The walkthrough spotlight — a ring that breathes outward from the cut-out. */
+  @keyframes tour-pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(232, 56, 42, 0.45);
+    }
+    65%,
+    100% {
+      box-shadow: 0 0 0 16px rgba(232, 56, 42, 0);
     }
   }
 
@@ -299,7 +310,8 @@
     .animate-marquee,
     .animate-ping-slow,
     .animate-aurora,
-    .animate-aurora-slow {
+    .animate-aurora-slow,
+    .animate-tour-pulse {
       animation: none;
     }
   }

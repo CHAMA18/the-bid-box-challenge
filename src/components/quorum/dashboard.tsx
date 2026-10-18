@@ -1,12 +1,15 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
   BookOpen,
+  Building2,
+  Cable,
+  Check,
   ChevronDown,
   CircleAlert,
   CircleCheck,
@@ -14,16 +17,22 @@ import {
   Copy,
   Database,
   Download,
+  Eye,
   FileText,
   FileUp,
   Files,
   Gavel,
   Gauge,
   HardDrive,
+  Library,
   ListChecks,
   Lock,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  Play,
   Plus,
   Radio,
   RefreshCw,
@@ -33,19 +42,23 @@ import {
   ShieldCheck,
   Stamp,
   Terminal,
+  Trash2,
   Users,
+  UserPlus,
+  Video,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { QuorumLogo } from "@/components/quorum/logo";
 import { StackConsole } from "@/components/quorum/stack-console";
+import { TourLayer, type TourStep } from "@/components/quorum/tour";
 import type { AuthUser } from "@/lib/auth-types";
 import { uploadTenderDocument } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 import { ThemeModeRow } from "@/components/quorum/theme-toggle";
 
 /**
- * Quorum — Mission Control.
+ * Quorum — Workspace.
  * The signed-in workspace: a living picture of every run, every finding
  * and every gate waiting on a named human. The agent prepares the file;
  * the committee awards the tender — so the gavel sits in the UI, not in
@@ -71,7 +84,6 @@ type McRun = {
   unsourced: number;
   status: RunStatus;
   startedAt: string;
-  duration: string;
   /* Documents ingested at launch — set when the run was briefed
      through the guided wizard (seeded runs have no pack attached). */
   docs?: number;
@@ -193,7 +205,6 @@ function useMissionData() {
           unsourced: r.findings.length - citations,
           status: RUN_STATUS[r.status],
           startedAt: clockOf(r.startedAt),
-          duration: r.status === "RUNNING" ? "LIVE" : "—",
         };
       }),
     [rawRuns]
@@ -251,8 +262,6 @@ function useMissionData() {
   return { runs, queue, ledger, verdicts, findings, notes, reachable, refresh };
 }
 
-const PORTALS: { name: string; at: string; ok: boolean }[] = [];
-
 const SPARK_A = [40, 62, 34, 78, 52, 70, 44, 88, 58, 74, 48, 84];
 const SPARK_B = [55, 40, 70, 46, 82, 60, 38, 74, 50, 66, 42, 90];
 
@@ -269,6 +278,7 @@ type SectionId =
   | "mc-sources"
   | "mc-ledger"
   | "mc-committee"
+  | "mc-suppliers"
   | "mc-rules"
   | "mc-stack"
   | "mc-settings"
@@ -278,7 +288,8 @@ type NavBadge = "runs" | "gates" | "findings";
 
 const NAV_GROUPS: {
   group: string;
-  items: { id: SectionId; label: string; icon: LucideIcon; badge?: NavBadge }[];
+  /* An item with `href` opens its own URL — a real page, not a section. */
+  items: { id: string; label: string; icon: LucideIcon; badge?: NavBadge; href?: string }[];
 }[] = [
   {
     group: "COMMAND",
@@ -305,18 +316,25 @@ const NAV_GROUPS: {
     ],
   },
   {
+    group: "SUPPLIERS",
+    items: [
+      { id: "mc-suppliers", label: "Supplier register", icon: Building2 },
+    ],
+  },
+  {
     group: "SYSTEM",
     items: [
       { id: "mc-stack", label: "Tools & models", icon: ServerCog },
       { id: "mc-rules", label: "Rules & safeguards", icon: ShieldCheck },
       { id: "mc-settings", label: "Settings", icon: Settings },
+      { id: "docs", label: "Documentation", icon: Library, href: "/docs" },
       { id: "mc-walkthrough", label: "Walkthrough", icon: BookOpen },
     ],
   },
 ];
 
 const SECTION_LABEL = Object.fromEntries(
-  NAV_GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label] as const))
+  NAV_GROUPS.flatMap((g) => g.items.filter((i) => !i.href).map((i) => [i.id, i.label] as const))
 ) as Record<SectionId, string>;
 
 function firstNameOf(user: AuthUser | null): string {
@@ -500,7 +518,7 @@ function AgentFeed() {
   }, []);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-night-2 shadow-[0_28px_70px_rgba(11,12,15,0.35)]">
+    <div data-tour="agent-feed" className="overflow-hidden rounded-2xl border border-white/10 bg-night-2 shadow-[0_28px_70px_rgba(11,12,15,0.35)]">
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <div className="flex items-center gap-1.5" aria-hidden="true">
           <span className="h-2.5 w-2.5 rounded-full bg-brand-600/90" />
@@ -516,6 +534,7 @@ function AgentFeed() {
         </p>
       </div>
       <div
+        data-tour="agent-feed-stream"
         className="min-h-[190px] px-4 py-4 font-code text-[10.5px] leading-[2] sm:text-[11.5px]"
         role="img"
         aria-label="Live agent activity log"
@@ -1065,7 +1084,7 @@ function NewRunModal({
             </div>
 
             {/* Step rail — 01 details · 02 documents · 03 scope */}
-            <div className="mt-6 rounded-2xl border border-ink-100 bg-paper/70 px-3 py-3 sm:mt-7 sm:px-5 sm:py-4">
+            <div data-tour="wiz-rail" className="mt-6 rounded-2xl border border-ink-100 bg-paper/70 px-3 py-3 sm:mt-7 sm:px-5 sm:py-4">
               <ol className="flex items-center gap-2 sm:gap-3" aria-label="Run setup, three steps">
               {WIZARD_STEPS.map((label, i) => {
                 const state = i === step ? "current" : i < step ? "done" : "todo";
@@ -1119,6 +1138,7 @@ function NewRunModal({
             </div>
 
             <form
+              data-tour="wiz-body"
               className="mt-6 sm:mt-7"
               onSubmit={async (e) => {
                 e.preventDefault();
@@ -1499,6 +1519,7 @@ function NewRunModal({
                 )}
                 <button
                   type="submit"
+                  data-tour="wiz-next"
                   disabled={(step === 1 && !canLeaveDocs) || (step === 2 && (checksOn === 0 || launching))}
                   className="group inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[14px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.3)] transition-all hover:-translate-y-0.5 hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0 sm:h-[54px] sm:text-[15px]"
                 >
@@ -1573,7 +1594,7 @@ function SidebarContent({
       </div>
 
       <nav
-        aria-label="Mission control sections"
+        aria-label="Workspace sections"
         className="min-h-0 flex-1 overflow-y-auto px-3 pb-1 [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1"
       >
         {NAV_GROUPS.map((group, gi) => (
@@ -1584,37 +1605,51 @@ function SidebarContent({
                 const Icon = item.icon;
                 const isActive = active === item.id;
                 const badge = item.badge ? counts[item.badge] : null;
+                const itemClass = cn(
+                  "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
+                  isActive ? "bg-white/10 text-white" : "text-ink-400 hover:bg-white/5 hover:text-ink-100"
+                );
                 return (
                   <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate(item.id)}
-                      aria-current={isActive ? "true" : undefined}
-                      className={cn(
-                        "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
-                        isActive ? "bg-white/10 text-white" : "text-ink-400 hover:bg-white/5 hover:text-ink-100"
-                      )}
-                    >
-                      {isActive && (
-                        <motion.span
-                          layoutId="mc-nav-rail"
-                          className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-brand-500"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span className="flex-1 font-code text-[10px] font-semibold uppercase tracking-[0.18em]">{item.label}</span>
-                      {badge !== null && badge > 0 && (
-                        <span
-                          className={cn(
-                            "grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-code text-[9px] font-bold",
-                            item.id === "mc-gates" ? "bg-brand-600 text-white" : "bg-white/10 text-ink-200"
-                          )}
-                        >
-                          {badge}
+                    {item.href ? (
+                      /* An item that lives at its own URL — leaving the workspace on purpose. */
+                      <a href={item.href} className={itemClass}>
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="flex-1 font-code text-[10px] font-semibold uppercase tracking-[0.18em]">
+                          {item.label}
                         </span>
-                      )}
-                    </button>
+                        <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-ink-500" aria-hidden="true" />
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate(item.id as SectionId)}
+                        aria-current={isActive ? "true" : undefined}
+                        className={itemClass}
+                      >
+                        {isActive && (
+                          <motion.span
+                            layoutId="mc-nav-rail"
+                            className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-brand-500"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="flex-1 font-code text-[10px] font-semibold uppercase tracking-[0.18em]">
+                          {item.label}
+                        </span>
+                        {badge !== null && badge > 0 && (
+                          <span
+                            className={cn(
+                              "grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-code text-[9px] font-bold",
+                              item.id === "mc-gates" ? "bg-brand-600 text-white" : "bg-white/10 text-ink-200"
+                            )}
+                          >
+                            {badge}
+                          </span>
+                        )}
+                      </button>
+                    )}
                   </li>
                 );
               })}
@@ -1626,6 +1661,7 @@ function SidebarContent({
       <div className="px-3 pb-1">
         <button
           type="button"
+          data-tour="nav-new-run"
           onClick={onNewRun}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-3 text-[13px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700"
         >
@@ -1759,6 +1795,7 @@ function RunRegister({
   return (
     <section id="mc-runs" aria-labelledby="mc-runs-h" className="scroll-mt-24">
       <motion.div
+        data-tour="run-register"
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.15, ease: EASE }}
@@ -1773,7 +1810,7 @@ function RunRegister({
               LAST 7 DAYS · {filtered.length} OF {runs.length} RUNS
             </p>
           </div>
-          <div className="flex items-center gap-1.5" role="group" aria-label="Filter runs">
+          <div data-tour="run-filters" className="flex items-center gap-1.5" role="group" aria-label="Filter runs">
             {RUN_FILTERS.map((f) => (
               <button
                 key={f.id}
@@ -1794,7 +1831,7 @@ function RunRegister({
         </header>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div data-tour="run-rows" className="overflow-x-auto">
           <table className="w-full min-w-[660px] border-collapse text-left">
             <caption className="sr-only">Quorum run register — recent agent runs with status, findings and citations</caption>
             <thead>
@@ -1859,7 +1896,7 @@ function RunRegister({
                       <td className="px-4 py-3.5">
                         <StatusChip status={run.status} />
                       </td>
-                      <td className="px-4 py-3.5 font-code text-[9px] tracking-[0.12em] text-ink-500">{run.duration}</td>
+                      <td className="px-4 py-3.5 font-code text-[9px] tracking-[0.12em] text-ink-500">{run.startedAt}</td>
                       <td className="pr-4">
                         <ChevronDown
                           className={cn(
@@ -1877,11 +1914,7 @@ function RunRegister({
                             {run.status === "running" || run.status === "queued" ? (
                               <p className="text-[13px] leading-relaxed text-ink-600">
                                 <span className="font-semibold text-ink-900">
-                                  Run in progress —{" "}
-                                  {run.duration === "CROSS-CHECK"
-                                    ? "cross-checking the bids against the scope you set"
-                                    : "reading the pack you staged"}
-                                  .
+                                  Run in progress — reading the pack you staged.
                                 </span>{" "}
                                 Findings stream in at completion — every claim will carry a page citation, and the file
                                 stops at your gate before anything is awarded.
@@ -2027,6 +2060,7 @@ function GateQueue({
   return (
     <section id="mc-gates" aria-labelledby="mc-gates-h" className="scroll-mt-24">
       <motion.div
+        data-tour="gate-queue"
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.22, ease: EASE }}
@@ -2087,7 +2121,7 @@ function GateQueue({
                     <dd className="mt-0.5 font-semibold text-ink-800">{g.value}</dd>
                   </div>
                 </dl>
-                <div className="mt-4 flex items-center gap-2">
+                <div data-tour="gate-actions" className="mt-4 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => act(g, "AWARDED")}
@@ -2129,7 +2163,7 @@ function GateQueue({
         </div>
 
         {/* Ledger */}
-        <div className="border-t border-ink-100 px-5 py-4">
+        <div data-tour="gate-ledger" className="border-t border-ink-100 px-5 py-4">
           <p className="font-code text-[8.5px] font-semibold tracking-[0.22em] text-ink-400">DECISION HISTORY</p>
           <ul className="mt-2.5 space-y-2">
             <AnimatePresence initial={false}>
@@ -2164,50 +2198,322 @@ function GateQueue({
 
 /* ── Portal sync + audit ─────────────────────────────────────────────────── */
 
-function PortalSync({ onToast }: { onToast: (m: string) => void }) {
+/* ── The OCP Data Registry, read for Africa ────────────────────────────────
+   The Sources screen draws the registry exactly as the registry states it:
+   one row per African country, one detail row per published dataset — read
+   through the quorum-mcp sidecar (mine-ocp-africa.py is the generator). */
+
+interface OcpDownload {
+  format: string;
+  size: string;
+  url: string;
+}
+
+interface OcpDataset {
+  country: string;
+  iso: string;
+  publisher: string;
+  publicationId: number;
+  registryUrl: string;
+  portalUrl: string | null;
+  policyUrl: string | null;
+  coverageFrom: string;
+  coverageTo: string;
+  stale: boolean;
+  updateFrequency: string | null;
+  lastRetrieved: string;
+  recordModified: string | null;
+  retrievedNote: string | null;
+  downloads: OcpDownload[];
+  license: string | null;
+  licenseUrl: string | null;
+  language: string | null;
+  ocidPrefix: string | null;
+  counts: Record<string, number>;
+}
+
+interface OcpCountry {
+  country: string;
+  iso: string;
+  datasets: number;
+  stale: number;
+  publishers: string[];
+  coverageFrom: string;
+  coverageTo: string;
+  lastRetrieved: string;
+  formats: string[];
+  searchUrl: string;
+}
+
+interface OcpRegistryHandshake {
+  ok: boolean;
+  status: number | null;
+  bytes: number;
+  ocid: string | null;
+  ms: number;
+  error: string | null;
+}
+
+interface OcpPortalProbe {
+  ok: boolean;
+  status: number | null;
+  ms: number;
+  error: string | null;
+}
+
+interface OcpPortalLink {
+  publicationId: number;
+  checkedAt: string;
+  registry: OcpRegistryHandshake;
+  portal: OcpPortalProbe;
+}
+
+interface OcpLinks {
+  updatedAt: string;
+  links: Record<string, OcpPortalLink>;
+}
+
+interface OcpRegistry {
+  source: { registry: string; via: string; retrieved: string; scope: string; licenseNote: string; note: string };
+  countries: OcpCountry[];
+  datasets: OcpDataset[];
+  links: OcpLinks;
+}
+
+const ISO_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+/* "2026-10-18" → "18 OCT 2026" — registry dates, day-precise as the record
+   keeps them. */
+function codeDate(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${Number(m[3])} ${ISO_MONTHS[Number(m[2]) - 1]} ${m[1]}` : iso;
+}
+
+/* An instant → "18 OCT 2026 01:13" — local clock, whole stamp from one Date. */
+function codeStamp(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${String(d.getDate()).padStart(2, "0")} ${ISO_MONTHS[d.getMonth()]} ${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(
+    d.getMinutes(),
+  ).padStart(2, "0")}`;
+}
+
+function useOcpRegistry() {
+  const [data, setData] = useState<OcpRegistry | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [nonce, setNonce] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/ocp-africa?XTransformPort=3031")
+      .then((x) => (x.ok ? x.json() : Promise.reject(new Error(String(x.status)))))
+      .then((d: OcpRegistry) => {
+        if (alive) {
+          setData(d);
+          setFailed(false);
+        }
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [nonce]);
+  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  return { data, failed, reload };
+}
+
+/* One dataset, exactly as the registry publishes it — licence, coverage,
+   counts, formats, and the publisher's own portal, each linked back. The
+   connection line is a real check: the registry handshake that opened the
+   published file (with the first OCDS release it read) and the portal probe. */
+function OcpDatasetRow({
+  d,
+  link,
+  onRecheck,
+  rechecking,
+  busy,
+}: {
+  d: OcpDataset;
+  link?: OcpPortalLink;
+  onRecheck?: (id: number) => void;
+  rechecking?: boolean;
+  busy?: boolean;
+}) {
+  const licenceIsUrl = d.license?.startsWith("http") ?? false;
+  const counts = (
+    [
+      ["TENDERS", d.counts.tenders],
+      ["AWARDS", d.counts.awards],
+      ["CONTRACTS", d.counts.contracts],
+      ["PARTIES", d.counts.parties],
+      ["DOCUMENTS", d.counts.documents],
+    ] as [string, number | undefined][]
+  ).filter((entry): entry is [string, number] => (entry[1] ?? 0) > 0);
+  const files = d.downloads.map((x) => (x.size ? `${x.format} ${x.size}` : x.format)).join(" · ");
+  const linkClass =
+    "inline-flex items-center gap-1 rounded-md border border-ink-200 px-2 py-1 font-code text-[7px] font-bold tracking-[0.14em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950";
+  return (
+    <li className="border-t border-ink-100 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-code text-[9.5px] font-bold tracking-[0.1em] text-ink-950">{d.publisher}</span>
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 font-code text-[7px] font-bold tracking-[0.14em] text-white",
+            d.stale ? "bg-brand-600" : "bg-ink-950"
+          )}
+        >
+          {d.stale ? "NO LONGER UPDATED" : "UPDATING"}
+        </span>
+      </div>
+      <p className="mt-1 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
+        RECORD {d.coverageFrom} → {d.coverageTo}
+        {d.updateFrequency ? ` · ${d.updateFrequency.toUpperCase()}` : ""}
+        {" · "}RETRIEVED {d.lastRetrieved}
+        {d.retrievedNote ? ` (${d.retrievedNote})` : ""}
+        {d.ocidPrefix ? ` · ${d.ocidPrefix}` : ""}
+      </p>
+      <p className="mt-0.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
+        {!d.license
+          ? "LICENCE — NOT STATED ON THE REGISTRY"
+          : licenceIsUrl
+            ? "LICENCE — PUBLISHER'S OWN TERMS"
+            : `LICENCE — ${d.license.toUpperCase()}`}
+        {files ? ` · ${files.toUpperCase()}` : ""}
+      </p>
+      {counts.length > 0 && (
+        <p className="mt-0.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-500">
+          {counts.map(([k, n]) => `${k} ${n.toLocaleString("en-US")}`).join(" · ")}
+        </p>
+      )}
+      <p className="mt-0.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em]">
+        {link ? (
+          link.registry.ok ? (
+            <>
+              <span className="font-bold text-ink-950">LINKED</span>
+              <span className="text-ink-400">
+                {" "}
+                {codeStamp(link.checkedAt)} · REGISTRY HTTP {link.registry.status} ·{" "}
+                {Math.max(1, Math.round(link.registry.bytes / 1024))} KB READ · FIRST OCDS RELEASE{" "}
+                {link.registry.ocid} ·{" "}
+              </span>
+              {link.portal.ok ? (
+                <span className="text-ink-400">PORTAL HTTP {link.portal.status}</span>
+              ) : (
+                <span className="text-brand-700">
+                  PORTAL {(link.portal.error ?? "UNREACHABLE").toUpperCase()}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-brand-700">
+              LINK FAILED — {(link.registry.error ?? "UNKNOWN").toUpperCase()} · CHECKED {codeStamp(link.checkedAt)}
+            </span>
+          )
+        ) : (
+          <span className="text-ink-400">NOT YET CONNECTED — USE THE CONNECT BUTTON AT THE TOP OF THIS CARD</span>
+        )}
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <a href={d.registryUrl} target="_blank" rel="noreferrer" className={linkClass}>
+          REGISTRY PAGE
+          <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
+        </a>
+        {d.portalUrl && (
+          <a href={d.portalUrl} target="_blank" rel="noreferrer" className={linkClass}>
+            PUBLISHER PORTAL
+            <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
+          </a>
+        )}
+        {d.licenseUrl && (
+          <a href={d.licenseUrl} target="_blank" rel="noreferrer" className={linkClass}>
+            LICENCE
+            <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
+          </a>
+        )}
+        {d.policyUrl && (
+          <a href={d.policyUrl} target="_blank" rel="noreferrer" className={linkClass}>
+            PUBLISHING POLICY
+            <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
+          </a>
+        )}
+        {onRecheck && (
+          <button
+            type="button"
+            onClick={() => onRecheck(d.publicationId)}
+            disabled={rechecking || busy}
+            className={cn(linkClass, "disabled:cursor-not-allowed disabled:opacity-50")}
+            title="Open the published file again, read its first release, and re-check the publisher's portal"
+          >
+            <RefreshCw className={cn("h-2.5 w-2.5", rechecking && "animate-spin")} aria-hidden="true" />
+            {rechecking ? "CHECKING" : "RE-CHECK"}
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function PortalSync() {
+  const { data, failed } = useOcpRegistry();
+  const countries = data?.countries ?? [];
+  const datasets = data?.datasets ?? [];
+  const links = data?.links.links ?? {};
+  const linkedByCountry = new Map<string, number>();
+  for (const d of datasets) {
+    if (links[String(d.publicationId)]?.registry.ok) {
+      linkedByCountry.set(d.country, (linkedByCountry.get(d.country) ?? 0) + 1);
+    }
+  }
   return (
     <div className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
       <div className="flex items-center justify-between">
         <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Connected portals</h3>
-        <span className="font-code text-[8px] tracking-[0.2em] text-ink-400">4 CONNECTED</span>
+        <span className="font-code text-[8px] tracking-[0.2em] text-ink-400">
+          {data
+            ? `${countries.length} COUNTRIES · ${datasets.length} DATASETS`
+            : failed
+              ? "REGISTRY UNREACHABLE"
+              : "READING THE REGISTRY…"}
+        </span>
       </div>
-      <ul className="mt-4 space-y-3">
-        {PORTALS.map((p) => (
-          <li key={p.name} className="flex items-center gap-3">
-            <span
-              className={cn(
-                "relative flex h-1.5 w-1.5 shrink-0",
-                !p.ok && "text-brand-600"
-              )}
-              aria-hidden="true"
-            >
-              {p.ok ? (
-                <span className="h-1.5 w-1.5 rounded-full bg-ink-950" />
-              ) : (
-                <>
-                  <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" />
-                </>
-              )}
-            </span>
-            <span className="flex-1 truncate font-code text-[9.5px] font-semibold tracking-[0.14em] text-ink-800">
-              {p.name}
-            </span>
-            <span className="font-code text-[8px] tracking-[0.14em] text-ink-400">{p.at}</span>
-            {!p.ok && (
-              <button
-                type="button"
-                onClick={() => onToast("PORTAL RE-SYNC IS NOT WIRED YET")}
-                aria-label={`Retry sync for ${p.name}`}
-                className="grid h-6 w-6 place-items-center rounded-md border border-ink-200 text-ink-500 transition-colors hover:border-brand-400 hover:text-brand-700"
-              >
-                <RefreshCw className="h-3 w-3" aria-hidden="true" />
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      <div className="mt-5 flex items-center gap-2.5 rounded-xl bg-sand px-3.5 py-3">
+      {data ? (
+        <ul className="mt-4 space-y-3">
+          {countries.map((c) => (
+            <li key={c.country} className="flex items-start gap-3">
+              <span
+                className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", c.stale > 0 ? "bg-brand-600" : "bg-ink-950")}
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="truncate font-code text-[9.5px] font-semibold tracking-[0.14em] text-ink-800">
+                    {c.country.toUpperCase()}
+                  </span>
+                  <span className="shrink-0 font-code text-[8px] tracking-[0.14em] text-ink-400">RETR. {c.lastRetrieved}</span>
+                </span>
+                <span className="mt-0.5 block font-code text-[7.5px] tracking-[0.16em] text-ink-400">
+                  {c.datasets} {c.datasets === 1 ? "DATASET" : "DATASETS"}
+                  {(linkedByCountry.get(c.country) ?? 0) > 0 ? ` · ${linkedByCountry.get(c.country)} LINKED` : ""}
+                  {c.stale > 0 ? ` · ${c.stale} NOT UPDATED` : ""}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 font-code text-[8.5px] leading-[1.9] tracking-[0.16em] text-ink-400">
+          {failed
+            ? "THE OCP DATA REGISTRY SNAPSHOT COULD NOT BE READ — SIDECAR OFFLINE"
+            : "READING THE OCP DATA REGISTRY…"}
+        </p>
+      )}
+      <p className="mt-4 font-code text-[7px] leading-[1.8] tracking-[0.14em] text-ink-400">
+        {data
+          ? `OCP DATA REGISTRY · RETRIEVED ${codeDate(data.source.retrieved)}`
+          : "OCP DATA REGISTRY · data.open-contracting.org"}
+      </p>
+      <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-sand px-3.5 py-3">
         <ShieldCheck className="h-4 w-4 shrink-0 text-brand-700" aria-hidden="true" />
         <p className="font-code text-[7.5px] leading-[1.8] tracking-[0.14em] text-ink-600">
           ACTIVITY LOG LOCKED AGAINST EDITS · CAN RUN ON YOUR OWN SERVERS
@@ -2253,7 +2559,7 @@ function ViewShell({
   );
 }
 
-function StandingRuleCard({ onToast }: { onToast: (m: string) => void }) {
+function StandingRuleCard() {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
       <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
@@ -2266,14 +2572,13 @@ function StandingRuleCard({ onToast }: { onToast: (m: string) => void }) {
           <br />
           <span className="text-brand-400">THE COMMITTEE SIGNS — THE AGENT NEVER DOES.</span>
         </p>
-        <button
-          type="button"
-          onClick={() => onToast("STANDING RULES — 3 CLAUSES · UNEDITABLE BY DESIGN")}
+        <a
+          href="/docs#docs-safeguards"
           className="mt-4 inline-flex items-center gap-1.5 font-code text-[8.5px] font-bold tracking-[0.2em] text-ink-300 transition-colors hover:text-white"
         >
           READ THE RULES
           <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
-        </button>
+        </a>
       </div>
     </div>
   );
@@ -2404,7 +2709,7 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
                   {rows.length} FLAGS · {open} OPEN · 0 UNSOURCED
                 </p>
               </div>
-              <div className="flex items-center gap-1.5" role="group" aria-label="Filter findings by status">
+              <div data-tour="findings-filters" className="flex items-center gap-1.5" role="group" aria-label="Filter findings by status">
                 {(["ALL", "OPEN", "CLEARED", "RE-CHECK"] as const).map((k) => (
                   <button
                     key={k}
@@ -2423,7 +2728,7 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
                 ))}
               </div>
             </header>
-            <div className="max-h-[520px] overflow-y-auto [scrollbar-width:thin]">
+            <div data-tour="findings-rows" className="max-h-[520px] overflow-y-auto [scrollbar-width:thin]">
               <table className="w-full min-w-[620px] border-collapse text-left">
                 <caption className="sr-only">Findings ledger — every flag with its class, status and source</caption>
                 <thead className="sticky top-0 z-10 bg-paper/95 backdrop-blur">
@@ -2533,24 +2838,328 @@ function shaTag(id: string): string {
   return `${a}…${b}`;
 }
 
+/* The sealed pack leaves the desk as a real file — the evidence, portable. */
+function packMarkdown(run: McRun, findings: SeedFinding[], verdict: "AWARDED" | "RETURNED" | null): string {
+  const pages = 58 + run.citations * 9;
+  const size = (2.4 + run.findings * 1.6).toFixed(1);
+  const lines = [
+    `# Quorum — committee pack · ${run.id}`,
+    "",
+    `- Run record: ${run.uid ?? run.id}`,
+    `- Status: SEALED${verdict ? ` · ${verdict}` : " AT THE GATE"}`,
+    `- Findings: ${run.findings} · Citations: ${run.citations} · Unsourced: ${run.unsourced}`,
+    `- Extent: ~${pages} pages · ${size} MB · sha256 ${shaTag(run.id)}`,
+    "",
+    "## Sourced findings",
+    ...(findings.length
+      ? findings.map((f) => `- [${f.cls}] ${f.note}${f.src ? ` — ${f.src}` : " — NO SOURCE ON FILE"}`)
+      : ["- The bound findings are listed in the sealed file."]),
+    "",
+    "## Audit trail",
+    "- Every finding above cites the page, clause or registry ID it was read from.",
+    `- Decision: ${verdict ? `${verdict} — signed at the gate.` : "seals at the gate."}`,
+  ];
+  return lines.join("\n");
+}
+
+/* The draft pack, opened for reading: exactly what sealing will carry,
+   export still locked. The preview the walkthrough promises. */
+function PackPreviewModal({
+  run,
+  findings,
+  onClose,
+  onOpenApprovals,
+}: {
+  run: McRun | null;
+  findings: SeedFinding[];
+  onClose: () => void;
+  onOpenApprovals: () => void;
+}) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+
+  /* Focus moves into the sheet; Escape hands the desk back — and the
+     officer's focus returns to the button that opened the preview. */
+  useEffect(() => {
+    if (!run) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const t = setTimeout(() => closeRef.current?.focus(), 60);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("keydown", onKey);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [run, onClose]);
+
+  /* Tab stays inside the dialog. */
+  const trapTab = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const nodes = Array.from(
+      cardRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [],
+    );
+    if (nodes.length === 0) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || !cardRef.current?.contains(active))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  const rows = useMemo(() => (run ? findings.filter((f) => f.run === run.id) : []), [run, findings]);
+  const shown = rows.slice(0, 5);
+  const pages = run ? 58 + run.citations * 9 : 0;
+  const size = run ? (2.4 + run.findings * 1.6).toFixed(1) : "0";
+
+  return (
+    <AnimatePresence>
+      {run && (
+        <motion.div
+          key="pack-preview"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[70] grid place-items-center bg-night/70 p-4 backdrop-blur-sm"
+          onClick={onClose}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pack-preview-title"
+        >
+          <motion.div
+            ref={cardRef}
+            initial={{ opacity: 0, y: 18, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.28, ease: EASE }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={trapTab}
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_30px_80px_rgba(11,12,15,0.35)] sm:p-7"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-code text-[8px] font-semibold tracking-[0.24em] text-ink-400">REPORT PACK · DRAFT PREVIEW</p>
+                <h3 id="pack-preview-title" className="mt-1 font-display text-[22px] font-black tracking-[-0.015em] text-ink-950">
+                  Committee pack — draft
+                </h3>
+                <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-ink-500">
+                  The pack is drafted in full. Nothing leaves the desk until the gate signs — this sheet is exactly what
+                  the sealed file will carry.
+                </p>
+              </div>
+              <button
+                ref={closeRef}
+                type="button"
+                onClick={onClose}
+                aria-label="Close the preview"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-paper hover:text-ink-900"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* The sheet — a draft of the sealed document, marked as such */}
+            <div className="relative mt-5 overflow-hidden rounded-2xl border border-ink-100 bg-paper p-5 sm:p-6">
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-2 top-7 rotate-12 select-none font-display text-[64px] font-black leading-none tracking-[-0.02em] text-ink-950/[0.05]"
+              >
+                DRAFT
+              </span>
+              <div className="relative">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-6 w-6 place-items-center rounded-md bg-ink-950 font-display text-[10px] font-black text-white">
+                      Q
+                    </span>
+                    <p className="font-code text-[8.5px] font-bold tracking-[0.22em] text-ink-950">
+                      QUORUM · PROCUREMENT REVIEW
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1 font-code text-[7.5px] font-bold tracking-[0.16em] text-ink-600">
+                    <Lock className="h-2.5 w-2.5" aria-hidden="true" />
+                    UNSEALED · PENDING GATE
+                  </span>
+                </div>
+
+                <p className="mt-4 font-code text-[8px] tracking-[0.2em] text-ink-400">TENDER</p>
+                <p className="mt-1 font-display text-[24px] font-black tracking-[-0.02em] text-ink-950">{run.id}</p>
+                <p className="mt-1 font-code text-[8.5px] tracking-[0.14em] text-ink-500">
+                  RUN {run.uid ?? run.id} · STARTED {run.startedAt} · PREPARED FOR THE COMMITTEE
+                </p>
+
+                <dl className="mt-5 grid grid-cols-2 gap-3 border-y border-ink-950/10 py-3.5 sm:grid-cols-4">
+                  {[
+                    { k: "FINDINGS", v: String(run.findings), tone: "text-ink-950" },
+                    { k: "CITED", v: String(run.citations), tone: "text-ink-950" },
+                    { k: "UNSOURCED", v: "0", tone: "text-brand-700" },
+                    { k: "EXTENT", v: `~${pages} pp`, tone: "text-ink-950" },
+                  ].map((cell) => (
+                    <div key={cell.k}>
+                      <dt className="font-code text-[7.5px] tracking-[0.18em] text-ink-400">{cell.k}</dt>
+                      <dd className={cn("mt-1 text-[14px] font-bold tabular", cell.tone)}>{cell.v}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-3 font-code text-[8px] tracking-[0.14em] text-ink-400">
+                  SIZE ~{size} MB · sha256 {shaTag(run.id)}
+                </p>
+
+                <p className="mt-5 font-code text-[8.5px] font-bold tracking-[0.22em] text-ink-950">THE PACK BINDS</p>
+                <ul className="mt-2.5 space-y-2">
+                  {[
+                    {
+                      n: "01",
+                      t: `${run.findings} sourced findings`,
+                      d: "classed and cited to the page, clause or registry each was read from.",
+                    },
+                    {
+                      n: "02",
+                      t: `${run.citations} citations`,
+                      d: "the evidence behind every finding, filed with the run.",
+                    },
+                    {
+                      n: "03",
+                      t: `Audit hash · sha256 ${shaTag(run.id)}`,
+                      d: "covers every page of the sealed file.",
+                    },
+                    {
+                      n: "04",
+                      t: "Decision sheet",
+                      d: "unsigned — the committee's signature seals the pack.",
+                    },
+                  ].map((item) => (
+                    <li key={item.n} className="flex items-baseline gap-2.5">
+                      <span className="font-code text-[8px] font-bold tracking-[0.14em] text-ink-300">{item.n}</span>
+                      <span className="min-w-0">
+                        <span className="text-[12.5px] font-semibold text-ink-900">{item.t}</span>
+                        <span className="text-[12px] text-ink-500"> — {item.d}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
+                <p className="mt-5 font-code text-[8.5px] font-bold tracking-[0.22em] text-ink-950">
+                  FIRST FINDINGS, AS THEY&apos;LL SEAL
+                </p>
+                <ul className="mt-2.5 space-y-2.5">
+                  {shown.map((f, i) => (
+                    <li key={`${f.run}-${i}`} className="flex gap-2.5">
+                      <span className="mt-px inline-flex h-fit shrink-0 rounded-md border border-ink-200 bg-white px-2 py-1 font-code text-[7px] font-bold tracking-[0.14em] text-ink-600">
+                        {f.cls}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[12px] leading-snug text-ink-800">{f.note}</span>
+                        <span className="mt-0.5 block font-code text-[7.5px] tracking-[0.12em] text-ink-400">
+                          {f.src || "NO SOURCE ON FILE"}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                  {rows.length === 0 && (
+                    <li className="font-code text-[8.5px] tracking-[0.16em] text-ink-400">
+                      FINDING DETAIL BINDS AT SEAL TIME
+                    </li>
+                  )}
+                </ul>
+                {rows.length > shown.length && (
+                  <p className="mt-2.5 font-code text-[8px] tracking-[0.16em] text-ink-400">
+                    + {rows.length - shown.length} MORE FINDINGS — ALL BOUND IN THE SEALED PACK
+                  </p>
+                )}
+
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-100 bg-white px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink-950 text-white">
+                      <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <p className="font-code text-[8.5px] font-bold tracking-[0.18em] text-ink-950">EXPORT LOCKED</p>
+                      <p className="mt-0.5 text-[11.5px] leading-snug text-ink-500">
+                        Seals the moment the committee signs at the gate.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex h-8 cursor-not-allowed items-center gap-1.5 rounded-lg border border-ink-100 px-3 font-code text-[8px] font-bold tracking-[0.16em] text-ink-300"
+                  >
+                    <Lock className="h-3 w-3" aria-hidden="true" />
+                    UNLOCKS ON SIGNATURE
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <p className="max-w-sm text-[11.5px] leading-relaxed text-ink-400">
+                The verdict prints on the cover once the gate records it — AWARDED or RETURNED.
+              </p>
+              <div className="flex items-center gap-2">
+                {run.status === "gate" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenApprovals();
+                    }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-ink-200 px-3.5 font-code text-[8.5px] font-bold tracking-[0.16em] text-ink-700 transition-colors hover:border-ink-950 hover:text-ink-950"
+                  >
+                    GO TO APPROVALS
+                    <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex h-9 items-center rounded-xl bg-ink-950 px-4 font-code text-[8.5px] font-bold tracking-[0.16em] text-white transition-colors hover:bg-brand-600"
+                >
+                  CLOSE PREVIEW
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function ReportPacksView({
   runs,
   verdicts,
+  findings,
   onToast,
+  onOpenApprovals,
 }: {
   runs: McRun[];
   verdicts: Record<string, "AWARDED" | "RETURNED">;
+  findings: SeedFinding[];
   onToast: (m: string) => void;
+  onOpenApprovals: () => void;
 }) {
   const packs = runs.filter((r) => r.findings > 0 && (r.status === "gate" || r.status === "complete"));
+  const [preview, setPreview] = useState<McRun | null>(null);
+  /* Stable close — the dialog's Escape listener must not churn as polls land. */
+  const closePreview = useCallback(() => setPreview(null), []);
 
   return (
+    <>
     <ViewShell
       fig="09"
       title="Report packs"
       sub="The sourced report is the deliverable — findings, citations and the audit hash, bound per run. A pack seals the moment the committee signs; after that it is evidence, not a document."
     >
-      <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)] sm:p-6">
+      <div data-tour="reports-intro" className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)] sm:p-6">
         <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -2571,7 +3180,7 @@ function ReportPacksView({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:grid-cols-2">
+      <div data-tour="reports-list" className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:grid-cols-2">
         {packs.map((run, i) => {
           const assembling = run.status === "gate";
           const v = verdicts[run.id];
@@ -2583,6 +3192,7 @@ function ReportPacksView({
                 : null;
           const pages = 58 + run.citations * 9;
           const size = (2.4 + run.findings * 1.6).toFixed(1);
+          const packFindings = findings.filter((f) => f.run === run.id);
           return (
             <motion.article
               key={run.uid ?? run.id}
@@ -2632,20 +3242,27 @@ function ReportPacksView({
                   </>
                 )}
               </p>
-              <div className="mt-4 flex items-center gap-2 pt-1">
+              <div data-tour="report-download" className="mt-4 flex items-center gap-2 pt-1">
                 {assembling ? (
                   <button
                     type="button"
-                    onClick={() => onToast(`${run.id} SEALS AT THE GATE — EXPORT UNLOCKS ON SIGNATURE`)}
+                    onClick={() => setPreview(run)}
+                    aria-haspopup="dialog"
                     className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-200 px-3 font-code text-[8.5px] font-bold tracking-[0.14em] text-ink-500 transition-colors hover:border-ink-400 hover:text-ink-800"
                   >
-                    <Lock className="h-3 w-3" aria-hidden="true" />
+                    <Eye className="h-3 w-3" aria-hidden="true" />
                     PREVIEW ONLY
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => onToast(`EXPORT QUEUED — ${run.id} · PDF + OCDS · ${size} MB`)}
+                    onClick={() => {
+                      downloadText(
+                        `quorum-${run.id.replace(/[^\w-]+/g, "-")}-pack.md`,
+                        packMarkdown(run, packFindings, v ?? null),
+                      );
+                      onToast(`PACK DOWNLOADED — ${run.id} · MARKDOWN + AUDIT HASH`);
+                    }}
                     className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-ink-950 px-3 font-code text-[8.5px] font-bold tracking-[0.14em] text-white transition-colors hover:bg-brand-600"
                   >
                     <Download className="h-3 w-3" aria-hidden="true" />
@@ -2670,17 +3287,18 @@ function ReportPacksView({
         })}
       </div>
     </ViewShell>
+
+    <PackPreviewModal
+      run={preview}
+      findings={findings}
+      onClose={closePreview}
+      onOpenApprovals={onOpenApprovals}
+    />
+    </>
   );
 }
 
 /* ── Sources & portals ───────────────────────────────────────────────────── */
-
-const PORTAL_KINDS: Record<string, string> = {
-  "OCDS EXPLORER": "OPEN DATA · OCDS 1.1",
-  "PPA · KENYA": "NATIONAL PORTAL",
-  "PRAZ · ZIMBABWE": "NATIONAL PORTAL",
-  "GGPPBD · GHANA": "NATIONAL PORTAL",
-};
 
 type SampleTenderRow = {
   ref: string;
@@ -2721,17 +3339,17 @@ function RequestsPanel({ requests }: { requests: SourceRequestRow[] }) {
       </header>
       <ul>
         {requests.map((r) => (
-          <li key={r.id} className="flex flex-wrap items-center gap-3 border-b border-ink-50 px-5 py-3.5 last:border-b-0">
-            <span className="min-w-0 flex-1">
+          <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-ink-50 px-5 py-3.5 last:border-b-0">
+            <span className="min-w-0 w-full sm:w-auto sm:flex-1">
               <span className="block truncate font-code text-[10px] font-bold tracking-[0.12em] text-ink-950">{r.name}</span>
               <span className="mt-0.5 block font-code text-[7.5px] tracking-[0.18em] text-ink-400">
                 {r.kind} · BY {r.requestedBy.toUpperCase()} · {clockOf(r.createdAt).toUpperCase()}
               </span>
             </span>
-            {r.note && <span className="max-w-[320px] truncate text-[12px] text-ink-500">{r.note}</span>}
+            {r.note && <span className="min-w-0 flex-1 truncate text-[12px] text-ink-500 sm:max-w-[320px] sm:flex-none">{r.note}</span>}
             <span
               className={cn(
-                "rounded-full px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em]",
+                "shrink-0 rounded-full px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em]",
                 r.status === "PENDING" ? "bg-brand-600 text-white" : "bg-ink-950 text-white"
               )}
             >
@@ -2746,7 +3364,18 @@ function RequestsPanel({ requests }: { requests: SourceRequestRow[] }) {
 
 function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; firstName: string }) {
   const standards = ["OCDS 1.1", "MCP TOOLS", "LLM DRAFTING", "PAGE CITATIONS"];
-  const degraded = PORTALS.filter((p) => !p.ok).length;
+  const { data: registry, failed: registryFailed, reload: reloadRegistry } = useOcpRegistry();
+  const [openCountry, setOpenCountry] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectProgress, setConnectProgress] = useState<{ done: number; total: number } | null>(null);
+  const [rechecking, setRechecking] = useState<number | null>(null);
+
+  /* Connection truth, straight from the sidecar's saved checks. */
+  const links = registry?.links?.links ?? {};
+  const datasets = registry?.datasets ?? [];
+  const linkedCount = datasets.filter((d) => links[String(d.publicationId)]?.registry.ok).length;
+  const portalUpCount = datasets.filter((d) => links[String(d.publicationId)]?.portal.ok).length;
+  const missingLinks = datasets.length - linkedCount;
 
   /* Live source requests from the quorum-mcp sidecar — pending ones show
      up right on the page; every request is audit-logged on the sidecar. */
@@ -2802,6 +3431,42 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
     }
   };
 
+  /* A real connection pass: the sidecar opens each published file, reads its
+     first OCDS release and checks the publisher's portal. Batched so the
+     card can show honest progress; every result is saved by the sidecar. */
+  const connectDatasets = useCallback(
+    async (ids: number[]) => {
+      if (ids.length === 0) return;
+      const single = ids.length === 1;
+      if (single) setRechecking(ids[0]);
+      else {
+        setConnecting(true);
+        setConnectProgress({ done: 0, total: ids.length });
+      }
+      try {
+        for (let i = 0; i < ids.length; i += 4) {
+          const chunk = ids.slice(i, i + 4);
+          const res = await fetch("/api/portal-connect?XTransformPort=3031", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ publicationIds: chunk, actor: firstName || "unknown" }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (!single) setConnectProgress({ done: Math.min(i + chunk.length, ids.length), total: ids.length });
+        }
+        reloadRegistry();
+        onToast(single ? "PORTAL RE-CHECKED — THE RESULT IS SAVED" : "CONNECTION PASS COMPLETE — EVERY CHECK IS SAVED");
+      } catch {
+        onToast("THE CONNECTION CHECK COULD NOT RUN — NOTHING WAS RECORDED");
+      } finally {
+        setConnecting(false);
+        setConnectProgress(null);
+        setRechecking(null);
+      }
+    },
+    [firstName, onToast, reloadRegistry],
+  );
+
   return (
     <ViewShell
       fig="10"
@@ -2810,6 +3475,7 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
       action={
         <button
           type="button"
+          data-tour="sources-request-btn"
           onClick={() => {
             setReqOpen(true);
             requestAnimationFrame(() => reqNameRef.current?.focus());
@@ -2821,7 +3487,7 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
         </button>
       }
     >
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+      <div data-tour="sources-standards" className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         {standards.map((s, i) => (
           <motion.div
             key={s}
@@ -2839,71 +3505,157 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
       <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
           <RequestsPanel requests={requests} />
-          <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
-            <header className="flex items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
+          <div data-tour="sources-portals" className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
               <div>
                 <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">Connected portals</h2>
                 <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
-                  {PORTALS.length} SOURCES · {degraded} DEGRADED
+                  {registry
+                    ? `${registry.countries.length} COUNTRIES · ${registry.datasets.length} DATASETS · ${linkedCount}/${registry.datasets.length} LINKED · ${
+                        registry.datasets.filter((d) => d.stale).length
+                      } NO LONGER UPDATED`
+                    : registryFailed
+                      ? "THE REGISTRY SNAPSHOT COULD NOT BE READ"
+                      : "READING THE OCP DATA REGISTRY…"}
                 </p>
               </div>
-              <span className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1.5 font-code text-[8px] font-semibold tracking-[0.18em] text-ink-600">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1.5 font-code text-[8px] font-semibold tracking-[0.18em] text-ink-600">
+                  <span className="h-1.5 w-1.5 rounded-full bg-ink-950" aria-hidden="true" />
+                  OCP REGISTRY{registry ? ` · ${codeDate(registry.source.retrieved)}` : ""}
                 </span>
-                POLLING
-              </span>
-            </header>
-            <ul>
-              {PORTALS.map((p) => (
-                <li
-                  key={p.name}
-                  className="flex flex-wrap items-center gap-3 border-b border-ink-50 px-5 py-4 last:border-b-0"
+                <button
+                  type="button"
+                  onClick={() => void connectDatasets(datasets.map((d) => d.publicationId))}
+                  disabled={!registry || connecting || rechecking !== null}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 font-code text-[8px] font-bold tracking-[0.16em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Open every published file, read its first OCDS release, and check the publisher's portal — each result is dated and saved"
                 >
-                  <span
-                    className={cn("relative flex h-2 w-2 shrink-0", !p.ok && "text-brand-600")}
-                    aria-hidden="true"
-                  >
-                    {p.ok ? (
-                      <span className="h-2 w-2 rounded-full bg-ink-950" />
-                    ) : (
-                      <>
-                        <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-600" />
-                      </>
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-code text-[10px] font-bold tracking-[0.12em] text-ink-950">
-                      {p.name}
-                    </span>
-                    <span className="mt-0.5 block font-code text-[7.5px] tracking-[0.18em] text-ink-400">
-                      {PORTAL_KINDS[p.name] ?? "DATA SOURCE"}
-                    </span>
-                  </span>
-                  <span className="font-code text-[8px] tracking-[0.14em] text-ink-400">SYNCED {p.at}</span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2.5 py-1 font-code text-[8px] font-bold tracking-[0.16em]",
-                      p.ok ? "bg-ink-950 text-white" : "bg-brand-600 text-white"
-                    )}
-                  >
-                    {p.ok ? "SYNCED" : "DEGRADED"}
-                  </span>
-                  {!p.ok && (
-                    <button
-                      type="button"
-                      onClick={() => onToast("PORTAL RE-SYNC IS NOT WIRED YET")}
-                      aria-label={`Retry sync for ${p.name}`}
-                      className="grid h-7 w-7 place-items-center rounded-md border border-ink-200 text-ink-500 transition-colors hover:border-brand-400 hover:text-brand-700"
-                    >
-                      <RefreshCw className="h-3 w-3" aria-hidden="true" />
-                    </button>
+                  {connecting ? (
+                    <RefreshCw className="h-3 w-3 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Cable className="h-3 w-3" aria-hidden="true" />
                   )}
-                </li>
-              ))}
-            </ul>
+                  {connecting && connectProgress
+                    ? `CHECKING ${connectProgress.done}/${connectProgress.total}`
+                    : missingLinks > 0
+                      ? `CONNECT ${missingLinks} PORTAL${missingLinks === 1 ? "" : "S"}`
+                      : "RE-CHECK CONNECTIONS"}
+                </button>
+              </div>
+            </header>
+            {registryFailed && !registry ? (
+              <div className="flex flex-wrap items-center gap-3 px-5 py-5">
+                <p className="min-w-0 flex-1 font-code text-[8.5px] leading-[1.9] tracking-[0.16em] text-ink-400">
+                  THE OCP DATA REGISTRY SNAPSHOT COULD NOT BE READ — THE quorum-mcp SIDECAR IS NOT RESPONDING
+                </p>
+                <button
+                  type="button"
+                  onClick={reloadRegistry}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 px-3 font-code text-[8px] font-bold tracking-[0.16em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950"
+                >
+                  <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                  RETRY
+                </button>
+              </div>
+            ) : (
+              <ul>
+                {(registry?.countries ?? []).map((c) => {
+                  const rows = (registry?.datasets ?? []).filter((d) => d.country === c.country);
+                  const open = openCountry === c.country;
+                  const status = c.stale === 0 ? "UPDATING" : c.stale === c.datasets ? "ARCHIVED" : "PARTIAL";
+                  return (
+                    <li key={c.country} className="border-b border-ink-50 last:border-b-0">
+                      <button
+                        type="button"
+                        onClick={() => setOpenCountry(open ? null : c.country)}
+                        aria-expanded={open}
+                        className="flex w-full flex-wrap items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-sand/50"
+                      >
+                        <span
+                          className={cn("h-2 w-2 shrink-0 rounded-full", c.stale > 0 ? "bg-brand-600" : "bg-ink-950")}
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="font-code text-[10px] font-bold tracking-[0.12em] text-ink-950">
+                              {c.country.toUpperCase()}
+                            </span>
+                            <span className="rounded border border-ink-200 px-1 py-px font-code text-[7px] tracking-[0.16em] text-ink-400">
+                              {c.iso}
+                            </span>
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-0.5 font-code text-[7px] font-bold tracking-[0.16em] text-white",
+                                status === "UPDATING" ? "bg-ink-950" : status === "PARTIAL" ? "bg-brand-600" : "bg-ink-400"
+                              )}
+                              title={
+                                status === "UPDATING"
+                                  ? "Every dataset from this country is still being updated by its publisher"
+                                  : status === "PARTIAL"
+                                    ? "Some datasets from this country are no longer updated by their publishers"
+                                    : "Every dataset from this country is no longer updated by its publisher"
+                              }
+                            >
+                              {status}
+                            </span>
+                          </span>
+                          <span className="mt-1 block font-code text-[7.5px] tracking-[0.18em] text-ink-400">
+                            {c.datasets} {c.datasets === 1 ? "DATASET" : "DATASETS"} · {c.publishers.length}{" "}
+                            {c.publishers.length === 1 ? "PUBLISHER" : "PUBLISHERS"} · RECORD {c.coverageFrom} →{" "}
+                            {c.coverageTo} · RETRIEVED {c.lastRetrieved}
+                          </span>
+                        </span>
+                        <ChevronDown
+                          className={cn("h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform", open && "rotate-180")}
+                          aria-hidden="true"
+                        />
+                      </button>
+                      {open && (
+                        <ul className="bg-sand/40">
+                          {rows.map((d) => (
+                            <OcpDatasetRow
+                              key={d.publicationId}
+                              d={d}
+                              link={links[String(d.publicationId)]}
+                              onRecheck={(id) => void connectDatasets([id])}
+                              rechecking={rechecking === d.publicationId}
+                              busy={connecting || rechecking !== null}
+                            />
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <footer className="border-t border-ink-100 bg-sand px-5 py-3.5">
+              <p className="font-code text-[7px] leading-[2] tracking-[0.14em] text-ink-500">
+                READ FROM THE OCP DATA REGISTRY ·{" "}
+                <a
+                  href="https://data.open-contracting.org/en/search/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-ink-300 underline-offset-2 transition-colors hover:text-ink-950"
+                >
+                  data.open-contracting.org/en/search
+                </a>
+                {registry
+                  ? ` · ${registry.source.scope.toUpperCase()} · RETRIEVED ${codeDate(registry.source.retrieved)}`
+                  : ""}
+                <br />
+                {registry
+                  ? `${registry.source.note.toUpperCase()} ${registry.source.licenseNote.toUpperCase()}`
+                  : "EVERY FIELD IS THE REGISTRY'S OWN — COUNTRIES, PUBLISHERS, COVERAGE, RETRIEVALS, FORMATS, LICENCES AND COUNTS."}
+                <br />
+                {registry
+                  ? `CONNECTIONS · EVERY DATASET OPENED AND ITS FIRST OCDS RELEASE READ · ${linkedCount}/${registry.datasets.length} LINKED · ${portalUpCount}/${registry.datasets.length} PUBLISHER PORTALS ANSWERED · LAST CHECK ${
+                      registry.links.updatedAt ? codeStamp(registry.links.updatedAt) : "NOT YET"
+                    }`
+                  : "CONNECTIONS · THE SIDECAR OPENS EVERY PUBLISHED FILE AND CHECKS EACH PUBLISHER PORTAL."}
+              </p>
+            </footer>
           </div>
         </div>
         <div className="grid content-start gap-4 sm:gap-6">
@@ -3075,7 +3827,7 @@ function AwardLedgerView({
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-2">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+          <div data-tour="ledger-stats" className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
             {[
               { label: "DECISIONS LOGGED", value: ledger.length },
               { label: "AWARDED", value: awarded },
@@ -3095,7 +3847,7 @@ function AwardLedgerView({
             ))}
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+          <div data-tour="ledger-rows" className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] border-collapse text-left">
                 <caption className="sr-only">Award ledger — decisions signed at the human gate</caption>
@@ -3169,7 +3921,7 @@ function AwardLedgerView({
               </p>
             </div>
           </div>
-          <StandingRuleCard onToast={onToast} />
+          <StandingRuleCard />
         </div>
       </div>
     </ViewShell>
@@ -3178,14 +3930,42 @@ function AwardLedgerView({
 
 /* ── Committee ───────────────────────────────────────────────────────────── */
 
+type SittingAttendanceView = {
+  memberId: string;
+  name: string;
+  role: string;
+  expected: "PRESENT" | "EXCUSED" | "OFFICER";
+  admitted: boolean;
+  admittedAt: string | null;
+  admittedBy: string | null;
+};
+
+type SittingView = {
+  id: string;
+  title: string;
+  room: string;
+  joinUrl: string;
+  agenda: string | null;
+  summonedBy: string;
+  summonedAt: string;
+  status: "OPEN" | "CLOSED";
+  closedAt: string | null;
+  notes: string;
+  notesUpdatedAt: string | null;
+  notesUpdatedBy: string | null;
+  attendance: SittingAttendanceView[];
+};
+
 type CommitteeData = {
   seats: number;
   required: number;
   present: number;
   open: number;
-  members: { name: string; role: string; isChair: boolean; status: "PRESENT" | "EXCUSED" }[];
+  members: { id: string; name: string; role: string; isChair: boolean; status: "PRESENT" | "EXCUSED" }[];
   you: { name: string } | null;
   lastSummonsAt: string | null;
+  sitting: SittingView | null;
+  sittings: SittingView[];
 };
 
 const NUMBER_WORDS = [
@@ -3208,10 +3988,92 @@ function summonsClock(iso: string): string {
   }
 }
 
+function dayOf(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  } catch {
+    return "—";
+  }
+}
+
+/* A guard change's moment, to the minute — the audit line's timestamp. */
+function stampOf(iso: string): string {
+  try {
+    return new Date(iso)
+      .toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+      .toUpperCase();
+  } catch {
+    return "—";
+  }
+}
+
+/* The minutes leave the desk as a real file — the record, portable. */
+function minutesMarkdown(s: SittingView): string {
+  const lines = [
+    `# Quorum — committee minutes · ${s.title}`,
+    "",
+    `- Summoned: ${dayOf(s.summonedAt)}, ${summonsClock(s.summonedAt)} — by ${s.summonedBy}`,
+    `- Room: ${s.joinUrl} (Jitsi Meet — open source, Apache-2.0)`,
+    s.status === "OPEN"
+      ? "- Status: OPEN — the room is live"
+      : `- Status: SEALED${s.closedAt ? ` at ${dayOf(s.closedAt)}, ${summonsClock(s.closedAt)}` : ""}`,
+    ...(s.agenda ? [`- Agenda: ${s.agenda}`] : []),
+    "",
+    "## The door — admitted to the meeting",
+    ...s.attendance.map(
+      (a) =>
+        `- [${a.admitted ? "x" : " "}] ${a.name} — ${a.role}${
+          a.admitted && a.admittedAt
+            ? ` (admitted ${summonsClock(a.admittedAt)}${a.admittedBy ? ` by ${a.admittedBy}` : ""})`
+            : a.expected === "EXCUSED"
+              ? " (excused)"
+              : ""
+        }`,
+    ),
+    "",
+    "## The minutes — written from the Quorum desk",
+    s.notes.trim() ? s.notes.trim() : "(no minutes were written)",
+  ];
+  if (s.notesUpdatedAt) {
+    lines.push("", `_Last written ${dayOf(s.notesUpdatedAt)}, ${summonsClock(s.notesUpdatedAt)} by ${s.notesUpdatedBy ?? "—"}._`);
+  }
+  return lines.join("\n");
+}
+
+function downloadText(filename: string, text: string): void {
+  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: string) => void }) {
   const [data, setData] = useState<CommitteeData | null>(null);
   const [loadErr, setLoadErr] = useState(false);
   const [summoning, setSummoning] = useState(false);
+
+  /* The sitting room — desk state */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [agenda, setAgenda] = useState("");
+  const [notesDraft, setNotesDraft] = useState("");
+  const [notesState, setNotesState] = useState<"idle" | "dirty" | "saving" | "error">("idle");
+  const [notesSavedAt, setNotesSavedAt] = useState<string | null>(null);
+  const [admitBusy, setAdmitBusy] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [memberOpen, setMemberOpen] = useState(false);
+  const [memberDraft, setMemberDraft] = useState({ name: "", role: "", isChair: false });
+  const [memberBusy, setMemberBusy] = useState(false);
+  const [memberErr, setMemberErr] = useState<string | null>(null);
+  const [armRemove, setArmRemove] = useState<string | null>(null);
+  const notesRef = useRef("");
+  const deskRef = useRef<HTMLDivElement | null>(null);
+  const closeArmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(() => {
     let alive = true;
@@ -3236,19 +4098,49 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
 
   useEffect(() => load(), [load]);
 
+  /* Which sitting the desk reads: the officer's pick, else the open one. */
+  const deskSitting = useMemo(() => {
+    if (!data) return null;
+    if (selectedId) return data.sittings.find((s) => s.id === selectedId) ?? data.sitting;
+    return data.sitting;
+  }, [data, selectedId]);
+  const openSitting = useMemo(() => data?.sittings.find((s) => s.status === "OPEN") ?? null, [data]);
+
+  /* The notes draft follows the sitting on the desk; it resets only when the
+     desk switches records — never mid-typing. */
+  useEffect(() => {
+    setNotesDraft(deskSitting?.notes ?? "");
+    notesRef.current = deskSitting?.notes ?? "";
+    setNotesState("idle");
+    setNotesSavedAt(deskSitting?.notesUpdatedAt ?? null);
+  }, [deskSitting?.id]);
+
   const summon = async () => {
     if (summoning) return;
     setSummoning(true);
     try {
-      const res = await fetch("/api/committee/summon", { method: "POST" });
-      const d = (await res.json()) as CommitteeData | { error: string };
+      const res = await fetch("/api/committee/summon", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agenda: agenda.trim() || undefined }),
+      });
+      const d = (await res.json()) as (CommitteeData & { minted?: boolean }) | { error: string };
       if (!res.ok || "error" in d) throw new Error("error" in d ? d.error : "failed");
       setData(d);
+      setSelectedId(null);
+      setAgenda("");
       onToast(
-        d.open === 0
-          ? "QUORUM PRESENT — THE SITTING CAN PROCEED"
-          : `SITTING SUMMONS ISSUED — ${d.open} SEAT${d.open === 1 ? "" : "S"} STILL PENDING QUORUM CALL`
+        d.minted
+          ? d.open === 0
+            ? "QUORUM PRESENT — ROOM MINTED; THE SITTING CAN PROCEED"
+            : `SITTING SUMMONS ISSUED — ROOM MINTED; ${d.open} SEAT${d.open === 1 ? "" : "S"} STILL PENDING QUORUM CALL`
+          : "A SITTING IS ALREADY OPEN — ITS ROOM IS ON THE DESK"
       );
+      if (d.minted) {
+        window.setTimeout(() => {
+          deskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 180);
+      }
     } catch {
       onToast("SUMMONS FAILED — COMMITTEE SERVICE UNREACHABLE");
     } finally {
@@ -3256,16 +4148,182 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
     }
   };
 
+  /* Autosave: one write 1.2s after the typing stops. A failure parks in
+     "error" and waits — retrying is a deliberate act, not a hot loop. */
+  const flushNotes = useCallback(async () => {
+    const s = deskSitting;
+    if (!s || s.status !== "OPEN") return;
+    const text = notesRef.current;
+    setNotesState("saving");
+    try {
+      const res = await fetch(`/api/committee/sittings/${s.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ notes: text }),
+      });
+      const d = (await res.json()) as CommitteeData | { error: string };
+      if (!res.ok || "error" in d) throw new Error("failed");
+      setData(d);
+      setNotesSavedAt(d.sitting?.notesUpdatedAt ?? new Date().toISOString());
+      setNotesState(notesRef.current === text ? "idle" : "dirty");
+    } catch {
+      setNotesState("error");
+    }
+  }, [deskSitting]);
+
+  useEffect(() => {
+    if (notesState !== "dirty") return;
+    const t = setTimeout(() => void flushNotes(), 1200);
+    return () => clearTimeout(t);
+  }, [notesDraft, notesState, flushNotes]);
+
+  const admit = async (memberId: string, admitted: boolean) => {
+    const s = deskSitting;
+    if (!s || s.status !== "OPEN" || admitBusy) return;
+    setAdmitBusy(memberId);
+    try {
+      const res = await fetch(`/api/committee/sittings/${s.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ attendance: [{ memberId, admitted }] }),
+      });
+      const d = (await res.json()) as CommitteeData | { error: string };
+      if (!res.ok || "error" in d) throw new Error("failed");
+      setData(d);
+      onToast(admitted ? "ADMITTED — ON THE DOOR RECORD" : "ADMISSION WITHDRAWN — THE DOOR NARROWS");
+    } catch {
+      onToast("THE DOOR REFUSED THE CHANGE — RETRY");
+    } finally {
+      setAdmitBusy(null);
+    }
+  };
+
+  const closeSitting = async () => {
+    const s = deskSitting;
+    if (!s || s.status !== "OPEN") return;
+    if (!confirmClose) {
+      setConfirmClose(true);
+      if (closeArmRef.current) clearTimeout(closeArmRef.current);
+      closeArmRef.current = setTimeout(() => setConfirmClose(false), 6000);
+      return;
+    }
+    if (closeArmRef.current) clearTimeout(closeArmRef.current);
+    setConfirmClose(false);
+    try {
+      const res = await fetch(`/api/committee/sittings/${s.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ notes: notesRef.current, close: true }),
+      });
+      const d = (await res.json()) as CommitteeData | { error: string };
+      if (!res.ok || "error" in d) throw new Error("failed");
+      setData(d);
+      onToast("SITTING SEALED — THE MINUTES ARE EVIDENCE NOW");
+    } catch {
+      onToast("THE SEAL FAILED — THE SITTING STAYS OPEN");
+    }
+  };
+
+  const copyLink = async () => {
+    if (!deskSitting) return;
+    try {
+      await navigator.clipboard.writeText(deskSitting.joinUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2400);
+      onToast("ROOM LINK COPIED — SHARE IT ONLY WITH THE REGISTER");
+    } catch {
+      onToast("COPY REFUSED BY THE BROWSER — SELECT THE ADDRESS BY HAND");
+    }
+  };
+
+  const downloadMinutes = () => {
+    if (!deskSitting) return;
+    downloadText(`quorum-${deskSitting.room}-minutes.md`, minutesMarkdown(deskSitting));
+    onToast("MINUTES DOWNLOADED — MARKDOWN, READY FOR THE FILE");
+  };
+
+  const addMember = async () => {
+    if (memberBusy) return;
+    const name = memberDraft.name.trim();
+    if (name.length < 2) {
+      setMemberErr("A full name is required — the register admits named humans, not seats.");
+      return;
+    }
+    setMemberBusy(true);
+    setMemberErr(null);
+    try {
+      const res = await fetch("/api/committee/members", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, role: memberDraft.role.trim() || undefined, isChair: memberDraft.isChair }),
+      });
+      const d = (await res.json()) as CommitteeData | { error: string };
+      if (!res.ok || "error" in d) throw new Error("error" in d ? d.error : "failed");
+      setData(d);
+      setMemberOpen(false);
+      setMemberDraft({ name: "", role: "", isChair: false });
+      onToast("MEMBER REGISTERED — THE DOOR LIST READS THE REGISTER");
+    } catch (err) {
+      setMemberErr(
+        err instanceof Error && err.message !== "failed"
+          ? err.message
+          : "THE MEMBER COULD NOT BE REGISTERED — RETRY"
+      );
+    } finally {
+      setMemberBusy(false);
+    }
+  };
+
+  const setMemberFlag = async (id: string, patch: { status?: "PRESENT" | "EXCUSED"; isChair?: boolean }) => {
+    try {
+      const res = await fetch(`/api/committee/members/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const d = (await res.json()) as CommitteeData | { error: string };
+      if (!res.ok || "error" in d) throw new Error("failed");
+      setData(d);
+      onToast(
+        patch.status === "EXCUSED"
+          ? "MARKED EXCUSED — THE QUORUM ACCOUNTING FOLLOWS"
+          : patch.status === "PRESENT"
+            ? "BACK ON THE ROLL — MARKED PRESENT"
+            : "THE CHAIR SEAT MOVES"
+      );
+    } catch {
+      onToast("THE ROSTER UPDATE FAILED — RETRY");
+    }
+  };
+
+  const removeMember = async (id: string) => {
+    if (armRemove !== id) {
+      setArmRemove(id);
+      setTimeout(() => setArmRemove((cur) => (cur === id ? null : cur)), 6000);
+      return;
+    }
+    setArmRemove(null);
+    try {
+      const res = await fetch(`/api/committee/members/${id}`, { method: "DELETE" });
+      const d = (await res.json()) as CommitteeData | { error: string };
+      if (!res.ok || "error" in d) throw new Error("failed");
+      setData(d);
+      onToast("MEMBER REMOVED FROM THE REGISTER");
+    } catch {
+      onToast("THE REMOVAL FAILED — RETRY");
+    }
+  };
+
   /* Roll-call order: the chair opens, the gavel sits second, then the rest.
      Excused members close the roll. Everything here comes from /api/committee —
      stored members plus the signed-in officer; nothing is hardcoded. */
-  const roll: { initials: string; name: string; role: string; you?: boolean; excused?: boolean }[] = [];
+  const roll: { initials: string; name: string; role: string; you?: boolean; excused?: boolean; id?: string }[] = [];
   if (data) {
     const presentMembers = data.members.filter((m) => m.status === "PRESENT");
     const excusedMembers = data.members.filter((m) => m.status === "EXCUSED");
     const chair = presentMembers.find((m) => m.isChair);
     const rest = presentMembers.filter((m) => !m.isChair);
-    if (chair) roll.push({ initials: initialsOf(chair.name), name: chair.name, role: chair.role });
+    if (chair) roll.push({ initials: initialsOf(chair.name), name: chair.name, role: chair.role, id: chair.id });
     if (data.you)
       roll.push({
         initials: initialsOf(data.you.name),
@@ -3273,9 +4331,9 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
         role: "PROCUREMENT OFFICER · HOLDS THE GAVEL",
         you: true,
       });
-    rest.forEach((m) => roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role }));
+    rest.forEach((m) => roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role, id: m.id }));
     excusedMembers.forEach((m) =>
-      roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role, excused: true })
+      roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role, excused: true, id: m.id })
     );
   }
   const youSeatIndex = roll.findIndex((m) => m.you); /* the gavel's square on the quorum grid */
@@ -3288,6 +4346,19 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
         data
           ? `${capWord(countWord(data.seats))} seats, ${countWord(data.present)} present — the quorum the law asks for before an award counts. The agent attends every sitting; it holds no seat and no gavel.`
           : "The roll-call is being read from the committee record — the seats, the presence, and the quorum the law asks for before an award counts."
+      }
+      action={
+        <button
+          type="button"
+          onClick={() => {
+            setMemberErr(null);
+            setMemberOpen(true);
+          }}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.18em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950"
+        >
+          <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+          REGISTER A MEMBER
+        </button>
       }
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
@@ -3315,7 +4386,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+            <div data-tour="committee-roll" className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
               {roll.map((m, i) => (
                 <motion.div
                   key={m.name}
@@ -3366,6 +4437,28 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
                       "PRESENT"
                     )}
                   </span>
+                  {!m.you && m.id && (
+                    <div className="mt-3 flex items-center gap-2.5 border-t border-ink-100 pt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => void setMemberFlag(m.id!, { status: m.excused ? "PRESENT" : "EXCUSED" })}
+                        className="font-code text-[7px] font-bold tracking-[0.16em] text-ink-400 transition-colors hover:text-ink-950"
+                      >
+                        {m.excused ? "RETURN TO THE ROLL" : "EXCUSE"}
+                      </button>
+                      <span className="h-3 w-px bg-ink-100" aria-hidden="true" />
+                      <button
+                        type="button"
+                        onClick={() => void removeMember(m.id!)}
+                        className={cn(
+                          "font-code text-[7px] font-bold tracking-[0.16em] transition-colors",
+                          armRemove === m.id ? "text-brand-600" : "text-ink-400 hover:text-brand-600"
+                        )}
+                      >
+                        {armRemove === m.id ? "TAP AGAIN — REMOVE" : "REMOVE"}
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               ))}
               {Array.from({ length: data.open }).map((_, i) => (
@@ -3387,7 +4480,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
         </div>
 
         <div className="grid content-start gap-4 sm:gap-6">
-          <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
+          <div data-tour="committee-quorum" className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
             <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
             <div className="relative">
               <div className="flex items-center justify-between gap-4">
@@ -3431,6 +4524,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
           <GavelProtocolCard />
           <button
             type="button"
+            data-tour="committee-summon"
             onClick={summon}
             disabled={!data || summoning}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-ink-200 bg-white px-4 font-code text-[9px] font-bold tracking-[0.18em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3444,6 +4538,501 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
           )}
         </div>
       </div>
+
+      {/* ── The sitting room — every summons mints a fresh Jitsi room (open
+             source; no accounts, nothing installed), the committee register
+             becomes the door list, and the minutes are written from this
+             desk straight into the record. ──────────────────────────────── */}
+      <div id="mc-sitting-desk" ref={deskRef} className="mt-4 scroll-mt-24 sm:mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="flex items-center gap-2.5 font-code text-[9px] font-bold uppercase tracking-[0.26em] text-ink-500">
+            <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
+            The sitting room
+          </p>
+          <span className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1.5 font-code text-[7.5px] font-bold tracking-[0.18em] text-ink-500">
+            <Video className="h-3 w-3 text-brand-600" aria-hidden="true" />
+            OPEN-SOURCE VIDEO · JITSI MEET
+          </span>
+        </div>
+
+        {data && !deskSitting && (
+          <div className="mt-3 rounded-2xl border border-dashed border-ink-200 bg-white/60 p-6 text-center sm:p-10">
+            <p className="font-code text-[9px] font-bold tracking-[0.24em] text-ink-500">NO SITTING HAS BEEN SUMMONED</p>
+            <p className="mx-auto mt-2 max-w-xl text-[13px] leading-relaxed text-ink-500">
+              A summons mints the room — a fresh, unlisted Jitsi address that no other meeting has ever used — and
+              opens the minutes on this desk. The door list is written from the committee register and nothing else:
+              only registered names are admitted, and every admission is recorded against the sitting.
+            </p>
+            <div className="mx-auto mt-5 flex max-w-md flex-col gap-2 sm:flex-row">
+              <input
+                value={agenda}
+                onChange={(e) => setAgenda(e.target.value)}
+                placeholder="Agenda — optional, e.g. 'Award decision: GRZ/2026/041'"
+                className="h-10 min-w-0 flex-1 rounded-xl border border-ink-200 bg-white px-3.5 text-[12.5px] text-ink-950 outline-none transition placeholder:text-ink-300 focus:border-ink-950"
+                aria-label="Optional agenda for the sitting"
+              />
+              <button
+                type="button"
+                onClick={() => void summon()}
+                disabled={summoning}
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 font-code text-[9px] font-bold tracking-[0.18em] text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Video className="h-3.5 w-3.5" aria-hidden="true" />
+                {summoning ? "MINTING THE ROOM…" : "SUMMON & MINT THE ROOM"}
+              </button>
+            </div>
+            <p className="mt-3 font-code text-[7.5px] tracking-[0.18em] text-ink-400">
+              THE OFFICER HOLDS THE GAVEL AND IS ADMITTED AT THE SUMMONS · THE MINUTES OPEN WITH THE ROOM
+            </p>
+          </div>
+        )}
+
+        {data && deskSitting && (
+          <>
+            {!openSitting ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink-100 bg-white px-4 py-3">
+                <p className="font-code text-[8px] font-bold tracking-[0.18em] text-ink-500">
+                  NO SITTING IS OPEN — THE DESK SHOWS A SEALED RECORD
+                </p>
+                <div className="flex min-w-0 items-center gap-2">
+                  <input
+                    value={agenda}
+                    onChange={(e) => setAgenda(e.target.value)}
+                    placeholder="Agenda (optional)"
+                    className="h-9 w-48 min-w-0 rounded-lg border border-ink-200 bg-white px-3 text-[12px] text-ink-950 outline-none transition placeholder:text-ink-300 focus:border-ink-950"
+                    aria-label="Optional agenda for the next sitting"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void summon()}
+                    disabled={summoning}
+                    className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-brand-600 px-4 font-code text-[8px] font-bold tracking-[0.18em] text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+                  >
+                    <Video className="h-3.5 w-3.5" aria-hidden="true" />
+                    {summoning ? "MINTING…" : "SUMMON A NEW SITTING"}
+                  </button>
+                </div>
+              </div>
+            ) : deskSitting.id !== openSitting.id ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink-100 bg-white px-4 py-3">
+                <p className="font-code text-[8px] font-bold tracking-[0.18em] text-ink-500">
+                  READING HISTORY — A SITTING IS OPEN
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(null)}
+                  className="font-code text-[8px] font-bold tracking-[0.18em] text-brand-600 transition-colors hover:text-brand-700"
+                >
+                  BACK TO THE OPEN SITTING →
+                </button>
+              </div>
+            ) : null}
+
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+              {/* Left — the room and the minutes */}
+              <div className="grid min-w-0 content-start gap-4 sm:gap-5">
+                <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)] sm:p-6">
+                  <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+                  <div className="relative">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-code text-[8px] font-semibold tracking-[0.24em] text-ink-400">
+                        {deskSitting.status === "OPEN" ? "THE ROOM IS OPEN" : "THE ROOM IS RETIRED"}
+                      </p>
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-code text-[7.5px] font-bold tracking-[0.16em]",
+                          deskSitting.status === "OPEN" ? "bg-brand-600 text-white" : "border border-white/20 text-ink-300"
+                        )}
+                      >
+                        {deskSitting.status === "OPEN"
+                          ? `LIVE · SUMMONED ${summonsClock(deskSitting.summonedAt)}`
+                          : `SEALED ${deskSitting.closedAt ? summonsClock(deskSitting.closedAt) : ""}`}
+                      </span>
+                    </div>
+                    <h3 className="mt-3 font-display text-[24px] font-black leading-tight tracking-[-0.02em] sm:text-[28px]">
+                      {deskSitting.status === "OPEN" ? (
+                        <>
+                          The floor is open<span className="text-brand-500">.</span>
+                        </>
+                      ) : (
+                        <>
+                          The record is sealed<span className="text-brand-500">.</span>
+                        </>
+                      )}
+                    </h3>
+                    <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-ink-300">
+                      {deskSitting.status === "OPEN"
+                        ? "Open the room in a second tab — keep this desk on screen. The minutes write into the record as the meeting talks, and the door below admits only names the register knows."
+                        : "The room's address is kept in the record and never reused. The minutes are evidence; the door list is final."}
+                    </p>
+                    <div className="mt-4 flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5">
+                      <Lock className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate font-code text-[10px] tracking-[0.06em] text-ink-200" title={deskSitting.joinUrl}>
+                        {deskSitting.joinUrl}
+                      </span>
+                    </div>
+                    {deskSitting.agenda && (
+                      <p className="mt-3 font-code text-[8px] tracking-[0.16em] text-ink-400">
+                        AGENDA — {deskSitting.agenda.toUpperCase()}
+                      </p>
+                    )}
+                    <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                      {deskSitting.status === "OPEN" ? (
+                        <a
+                          href={deskSitting.joinUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand-600 px-5 text-[13px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.3)] transition-colors hover:bg-brand-700"
+                        >
+                          <Video className="h-4 w-4" aria-hidden="true" />
+                          Open the room — Jitsi
+                          <ArrowUpRight className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
+                        </a>
+                      ) : (
+                        <span className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/15 px-5 text-[12px] font-semibold text-ink-300">
+                          <Lock className="h-4 w-4" aria-hidden="true" />
+                          Room retired — the record keeps its address
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void copyLink()}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/20 px-4 text-[12px] font-semibold text-white transition-colors hover:bg-white/10"
+                      >
+                        {copied ? <Check className="h-4 w-4 text-brand-400" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+                        {copied ? "Copied" : "Copy the link"}
+                      </button>
+                    </div>
+                    <p className="mt-3.5 font-code text-[7.5px] leading-[2] tracking-[0.16em] text-ink-400">
+                      JITSI MEET · FREE & OPEN SOURCE (APACHE-2.0) · NO ACCOUNT, NO INSTALL · MINTED FOR THIS SITTING ONLY
+                      {deskSitting.status === "OPEN" && <> · SUMMONED BY {deskSitting.summonedBy.toUpperCase()}</>}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+                  <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
+                    <div>
+                      <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">The minutes — captured here</h3>
+                      <p className="mt-0.5 font-code text-[7.5px] tracking-[0.18em] text-ink-400">
+                        WRITTEN FROM THE DESK · EVERY SAVE LANDS IN THE RECORD
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-code text-[7.5px] font-bold tracking-[0.16em]",
+                        notesState === "error"
+                          ? "border border-brand-200 bg-brand-50 text-brand-700"
+                          : notesState === "idle" && notesSavedAt
+                            ? "bg-ink-50 text-ink-600"
+                            : notesState === "idle"
+                              ? "border border-ink-200 bg-white text-ink-400"
+                              : "border border-ink-200 bg-white text-ink-500"
+                      )}
+                    >
+                      {deskSitting.status !== "OPEN"
+                        ? "SEALED — THE MINUTES STAND"
+                        : notesState === "saving"
+                          ? "SAVING…"
+                          : notesState === "dirty"
+                            ? "UNSAVED — TYPING…"
+                            : notesState === "error"
+                              ? "NOT SAVED — PRESS SAVE"
+                              : notesSavedAt
+                                ? `SAVED ${summonsClock(notesSavedAt)} · AUTO`
+                                : "NOTHING WRITTEN YET"}
+                    </span>
+                  </header>
+                  <div className="p-5">
+                    <textarea
+                      value={notesDraft}
+                      onChange={(e) => {
+                        setNotesDraft(e.target.value);
+                        notesRef.current = e.target.value;
+                        setNotesState("dirty");
+                      }}
+                      readOnly={deskSitting.status !== "OPEN"}
+                      placeholder={
+                        deskSitting.status === "OPEN"
+                          ? "Type the minutes as the room talks — the motion, the mover, the numbers cited, who hesitated. Autosaves to the sitting record."
+                          : "Sealed — the minutes above are the final text."
+                      }
+                      className={cn(
+                        "min-h-[240px] w-full resize-y rounded-xl border border-ink-200 bg-paper px-4 py-3 text-[13.5px] leading-relaxed text-ink-950 outline-none transition placeholder:text-ink-300 focus:border-ink-950 focus:ring-2 focus:ring-ink-950/10",
+                        deskSitting.status !== "OPEN" && "cursor-not-allowed bg-ink-50/60 text-ink-600"
+                      )}
+                      aria-label="The minutes of the sitting"
+                    />
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-code text-[7.5px] tracking-[0.18em] text-ink-400">
+                        {notesDraft.trim().length > 0 ? `${notesDraft.trim().length.toLocaleString()} CHARS · ` : ""}
+                        {deskSitting.notesUpdatedAt
+                          ? `LAST WRITTEN ${summonsClock(deskSitting.notesUpdatedAt)} BY ${(deskSitting.notesUpdatedBy ?? "—").toUpperCase()}`
+                          : "NOTHING WRITTEN YET"}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {deskSitting.status === "OPEN" && (notesState === "dirty" || notesState === "error") && (
+                          <button
+                            type="button"
+                            onClick={() => void flushNotes()}
+                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-ink-200 bg-white px-3.5 font-code text-[8px] font-bold tracking-[0.16em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950"
+                          >
+                            SAVE NOW
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={downloadMinutes}
+                          className="inline-flex h-9 items-center gap-2 rounded-lg border border-ink-200 bg-white px-3.5 font-code text-[8px] font-bold tracking-[0.16em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950"
+                        >
+                          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                          DOWNLOAD .MD
+                        </button>
+                        {deskSitting.status === "OPEN" && (
+                          <button
+                            type="button"
+                            onClick={() => void closeSitting()}
+                            className={cn(
+                              "inline-flex h-9 items-center gap-2 rounded-lg px-3.5 font-code text-[8px] font-bold tracking-[0.16em] transition-colors",
+                              confirmClose
+                                ? "bg-brand-600 text-white hover:bg-brand-700"
+                                : "border border-ink-200 bg-white text-ink-600 hover:border-ink-950 hover:text-ink-950"
+                            )}
+                          >
+                            <Stamp className="h-3.5 w-3.5" aria-hidden="true" />
+                            {confirmClose ? "TAP AGAIN — SEAL THE SITTING" : "SEAL & CLOSE"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right — the door */}
+              <aside className="min-w-0">
+                <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+                  <header className="border-b border-ink-100 px-5 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">The door</h3>
+                      <span className="font-code text-[8px] font-bold tracking-[0.18em] text-ink-500">
+                        {deskSitting.attendance.filter((a) => a.admitted).length}/{deskSitting.attendance.length} ADMITTED
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11.5px] leading-relaxed text-ink-500">
+                      The door list is the committee register, read into this sitting. No registered name, no entry —
+                      and every admission is recorded.
+                    </p>
+                  </header>
+                  <ul className="divide-y divide-ink-100">
+                    {deskSitting.attendance.map((a) => (
+                      <li key={a.memberId} className="flex items-center gap-3 px-4 py-3">
+                        <span
+                          className={cn(
+                            "grid h-9 w-9 shrink-0 place-items-center rounded-full font-code text-[9px] font-bold text-white",
+                            a.expected === "OFFICER" ? "bg-brand-600" : "bg-ink-950"
+                          )}
+                          aria-hidden="true"
+                        >
+                          {initialsOf(a.name)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12.5px] font-semibold text-ink-950">{a.name}</p>
+                          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 font-code text-[7px] tracking-[0.16em] text-ink-400">
+                            <span className="truncate">{a.expected === "OFFICER" ? "PROCUREMENT OFFICER" : a.role}</span>
+                            {a.expected === "EXCUSED" && (
+                              <span className="rounded-full border border-ink-200 px-1.5 py-0.5">EXCUSED</span>
+                            )}
+                            {a.admitted && a.admittedAt && deskSitting.status === "OPEN" && (
+                              <span>· IN {summonsClock(a.admittedAt)}</span>
+                            )}
+                          </p>
+                        </div>
+                        {deskSitting.status === "OPEN" ? (
+                          <button
+                            type="button"
+                            onClick={() => void admit(a.memberId, !a.admitted)}
+                            disabled={admitBusy === a.memberId}
+                            className={cn(
+                              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 font-code text-[7.5px] font-bold tracking-[0.16em] transition-colors disabled:cursor-wait",
+                              a.admitted
+                                ? "bg-ink-950 text-white hover:bg-ink-800"
+                                : "border border-ink-200 bg-white text-ink-500 hover:border-ink-950 hover:text-ink-950"
+                            )}
+                          >
+                            {a.admitted ? <Check className="h-3 w-3" aria-hidden="true" /> : <Plus className="h-3 w-3" aria-hidden="true" />}
+                            {a.admitted ? "ADMITTED" : "ADMIT"}
+                          </button>
+                        ) : (
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-2.5 py-1 font-code text-[7.5px] font-bold tracking-[0.16em]",
+                              a.admitted ? "bg-ink-50 text-ink-700" : "border border-ink-200 text-ink-300"
+                            )}
+                          >
+                            {a.admitted ? "ADMITTED" : "ABSENT"}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                    {deskSitting.attendance.length === 0 && (
+                      <li className="px-5 py-6 text-center font-code text-[8px] tracking-[0.18em] text-ink-400">
+                        THE REGISTER IS EMPTY — REGISTER THE MEMBERS AND THEY APPEAR AT THE DOOR
+                      </li>
+                    )}
+                  </ul>
+                  <footer className="border-t border-ink-100 bg-paper/70 px-5 py-3">
+                    <p className="font-code text-[7.5px] leading-[2] tracking-[0.16em] text-ink-400">
+                      A JITSI ROOM CANNOT VERIFY IDENTITIES BY ITSELF — THIS DOOR IS THE VERIFICATION. ADMIT ONLY
+                      REGISTERED NAMES; ANY STRANGER IN THE ROOM IS NOT OF THIS COMMITTEE.
+                    </p>
+                  </footer>
+                </div>
+              </aside>
+            </div>
+
+            {data.sittings.length > 1 && (
+              <div className="mt-4 overflow-hidden rounded-2xl border border-ink-100 bg-white sm:mt-5">
+                <header className="flex items-center justify-between gap-3 border-b border-ink-100 px-5 py-3.5">
+                  <h3 className="font-code text-[9px] font-bold tracking-[0.22em] text-ink-500">THE SITTING REGISTER</h3>
+                  <span className="font-code text-[7.5px] tracking-[0.18em] text-ink-400">{data.sittings.length} MOST RECENT</span>
+                </header>
+                <ul className="divide-y divide-ink-100">
+                  {data.sittings.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (notesState === "dirty" || notesState === "error") void flushNotes();
+                          setSelectedId(s.id);
+                        }}
+                        className={cn(
+                          "flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 text-left transition-colors hover:bg-paper",
+                          deskSitting.id === s.id && "bg-paper"
+                        )}
+                      >
+                        <span className="font-code text-[8px] font-bold tracking-[0.16em] text-ink-400">
+                          {dayOf(s.summonedAt).toUpperCase()}
+                        </span>
+                        <span className="text-[12.5px] font-semibold text-ink-950">{s.title}</span>
+                        <span className="font-code text-[7.5px] tracking-[0.16em] text-ink-400">
+                          {s.attendance.filter((a) => a.admitted).length} ADMITTED · {s.notes.trim().length.toLocaleString()} CHARS
+                        </span>
+                        <span
+                          className={cn(
+                            "ml-auto shrink-0 rounded-full px-2.5 py-1 font-code text-[7.5px] font-bold tracking-[0.16em]",
+                            s.status === "OPEN" ? "bg-brand-600 text-white" : "border border-ink-200 text-ink-400"
+                          )}
+                        >
+                          {s.status === "OPEN" ? "OPEN" : "SEALED"}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Register-a-member dialog — the register is what opens the door */}
+      <AnimatePresence>
+        {memberOpen && (
+          <motion.div
+            key="member-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[70] grid place-items-center bg-night/70 p-4 backdrop-blur-sm"
+            onClick={() => {
+              if (!memberBusy) setMemberOpen(false);
+            }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Register a committee member"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{ duration: 0.28, ease: EASE }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_30px_80px_rgba(11,12,15,0.35)] sm:p-7"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-code text-[8px] font-semibold tracking-[0.24em] text-ink-400">THE COMMITTEE REGISTER</p>
+                  <h3 className="mt-1 font-display text-[20px] font-black tracking-[-0.015em] text-ink-950">
+                    Register a member<span className="text-brand-600">.</span>
+                  </h3>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-500">
+                    Only names on this register are admitted to a sitting&apos;s room — and only PRESENT members count
+                    toward quorum. Register the humans; the door does the rest.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!memberBusy) setMemberOpen(false);
+                  }}
+                  aria-label="Close without saving"
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-paper hover:text-ink-900"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="mt-5 grid grid-cols-1 gap-3">
+                <label className="block">
+                  <span className="font-code text-[7.5px] font-bold tracking-[0.18em] text-ink-400">FULL NAME</span>
+                  <input
+                    value={memberDraft.name}
+                    onChange={(e) => setMemberDraft((d) => ({ ...d, name: e.target.value }))}
+                    placeholder="e.g. Mwansa Chileshe"
+                    className="mt-1.5 h-10 w-full rounded-xl border border-ink-200 bg-white px-3.5 text-[13px] text-ink-950 outline-none transition placeholder:text-ink-300 focus:border-ink-950"
+                  />
+                </label>
+                <label className="block">
+                  <span className="font-code text-[7.5px] font-bold tracking-[0.18em] text-ink-400">ROLE ON THE COMMITTEE</span>
+                  <input
+                    value={memberDraft.role}
+                    onChange={(e) => setMemberDraft((d) => ({ ...d, role: e.target.value }))}
+                    placeholder="e.g. DIRECTOR OF PROCUREMENT · FINANCE"
+                    className="mt-1.5 h-10 w-full rounded-xl border border-ink-200 bg-white px-3.5 text-[13px] text-ink-950 outline-none transition placeholder:text-ink-300 focus:border-ink-950"
+                  />
+                </label>
+                <label className="flex items-center gap-2.5 rounded-xl border border-ink-100 bg-paper/60 px-3.5 py-3">
+                  <input
+                    type="checkbox"
+                    checked={memberDraft.isChair}
+                    onChange={(e) => setMemberDraft((d) => ({ ...d, isChair: e.target.checked }))}
+                    className="h-4 w-4 accent-brand-600"
+                  />
+                  <span className="text-[12.5px] text-ink-600">Sits as chair — opens the roll at every sitting</span>
+                </label>
+              </div>
+              {memberErr && (
+                <p role="alert" className="mt-4 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5 text-[12px] leading-relaxed text-brand-800">
+                  {memberErr}
+                </p>
+              )}
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                <p className="font-code text-[7.5px] tracking-[0.16em] text-ink-400">IT IS A WRITE — THE ROSTER CHANGES FOR REAL</p>
+                <button
+                  type="button"
+                  onClick={() => void addMember()}
+                  disabled={memberBusy}
+                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand-600 px-5 text-[13px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <UserPlus className="h-4 w-4" aria-hidden="true" />
+                  {memberBusy ? "Writing to the register…" : "Add to the register"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </ViewShell>
   );
 }
@@ -3691,11 +5280,13 @@ function GuardPills<T extends string>({
   options,
   onChange,
   groupLabel,
+  disabled = false,
 }: {
   value: T;
   options: readonly T[];
   onChange: (v: T) => void;
   groupLabel: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={groupLabel}>
@@ -3705,11 +5296,13 @@ function GuardPills<T extends string>({
           type="button"
           onClick={() => onChange(o)}
           aria-pressed={value === o}
+          disabled={disabled}
           className={cn(
             "h-8 rounded-full border px-3.5 font-code text-[8.5px] font-bold tracking-[0.14em] transition-all",
             value === o
               ? "border-ink-950 bg-ink-950 text-white"
-              : "border-ink-200 bg-white text-ink-500 hover:border-ink-400"
+              : "border-ink-200 bg-white text-ink-500 hover:border-ink-400",
+            disabled && "cursor-not-allowed opacity-55 hover:border-ink-200"
           )}
         >
           {o}
@@ -3755,7 +5348,7 @@ function SettingsView({
       sub="Your account, the agent connection and this session. Identity comes from sign-in and agent values are read live from the sidecar, so neither is edited here."
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-        <div className={cardClass}>
+        <div data-tour="settings-account" className={cardClass}>
           <p className={labelClass}>ACCOUNT</p>
           <h3 className={titleClass}>Signed-in officer</h3>
           <div className="mt-5 flex items-center gap-4">
@@ -3774,7 +5367,7 @@ function SettingsView({
           </div>
         </div>
 
-        <div className={cardClass}>
+        <div data-tour="settings-signout" className={cardClass}>
           <p className={labelClass}>SESSION</p>
           <h3 className={titleClass}>Sign out of this workspace</h3>
           <p className="mt-1 text-[12.5px] text-ink-500">
@@ -3792,7 +5385,7 @@ function SettingsView({
 
         <TeamMembersSection user={user} onToast={onToast} />
 
-        <div className={`${cardClass} lg:col-span-2`}>
+        <div data-tour="settings-agent" className={`${cardClass} lg:col-span-2`}>
           <p className={labelClass}>AGENT CONNECTION</p>
           <h3 className={titleClass}>Quorum sidecar</h3>
           <p className="mt-1 text-[12.5px] text-ink-500">Live status reported by the MCP sidecar on port 3031.</p>
@@ -3813,13 +5406,20 @@ function SettingsView({
 /* ── Walkthrough: a guided tour of every section, in the order a tender moves ── */
 
 type WalkthroughChapter = {
-  section: SectionId;
+  /* A chapter opens a section — or, with `href`, its own URL entirely. */
+  section?: SectionId;
+  href?: string;
   title: string;
   summary: string;
   steps: string[];
   tip: string;
   /* Chapter two opens the New evaluation wizard instead of a section. */
   launch?: boolean;
+  /* The guided tour: each step spotlights one real control on the page this
+     chapter names — targets are [data-tour] keys, so the page itself can be
+     grepped for exactly what the walkthrough talks about. Chapters that open
+     their own URL (the handbook) run their tour on the page they leave to. */
+  tour?: TourStep[];
 };
 
 const WALKTHROUGH: WalkthroughChapter[] = [
@@ -3828,11 +5428,28 @@ const WALKTHROUGH: WalkthroughChapter[] = [
     title: "Start with the overview",
     summary: "Your command deck. Every live run, every open approval and the agent's latest moves on one screen.",
     steps: [
-      "Read the flow guide: Launch, Review, Approve, Record. Each step is clickable and jumps to where the work happens.",
+      "Start with New evaluation — name the tender and stage its pack; the register below fills in as the agent reads.",
       "Check the counters for runs in progress and approvals waiting on a named officer.",
       "Begin each session here to see what needs your signature first.",
     ],
     tip: "If nothing is waiting, the committee has nothing to decide, and the agent has nothing to hand over.",
+    tour: [
+      {
+        target: "ov-new-run",
+        title: "Brief the agent",
+        body: "Every review starts here. Name the tender and stage its pack — the agent reads it, and the register fills in with every claim cited.",
+      },
+      {
+        target: "ov-stats",
+        title: "Four counters, read live",
+        body: "Runs in progress, issues found, citation coverage and approvals waiting. The last turns brand-coloured the moment the committee is on the clock.",
+      },
+      {
+        target: "gate-queue",
+        title: "What needs your signature first",
+        body: "A finished run lands here as a gate. Nothing moves past it without a named officer.",
+      },
+    ],
   },
   {
     section: "mc-runs",
@@ -3845,6 +5462,31 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Launch: the run is queued and you land on Agent runs, where it goes live.",
     ],
     tip: "Use the step rail to go back and correct details at any point before launch.",
+    tour: [
+      {
+        target: "nav-new-run",
+        placement: "right",
+        title: "Every evaluation starts here",
+        body: "New evaluation opens the wizard over whatever screen you are on — the sidebar button, or the header button on the overview.",
+      },
+      {
+        target: "wiz-rail",
+        action: "open-wizard",
+        title: "Three steps, shown before you commit",
+        body: "01 details · 02 documents · 03 scope. The rail stays visible so you always know what is left.",
+      },
+      {
+        target: "wiz-body",
+        title: "Details the audit trail will cite",
+        body: "The tender reference and its published title. Leave the reference blank and Quorum continues the register's sequence — the form says so when it does.",
+      },
+      {
+        target: "wiz-next",
+        placement: "top",
+        title: "The wizard refuses to guess",
+        body: "Continue advances only when the step is complete. On scope, this same button queues the run — and the register goes live behind it.",
+      },
+    ],
     launch: true,
   },
   {
@@ -3858,6 +5500,23 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Search and filter the register, or open a run's notes.",
     ],
     tip: "A run in GATE is waiting on people, not on the agent.",
+    tour: [
+      {
+        target: "run-register",
+        title: "The register of every run",
+        body: "Newest first: the tender, its bids, issues found and the share of findings that carry a citation. Search narrows by reference, title or buyer.",
+      },
+      {
+        target: "run-filters",
+        title: "Filter to what needs you",
+        body: "IN PROGRESS · NEEDS APPROVAL · COMPLETED. A run in NEEDS APPROVAL is waiting on people, not on the agent.",
+      },
+      {
+        target: "run-rows",
+        title: "Expand any row",
+        body: "The top findings and the run's audit trail open in place — every figure traces to a line in the tool log.",
+      },
+    ],
   },
   {
     section: "mc-gates",
@@ -3869,6 +5528,23 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Only committee members on the roster can sign. The sidecar refuses any other signature.",
     ],
     tip: "The agent prepares the file and never awards. Every decision is recorded under the name of the officer who signed.",
+    tour: [
+      {
+        target: "gate-queue",
+        title: "The human gate",
+        body: "Each card is one file the agent finished and halted: the proposed supplier, the contract value and the flags behind it.",
+      },
+      {
+        target: "gate-actions",
+        title: "Award or return — by name",
+        body: "Award signs the decision under your name; Return sends it back with a task. Only roster names can sign — the sidecar refuses anyone else.",
+      },
+      {
+        target: "gate-ledger",
+        title: "Decisions land here",
+        body: "Every sign or return is appended with the name and the time — and mirrored into the award history.",
+      },
+    ],
   },
   {
     section: "mc-activity",
@@ -3879,6 +5555,18 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Use the feed to trace how a finding was reached before you rely on it.",
     ],
     tip: "Leave this open while a run is in progress to see it move in real time.",
+    tour: [
+      {
+        target: "agent-feed",
+        title: "The work, streaming",
+        body: "What the agent read, which tool it called and what it flagged, in the order it happened — without leaving this screen.",
+      },
+      {
+        target: "agent-feed-stream",
+        title: "Every line is a durable entry",
+        body: "The feed reads the same append-only log the sidecar writes to disk. Leave it open during a run and watch the file build.",
+      },
+    ],
   },
   {
     section: "mc-findings",
@@ -3891,6 +5579,18 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Open a finding's run to see it in context.",
     ],
     tip: "Unsourced findings are the first thing to check before a gate is signed.",
+    tour: [
+      {
+        target: "findings-filters",
+        title: "Classes and states, filtered",
+        body: "Filter by OPEN, CLEARED or RE-CHECK. The counters above name every finding and how many remain open — 0 UNSOURCED is the one that must never move.",
+      },
+      {
+        target: "findings-rows",
+        title: "Read the source before the sentence",
+        body: "Each row carries its class, its state and the page, clause or registry ID it came from. Open a row for the run behind it.",
+      },
+    ],
   },
   {
     section: "mc-reports",
@@ -3901,16 +5601,51 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "The verdict shows whether the run was awarded or returned.",
     ],
     tip: "Packs are the document the committee reads at the sitting.",
+    tour: [
+      {
+        target: "reports-intro",
+        title: "The committee pack",
+        body: "Every sealed report for the sitting, bound into one cited file sharing a single audit hash — the document the committee reads.",
+      },
+      {
+        target: "reports-list",
+        title: "One pack per finished run",
+        body: "Findings, citations, the sha-256 tag and the verdict. A pack seals on signature — before that it previews only.",
+      },
+      {
+        target: "report-download",
+        title: "Export when sealed",
+        body: "Download unlocks the moment the gate signs. Until then the button previews what the sealed pack will carry.",
+      },
+    ],
   },
   {
     section: "mc-sources",
     title: "Check data sources",
-    summary: "The registries and documents the agent reads from, and what each one contributes.",
+    summary: "Every African dataset the OCP Data Registry lists — who publishes it, what it covers, when it was last pulled, and a dated connection record for each.",
     steps: [
-      "See which sources are connected and what they cover.",
-      "Confirm a source is available before launching a run that depends on it.",
+      "See the registries the agent can read, country by country — coverage span, formats and the latest retrieval date.",
+      "Expand a country to check a dataset's licence, counts and the publisher's own portal before leaning on it in a run.",
+      "Connect the portals: the sidecar opens each published file, reads its first OCDS release as proof, and checks the publisher's own portal — every result is dated and saved.",
     ],
-    tip: "A missing source shows up as a gap in the findings, not as a silent pass.",
+    tip: "A dataset the publisher stopped updating carries the registry's own flag — a gap downstream is never a silent pass.",
+    tour: [
+      {
+        target: "sources-standards",
+        title: "What every finding stands on",
+        body: "OCDS 1.1, the MCP tool surface, LLM drafting and page citations — the four standards the review pipeline holds itself to.",
+      },
+      {
+        target: "sources-portals",
+        title: "The registries it reads",
+        body: "Every African dataset on the Open Contracting Partnership's registry — one row per country. Expand one for licences, coverage, counts and the publisher's own portal. Each dataset keeps a real connection record: the first OCDS release the sidecar read from the published file, and whether the publisher's portal answered. Re-check any time — a failed check is shown, never hidden.",
+      },
+      {
+        target: "sources-request-btn",
+        title: "Missing a source? File it",
+        body: "A request lands in the register with a name and a timestamp, so the gap is recorded where the next run can see it.",
+      },
+    ],
   },
   {
     section: "mc-ledger",
@@ -3921,6 +5656,18 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Entries are appended, never edited.",
     ],
     tip: "Use this for audit questions: it is the record of who decided what.",
+    tour: [
+      {
+        target: "ledger-stats",
+        title: "The gavel's arithmetic",
+        body: "Decisions logged, awarded, returned and awaiting — the ledger's four totals, read live.",
+      },
+      {
+        target: "ledger-rows",
+        title: "Who decided what, and when",
+        body: "Each row names the tender, the decision, the officer who signed and the time. Entries are appended, never edited.",
+      },
+    ],
   },
   {
     section: "mc-committee",
@@ -3931,6 +5678,23 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "When quorum is present, the sitting can proceed to decisions.",
     ],
     tip: "Quorum is checked before any gate can be signed in a sitting.",
+    tour: [
+      {
+        target: "committee-roll",
+        title: "The roll, in reading order",
+        body: "The chair opens, the gavel seat follows, then the members — excused seats close the roll. Every card is a stored record, not a hardcoded name.",
+      },
+      {
+        target: "committee-quorum",
+        title: "The mark on the door",
+        body: "Seats present against seats required. Quorum is the threshold an award must clear before the sitting can decide.",
+      },
+      {
+        target: "committee-summon",
+        title: "Summon the sitting",
+        body: "A summons mints a fresh Jitsi room, opens the minutes and admits only names on this register. One sitting is open at a time.",
+      },
+    ],
   },
   {
     section: "mc-stack",
@@ -3941,6 +5705,23 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "The tool log records every call the agent makes.",
     ],
     tip: "If something looks wrong, the tool log shows exactly what the agent did and in what order.",
+    tour: [
+      {
+        target: "stack-tools",
+        title: "Our own MCP server — five tools",
+        body: "Each tool is tagged READ, WRITES or IRREVERSIBLE. The irreversible one — filing — can only ever raise a gate for a human.",
+      },
+      {
+        target: "stack-graphs",
+        title: "Run the graph, live",
+        body: "Fire the review graph and watch the nodes work: read over the filesystem MCP, requirements pinned, findings flagged, a gate raised.",
+      },
+      {
+        target: "stack-log",
+        title: "The tool log",
+        body: "Every call, append-only, JSONL on disk. If something looks wrong, this shows exactly what the agent did and in what order.",
+      },
+    ],
   },
   {
     section: "mc-rules",
@@ -3952,6 +5733,23 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Every change is written to the audit trail.",
     ],
     tip: "The standing rule holds regardless of settings: the committee signs, and the agent never does.",
+    tour: [
+      {
+        target: "rules-guards",
+        title: "Three tunable guards",
+        body: "Price variance, the document checklist and the registry cross-check. Change a pill and the sidecar stores it the moment you click.",
+      },
+      {
+        target: "rules-locked",
+        title: "One guard is not a setting",
+        body: "Page-level citations on every claim — locked by design, not offered as a toggle.",
+      },
+      {
+        target: "rules-audit",
+        title: "Your name, on every change",
+        body: "The last-change line and the trail behind it: who, when, before and after. READ THE TRAIL jumps to the full record.",
+      },
+    ],
   },
   {
     section: "mc-settings",
@@ -3963,29 +5761,85 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Sign out ends this browser session. Runs and the audit trail stay on the sidecar.",
     ],
     tip: "If the sidecar shows offline, decisions cannot be recorded until it is back.",
+    tour: [
+      {
+        target: "settings-account",
+        title: "The name that signs",
+        body: "Identity comes from sign-in — the officer shown here is the name every decision records.",
+      },
+      {
+        target: "settings-agent",
+        title: "The agent connection, live",
+        body: "Sidecar status, filesystem tools, runs recorded and calls logged — read straight from quorum-mcp.",
+      },
+      {
+        target: "settings-signout",
+        title: "Ending the session",
+        body: "Sign out closes this browser session. Runs, gates and the audit trail stay on the sidecar.",
+      },
+    ],
+  },
+  {
+    section: "mc-suppliers",
+    title: "Keep the supplier register",
+    summary: "The platform's roll of named bidders — every firm your entity deals with, with the registration detail a compliant bid must carry.",
+    steps: [
+      "Open Suppliers from the sidebar, then fill the Add Supplier intake on the right: name, registration number, ZRA tax detail and the sector regulator where one applies.",
+      "The table shows every supplier with their tax clearance state, categories and audit trail of who added them.",
+      "Edit a firm when its papers change; suspend or blacklist when it should not be considered.",
+    ],
+    tip: "A supplier carrying an expired ZRA tax clearance is the classic non-responsiveness — keep the register current before a run reads it.",
+    tour: [
+      {
+        target: "suppliers-add",
+        title: "Register a supplier",
+        body: "The intake opens as a modal; pick a firm from the ZPPA roll and the record fills itself — or type a new one by hand.",
+      },
+      {
+        target: "suppliers-roll",
+        title: "The roll, full width",
+        body: "Every firm with its registration, tax-clearance state, categories, and who added it — and when.",
+      },
+      {
+        target: "suppliers-filters",
+        title: "Filter by standing",
+        body: "Active, suspended, blacklisted. A firm carrying an expired tax clearance is the classic non-responsiveness — keep the register current before a run reads it.",
+      },
+    ],
+  },
+  {
+    href: "/docs",
+    title: "Read the documentation",
+    summary: "The full handbook, at its own address: the review pipeline, every rule the agent applies, the gate protocol and Zambia's procurement law.",
+    steps: [
+      "Open Documentation from the sidebar — it leaves the workspace for its own page.",
+      "Chapters run in reading order, from what Quorum is to the glossary; search jumps straight to a rule, a method or a field.",
+      "The Zambia chapter carries the lawful procurement methods, live from the agent's own method register.",
+    ],
+    tip: "When a finding surprises you, its rule code is documented there with the exact trigger and the committee's move.",
   },
 ];
 
 const SECTION_ICON = Object.fromEntries(
-  NAV_GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.icon] as const))
+  NAV_GROUPS.flatMap((g) => g.items.filter((i) => !i.href).map((i) => [i.id, i.icon] as const))
 ) as Record<SectionId, LucideIcon>;
 
 function WalkthroughView({
   onOpen,
   onNewRun,
+  onTour,
+  done,
 }: {
   onOpen: (id: SectionId) => void;
   onNewRun: () => void;
+  onTour: (chapter: number) => void;
+  done: number[];
 }) {
-  const jumpTo = (no: number) => {
-    document.getElementById(`wt-${no}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   return (
     <ViewShell
       fig="15"
       title="Walkthrough"
-      sub="A tour of every part of Quorum, in the order a tender moves through it. Each chapter says what the screen does, what you decide there, and where to go next."
+      sub="A tour of every part of Quorum, in the order a tender moves through it. Start a chapter and the screen dims, the control is spotlit, and Quorum walks you through it — what the screen does, what you decide there, and where to go next."
       action={
         <button
           type="button"
@@ -3999,18 +5853,23 @@ function WalkthroughView({
     >
       <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label="Chapters">
         {WALKTHROUGH.map((ch, i) => {
-          const Icon = SECTION_ICON[ch.section];
+          const Icon = ch.section ? SECTION_ICON[ch.section] : Library;
           return (
-            <li key={`${ch.section}-${i}`}>
+            <li key={`${ch.section ?? ch.href}-${i}`}>
               <button
                 type="button"
-                onClick={() => jumpTo(i + 1)}
-                className="group flex w-full items-center gap-3 rounded-xl border border-ink-100 bg-white px-4 py-3 text-left transition-colors hover:border-ink-400"
+                onClick={() => onTour(i)}
+                aria-label={`Start the guided walkthrough — ${ch.title}`}
+                className="group flex w-full items-center gap-3 rounded-xl border border-ink-100 bg-white px-4 py-3 text-left transition-colors hover:border-brand-500/60"
               >
                 <span className="font-code text-[9px] font-bold tracking-[0.14em] text-brand-700">{String(i + 1).padStart(2, "0")}</span>
                 <Icon className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-900">{ch.title}</span>
-                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-ink-300 transition-colors group-hover:text-ink-700" aria-hidden="true" />
+                {done.includes(i) ? (
+                  <CircleCheck className="h-3.5 w-3.5 shrink-0 text-brand-600" aria-label="Chapter toured" />
+                ) : (
+                  <Play className="h-3.5 w-3.5 shrink-0 text-ink-300 transition-colors group-hover:text-brand-600" aria-hidden="true" />
+                )}
               </button>
             </li>
           );
@@ -4019,11 +5878,11 @@ function WalkthroughView({
 
       <div className="mt-8 space-y-4 sm:space-y-5">
         {WALKTHROUGH.map((ch, i) => {
-          const Icon = SECTION_ICON[ch.section];
+          const Icon = ch.section ? SECTION_ICON[ch.section] : Library;
           const no = String(i + 1).padStart(2, "0");
           return (
             <article
-              key={`${ch.section}-${i}`}
+              key={`${ch.section ?? ch.href}-${i}`}
               id={`wt-${i + 1}`}
               className="scroll-mt-24 rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)] sm:p-7"
             >
@@ -4033,19 +5892,51 @@ function WalkthroughView({
                     <Icon className="h-4.5 w-4.5" />
                   </span>
                   <div className="min-w-0">
-                    <p className="font-code text-[8.5px] font-bold tracking-[0.22em] text-brand-700">CHAPTER {no}</p>
+                    <p className="flex items-center gap-2 font-code text-[8.5px] font-bold tracking-[0.22em] text-brand-700">
+                      CHAPTER {no}
+                      {done.includes(i) && (
+                        <span className="inline-flex items-center gap-1 text-ink-400">
+                          <CircleCheck className="h-3 w-3 text-brand-600" aria-hidden="true" />
+                          TOURED
+                        </span>
+                      )}
+                    </p>
                     <h3 className="mt-1 font-display text-[18px] font-black tracking-[-0.01em] text-ink-950 sm:text-[20px]">{ch.title}</h3>
                     <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-ink-600">{ch.summary}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => (ch.launch ? onNewRun() : onOpen(ch.section))}
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3.5 font-code text-[9px] font-bold tracking-[0.12em] text-ink-700 transition-colors hover:border-ink-950 hover:text-ink-950"
-                >
-                  {ch.launch ? "LAUNCH AN EVALUATION" : `OPEN ${SECTION_LABEL[ch.section].toUpperCase()}`}
-                  <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
-                </button>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onTour(i)}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand-600 px-4 font-code text-[9px] font-bold tracking-[0.12em] text-white shadow-[0_8px_20px_rgba(217,38,22,0.24)] transition-all hover:-translate-y-0.5 hover:bg-brand-700"
+                  >
+                    <Play className="h-3 w-3" aria-hidden="true" />
+                    START GUIDED TOUR
+                  </button>
+                  {ch.href ? (
+                    <a
+                      href={ch.href}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink-200 px-3.5 font-code text-[9px] font-bold tracking-[0.12em] text-ink-700 transition-colors hover:border-ink-950 hover:text-ink-950"
+                    >
+                      OPEN DOCUMENTATION
+                      <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => (ch.launch ? onNewRun() : ch.section && onOpen(ch.section))}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink-200 px-3.5 font-code text-[9px] font-bold tracking-[0.12em] text-ink-700 transition-colors hover:border-ink-950 hover:text-ink-950"
+                    >
+                      {ch.launch
+                        ? "LAUNCH AN EVALUATION"
+                        : ch.section
+                          ? `OPEN ${SECTION_LABEL[ch.section].toUpperCase()}`
+                          : "OPEN"}
+                      <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <ol className="mt-5 space-y-2.5 border-t border-ink-100 pt-5">
@@ -4071,25 +5962,1425 @@ function WalkthroughView({
   );
 }
 
-function RulesView({ onToast }: { onToast: (m: string) => void }) {
-  const [variance, setVariance] = useState<"15%" | "25%" | "40%">("25%");
-  const [checklist, setChecklist] = useState<"STANDARD · 12/16" | "STRICT · 16/16">("STANDARD · 12/16");
-  const [registry, setRegistry] = useState(true);
+/* ── Supplier register — the platform's named bidders ──────────────────────
+   The roll of firms the entity deals with, held on the quorum-mcp sidecar
+   and written through with the same audit discipline as everything else:
+   add, edit, suspend and remove are tool calls in the log, never silent. */
 
-  const guards: { no: string; title: string; desc: string; control: ReactNode }[] = [
+type SupplierRow = {
+  id: string;
+  name: string;
+  registrationNo: string;
+  taxPin?: string;
+  taxClearanceNo?: string;
+  taxClearanceExpiry?: string;
+  regulator?: string;
+  regulatorNo?: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  categories: string[];
+  status: "ACTIVE" | "SUSPENDED" | "BLACKLISTED";
+  addedBy: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+type SupplierStatus = SupplierRow["status"];
+
+/* What a firm can be registered for — the categories a Zambian procurement
+   file actually names. */
+const SUPPLIER_CATEGORIES = [
+  "Construction works",
+  "Engineering services",
+  "Medical supplies",
+  "ICT equipment & services",
+  "Transport & logistics",
+  "Agriculture & agro-processing",
+  "Consultancy services",
+  "Office supplies & stationery",
+  "Energy & electrification",
+  "Water & sanitation",
+  "Security services",
+  "Cleaning & facilities",
+] as const;
+
+/* The sector regulators Zambian bidders register with, by category. */
+const SUPPLIER_REGULATORS = ["NCC", "NHCC", "ERB", "ZPPA", "ZEMA", "Other"] as const;
+
+const SUPPLIER_INPUT =
+  "w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-[13px] text-ink-900 outline-none transition-colors placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15";
+
+type SupplierDraft = {
+  name: string;
+  registrationNo: string;
+  taxPin: string;
+  taxClearanceNo: string;
+  taxClearanceExpiry: string;
+  regulator: string;
+  regulatorNo: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  address: string;
+  categories: string[];
+};
+
+const EMPTY_SUPPLIER_DRAFT: SupplierDraft = {
+  name: "",
+  registrationNo: "",
+  taxPin: "",
+  taxClearanceNo: "",
+  taxClearanceExpiry: "",
+  regulator: "",
+  regulatorNo: "",
+  contactName: "",
+  email: "",
+  phone: "",
+  address: "",
+  categories: [],
+};
+
+function draftFromSupplier(s: SupplierRow): SupplierDraft {
+  return {
+    name: s.name,
+    registrationNo: s.registrationNo,
+    taxPin: s.taxPin ?? "",
+    taxClearanceNo: s.taxClearanceNo ?? "",
+    taxClearanceExpiry: s.taxClearanceExpiry ?? "",
+    regulator: s.regulator ?? "",
+    regulatorNo: s.regulatorNo ?? "",
+    contactName: s.contactName ?? "",
+    email: s.email ?? "",
+    phone: s.phone ?? "",
+    address: s.address ?? "",
+    categories: [...s.categories],
+  };
+}
+
+function shortDateOf(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d
+        .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+        .toUpperCase();
+}
+
+/* A tax clearance certificate's standing today: valid, expiring soon, lapsed. */
+function clearanceStanding(expiry?: string): { label: string; tone: string } | null {
+  if (!expiry) return null;
+  const t = new Date(`${expiry}T00:00:00`).getTime();
+  if (Number.isNaN(t)) return null;
+  const days = Math.ceil((t - Date.now()) / 86_400_000);
+  if (days < 0) return { label: "CLEARANCE EXPIRED", tone: "border-brand-200 bg-brand-50 text-brand-800" };
+  if (days <= 60)
+    return { label: days === 0 ? "EXPIRES TODAY" : `EXPIRES IN ${days}D`, tone: "border-ink-200 bg-ink-100 text-ink-700" };
+  return null;
+}
+
+function SupplierStatusChip({ status }: { status: SupplierStatus }) {
+  const tone =
+    status === "ACTIVE"
+      ? "border-brand-200 bg-brand-50 text-brand-800"
+      : status === "BLACKLISTED"
+        ? "border-ink-950 bg-ink-950 text-white"
+        : "border-ink-200 bg-white text-ink-600";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-code text-[8.5px] font-bold tracking-[0.16em]",
+        tone,
+      )}
+    >
+      {status === "ACTIVE" && <CircleCheck className="h-2.5 w-2.5" aria-hidden="true" />}
+      {status}
+    </span>
+  );
+}
+
+function SupplierRowAction({
+  children,
+  onClick,
+  tone = "default",
+  title,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  tone?: "default" | "confirm" | "danger";
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={cn(
+        "rounded-md px-2 py-1 font-code text-[8px] font-bold tracking-[0.12em] transition-colors",
+        tone === "confirm" ? "bg-brand-600 text-white hover:bg-brand-700" : "",
+        tone === "danger" ? "text-brand-700 hover:bg-brand-50" : "",
+        tone === "default" ? "text-ink-500 hover:bg-paper hover:text-ink-900" : "",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* Polls the sidecar's supplier register — the platform's single source of
+   truth for named bidders. Nothing is invented on the client. */
+function useSuppliers() {
+  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
+  const [reachable, setReachable] = useState<boolean | null>(null);
+
+  const pull = useCallback(async () => {
+    try {
+      const res = await fetch("/api/suppliers?XTransformPort=3031");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = (await res.json()) as { suppliers?: SupplierRow[] };
+      setSuppliers(d.suppliers ?? []);
+      setReachable(true);
+    } catch {
+      setReachable(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void pull();
+    const id = setInterval(() => void pull(), 6000);
+    return () => clearInterval(id);
+  }, [pull]);
+
+  return { suppliers, reachable, reload: pull };
+}
+
+function SupplierField({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <label className="block min-w-0">
+      <span className="mb-1.5 block font-code text-[8px] font-semibold tracking-[0.2em] text-ink-400">{label}</span>
+      {children}
+      {hint && <span className="mt-1 block text-[10.5px] leading-snug text-ink-400">{hint}</span>}
+    </label>
+  );
+}
+
+/* The registration dossier — the same fields on the intake card and in the
+   edit dialog, because an edit is just the dossier, re-read. */
+function SupplierFormFields({
+  idPrefix,
+  draft,
+  onChange,
+}: {
+  idPrefix: string;
+  draft: SupplierDraft;
+  onChange: (d: SupplierDraft) => void;
+}) {
+  const set = <K extends keyof SupplierDraft>(k: K, v: SupplierDraft[K]) => onChange({ ...draft, [k]: v });
+  const toggleCategory = (c: string) =>
+    set(
+      "categories",
+      draft.categories.includes(c) ? draft.categories.filter((x) => x !== c) : [...draft.categories, c],
+    );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SupplierField label="SUPPLIER NAME">
+          <input
+            id={`${idPrefix}-name`}
+            className={SUPPLIER_INPUT}
+            value={draft.name}
+            onChange={(e) => set("name", e.target.value)}
+            placeholder="e.g. Kafubu Engineering Works Ltd"
+            autoComplete="organization"
+          />
+        </SupplierField>
+        <SupplierField label="REGISTRATION NUMBER" hint="PACRA / Registrar of Societies number.">
+          <input
+            className={SUPPLIER_INPUT}
+            value={draft.registrationNo}
+            onChange={(e) => set("registrationNo", e.target.value)}
+            placeholder="e.g. 120200012345"
+          />
+        </SupplierField>
+        <SupplierField label="ZRA TAX PIN">
+          <input
+            className={SUPPLIER_INPUT}
+            value={draft.taxPin}
+            onChange={(e) => set("taxPin", e.target.value)}
+            placeholder="e.g. 1000000000"
+            inputMode="numeric"
+          />
+        </SupplierField>
+        <SupplierField label="ZRA TAX CLEARANCE NO">
+          <input
+            className={SUPPLIER_INPUT}
+            value={draft.taxClearanceNo}
+            onChange={(e) => set("taxClearanceNo", e.target.value)}
+            placeholder="Certificate number"
+          />
+        </SupplierField>
+        <SupplierField label="TAX CLEARANCE EXPIRY" hint="An expired certificate makes a bid non-responsive.">
+          <input
+            type="date"
+            className={SUPPLIER_INPUT}
+            value={draft.taxClearanceExpiry}
+            onChange={(e) => set("taxClearanceExpiry", e.target.value)}
+          />
+        </SupplierField>
+        <SupplierField label="SECTOR REGULATOR" hint="Where the category requires registration.">
+          <select
+            className={SUPPLIER_INPUT}
+            value={draft.regulator}
+            onChange={(e) => set("regulator", e.target.value)}
+          >
+            <option value="">— none required —</option>
+            {SUPPLIER_REGULATORS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </SupplierField>
+        <SupplierField label="REGULATOR REGISTRATION NO">
+          <input
+            className={SUPPLIER_INPUT}
+            value={draft.regulatorNo}
+            onChange={(e) => set("regulatorNo", e.target.value)}
+            placeholder="e.g. NCC/RS/2019/1187"
+          />
+        </SupplierField>
+        <SupplierField label="CONTACT NAME">
+          <input
+            className={SUPPLIER_INPUT}
+            value={draft.contactName}
+            onChange={(e) => set("contactName", e.target.value)}
+            placeholder="Who signs for the firm"
+            autoComplete="name"
+          />
+        </SupplierField>
+        <SupplierField label="EMAIL">
+          <input
+            type="email"
+            className={SUPPLIER_INPUT}
+            value={draft.email}
+            onChange={(e) => set("email", e.target.value)}
+            placeholder="bids@supplier.co.zm"
+            autoComplete="email"
+          />
+        </SupplierField>
+        <SupplierField label="PHONE">
+          <input
+            type="tel"
+            className={SUPPLIER_INPUT}
+            value={draft.phone}
+            onChange={(e) => set("phone", e.target.value)}
+            placeholder="+260 …"
+            autoComplete="tel"
+          />
+        </SupplierField>
+        <div className="sm:col-span-2">
+          <SupplierField label="ADDRESS">
+            <input
+              className={SUPPLIER_INPUT}
+              value={draft.address}
+              onChange={(e) => set("address", e.target.value)}
+              placeholder="Plot, street, city"
+            />
+          </SupplierField>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 font-code text-[8px] font-semibold tracking-[0.2em] text-ink-400">SUPPLY CATEGORIES</p>
+        <div className="flex flex-wrap gap-1.5">
+          {SUPPLIER_CATEGORIES.map((c) => {
+            const on = draft.categories.includes(c);
+            return (
+              <button
+                key={c}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggleCategory(c)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 font-code text-[8.5px] font-semibold tracking-[0.1em] transition-colors",
+                  on
+                    ? "border-ink-950 bg-ink-950 text-white"
+                    : "border-ink-200 bg-white text-ink-500 hover:border-ink-400 hover:text-ink-800",
+                )}
+              >
+                {c.toUpperCase()}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Sidecar refusals arrive as {"error": …} — surface them verbatim when present. */
+async function sidecarError(res: Response, fallback: string) {
+  try {
+    const d = (await res.json()) as { error?: string };
+    if (d.error) return d.error.charAt(0).toUpperCase() + d.error.slice(1);
+  } catch {
+    /* non-JSON body — fall through */
+  }
+  return fallback;
+}
+
+/* ── The ZPPA roll — the published e-GP record, read in at intake ──────────
+   The Zambia e-GP record (ZPPA, published through the Open Contracting
+   Partnership) lists tens of thousands of firms with their PACRA numbers.
+   The sidecar ships a derived roll of the most awarded among them; picking
+   one fills the intake from what the record already knows — it never invents
+   a field, and every field stays the officer's to correct. */
+
+type ZppaRollEntry = {
+  name: string;
+  regNo: string;
+  address?: string;
+  phone?: string;
+  tenders: number;
+  awards: number;
+  valueZMW?: number;
+  since?: number;
+  categories: string[];
+  latest?: { kind: "award" | "tender"; title: string; buyer: string; date: string };
+};
+
+type ZppaSource = {
+  authority: string;
+  via: string;
+  license: string;
+  retrieved: string;
+  coverage: string;
+  note: string;
+};
+
+const PLURAL = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+function AddSupplierModal({
+  open,
+  firstName,
+  existing,
+  onClose,
+  onRegistered,
+}: {
+  open: boolean;
+  firstName: string;
+  existing: SupplierRow[];
+  onClose: () => void;
+  onRegistered: (name: string) => Promise<void> | void;
+}) {
+  const [draft, setDraft] = useState<SupplierDraft>(EMPTY_SUPPLIER_DRAFT);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [roll, setRoll] = useState<{ source: ZppaSource; entries: ZppaRollEntry[] } | null>(null);
+  const [rollLoading, setRollLoading] = useState(false);
+  const [rollFailed, setRollFailed] = useState(false);
+  const [rollOpen, setRollOpen] = useState(false);
+  const [rollQuery, setRollQuery] = useState("");
+  const [picked, setPicked] = useState<ZppaRollEntry | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const wasOpenRef = useRef(false);
+  const existingRef = useRef(existing);
+  existingRef.current = existing;
+
+  /* A fresh intake every time the modal opens — never mid-edit. */
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      wasOpenRef.current = true;
+      setDraft(EMPTY_SUPPLIER_DRAFT);
+      setError("");
+      setPicked(null);
+      setRollQuery("");
+      setBusy(false);
+      setRollOpen(existingRef.current.length === 0);
+    } else if (!open && wasOpenRef.current) {
+      wasOpenRef.current = false;
+    }
+  }, [open]);
+
+  /* The roll is read off the sidecar the first time the modal opens. */
+  const loadRoll = useCallback(() => {
+    setRollLoading(true);
+    setRollFailed(false);
+    fetch("/api/zppa-roll?XTransformPort=3031")
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<{ source?: ZppaSource; roll?: ZppaRollEntry[] }>;
+      })
+      .then((d) => {
+        if (!d.roll || !d.source) throw new Error("empty payload");
+        setRoll({ source: d.source, entries: d.roll });
+      })
+      .catch(() => setRollFailed(true))
+      .finally(() => setRollLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (open && !roll && !rollLoading && !rollFailed) loadRoll();
+  }, [open, roll, rollLoading, rollFailed, loadRoll]);
+
+  /* Open with the cursor already in the first field. */
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => document.getElementById("add-name")?.focus(), 90);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  /* Escape closes — nothing closes while a write is in flight. */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, busy, onClose]);
+
+  /* Tab stays inside the dialog. */
+  const trapTab = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const nodes = Array.from(
+      cardRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    if (nodes.length === 0) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || !cardRef.current?.contains(active))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  const alreadyOn = (e: ZppaRollEntry) => {
+    const reg = e.regNo.replace(/\D/g, "");
+    return existing.some(
+      (s) =>
+        (reg !== "" && s.registrationNo.replace(/\D/g, "") === reg) ||
+        s.name.trim().toUpperCase() === e.name.trim().toUpperCase(),
+    );
+  };
+
+  const applyRoll = (e: ZppaRollEntry) => {
+    setDraft((d) => ({
+      ...d,
+      name: e.name,
+      registrationNo: e.regNo,
+      address: d.address.trim() ? d.address : e.address ?? "",
+      phone: d.phone.trim() ? d.phone : e.phone ?? "",
+      categories: Array.from(new Set([...d.categories, ...e.categories])),
+    }));
+    setPicked(e);
+    setRollOpen(false);
+    cardRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const register = async () => {
+    if (!draft.name.trim() || !draft.registrationNo.trim()) {
+      setError("A supplier needs at least a name and a registration number.");
+      document.getElementById("add-name")?.focus();
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/suppliers?XTransformPort=3031", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...draft, addedBy: firstName || "unknown" }),
+      });
+      if (!res.ok) {
+        setError(await sidecarError(res, `The register refused the entry (HTTP ${res.status}).`));
+        return;
+      }
+      const name = draft.name.trim();
+      await onRegistered(name);
+      onClose();
+    } catch {
+      setError("The sidecar is offline — suppliers cannot be written right now.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const q = rollQuery.trim().toLowerCase();
+  const shown = useMemo(() => {
+    if (!roll) return [];
+    const base = q ? roll.entries.filter((e) => `${e.name} ${e.regNo}`.toLowerCase().includes(q)) : roll.entries;
+    return base.slice(0, 40);
+  }, [roll, q]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="supplier-add"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[70] grid place-items-center bg-night/70 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!busy) onClose();
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-supplier-title"
+        >
+          <motion.div
+            ref={cardRef}
+            initial={{ opacity: 0, y: 18, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.28, ease: EASE }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={trapTab}
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_30px_80px_rgba(11,12,15,0.35)] sm:p-7"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="font-code text-[8px] font-semibold tracking-[0.24em] text-ink-400">INTAKE</p>
+                <h3 id="add-supplier-title" className="mt-1 font-display text-[22px] font-black tracking-[-0.015em] text-ink-950">
+                  Add supplier
+                </h3>
+                <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-ink-500">
+                  Register a bidder before their first bid. The fields mirror what Zambia&apos;s regime asks a bidder
+                  to hold — only the name and registration number are required.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!busy) onClose();
+                }}
+                aria-label="Close without adding"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-paper hover:text-ink-900"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* The published ZPPA record, offered as a head start */}
+            <div className="mt-5 rounded-2xl border border-ink-100 bg-paper/70">
+              <button
+                type="button"
+                onClick={() => setRollOpen((v) => !v)}
+                aria-expanded={rollOpen}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left"
+              >
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink-950 text-white">
+                  <Library className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-code text-[9px] font-bold tracking-[0.18em] text-ink-900">
+                    PICK FROM THE ZPPA RECORD
+                  </span>
+                  <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-500">
+                    {roll
+                      ? `${roll.entries.length} firms ranked by awards on the published e-GP record — name, PACRA number, address and contact fill the form.`
+                      : "The published Zambia e-GP record, read in at intake."}
+                  </span>
+                </span>
+                <ChevronDown
+                  className={cn("h-4 w-4 shrink-0 text-ink-400 transition-transform", rollOpen && "rotate-180")}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {rollOpen && (
+                <div className="border-t border-ink-100 px-4 pb-3.5 pt-3">
+                  {rollLoading && (
+                    <p className="py-4 text-center font-code text-[8.5px] tracking-[0.18em] text-ink-400">
+                      READING THE RECORD…
+                    </p>
+                  )}
+
+                  {rollFailed && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-3.5 py-3">
+                      <p className="text-[12px] leading-relaxed text-ink-500">
+                        The record could not be reached — the form still works; write the firm in by hand.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={loadRoll}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 font-code text-[8px] font-bold tracking-[0.16em] text-ink-700 transition-colors hover:border-ink-950 hover:text-ink-950"
+                      >
+                        <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                        RETRY
+                      </button>
+                    </div>
+                  )}
+
+                  {roll && (
+                    <>
+                      <label className="relative block">
+                        <Search
+                          className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-300"
+                          aria-hidden="true"
+                        />
+                        <input
+                          type="search"
+                          value={rollQuery}
+                          onChange={(e) => setRollQuery(e.target.value)}
+                          placeholder="Search by firm or PACRA number…"
+                          aria-label="Search the ZPPA record"
+                          className="h-9 w-full rounded-xl border border-ink-200 bg-white pl-9 pr-3 text-[12.5px] text-ink-900 outline-none transition-colors placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                        />
+                      </label>
+
+                      <ul className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-ink-100 bg-white">
+                        {shown.map((e) => {
+                          const on = alreadyOn(e);
+                          return (
+                            <li key={e.regNo} className="border-b border-ink-50 last:border-b-0">
+                              <button
+                                type="button"
+                                disabled={on}
+                                onClick={() => applyRoll(e)}
+                                className={cn(
+                                  "flex w-full items-start justify-between gap-3 px-3.5 py-2.5 text-left transition-colors",
+                                  on ? "cursor-default opacity-60" : "hover:bg-paper",
+                                )}
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[12.5px] font-semibold text-ink-900">{e.name}</span>
+                                  <span className="mt-0.5 block font-code text-[8px] tracking-[0.14em] text-ink-400">
+                                    PACRA {e.regNo} · {PLURAL(e.awards, "AWARD", "AWARDS")} · {PLURAL(e.tenders, "TENDER", "TENDERS")}
+                                    {e.since ? ` · ON RECORD SINCE ${e.since}` : ""}
+                                  </span>
+                                </span>
+                                {on ? (
+                                  <span className="mt-0.5 inline-flex shrink-0 rounded-full border border-ink-200 bg-paper px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.12em] text-ink-500">
+                                    ALREADY ON FILE
+                                  </span>
+                                ) : (
+                                  <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 font-code text-[7.5px] font-bold tracking-[0.12em] text-brand-700">
+                                    USE
+                                    <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                                  </span>
+                                )}
+                              </button>
+                            </li>
+                          );
+                        })}
+                        {shown.length === 0 && (
+                          <li className="px-3.5 py-4 text-center text-[12px] text-ink-400">
+                            No firm on the roll matches — write it in by hand.
+                          </li>
+                        )}
+                      </ul>
+
+                      <p className="mt-2 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
+                        SOURCE — {roll.source.authority.toUpperCase()} · VIA OPEN CONTRACTING PARTNERSHIP ·{" "}
+                        {roll.source.license}
+                        <br />
+                        RECORD COVERAGE {roll.source.coverage} · RETRIEVED {roll.source.retrieved}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* What the record already knew — still every field the officer's */}
+            {picked && (
+              <div className="mt-4 rounded-xl border border-ink-100 border-l-2 border-l-brand-600 bg-paper px-4 py-3">
+                <p className="font-code text-[8.5px] font-bold tracking-[0.16em] text-ink-900">
+                  FILLED FROM THE ZPPA RECORD
+                </p>
+                <p className="mt-1 font-code text-[8px] tracking-[0.14em] text-ink-600">
+                  {PLURAL(picked.awards, "AWARD", "AWARDS")} · {PLURAL(picked.tenders, "TENDER", "TENDERS")}
+                  {picked.valueZMW ? ` · ZMW ${picked.valueZMW.toLocaleString("en-GB")} WON` : ""}
+                  {picked.since ? ` · ON RECORD SINCE ${picked.since}` : ""}
+                </p>
+                {picked.latest && (
+                  <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-600">
+                    LAST {picked.latest.kind === "award" ? "AWARD" : "BID"} — {picked.latest.title} → {picked.latest.buyer} ·{" "}
+                    {shortDateOf(picked.latest.date)}
+                  </p>
+                )}
+                <p className="mt-1.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
+                  EVERY FIELD IS STILL YOURS TO CORRECT — THE RECORD SUGGESTS, THE OFFICER CONFIRMS.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-5">
+              <SupplierFormFields idPrefix="add" draft={draft} onChange={setDraft} />
+            </div>
+
+            {error && (
+              <p
+                role="alert"
+                className="mt-4 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5 text-[12px] leading-relaxed text-brand-800"
+              >
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-5">
+              <p className="font-code text-[7.5px] leading-[2] tracking-[0.16em] text-ink-400">
+                WRITTEN VIA quorum-mcp · {(firstName || "unknown").toUpperCase()} IS THE RECORDED ACTOR
+              </p>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!busy) onClose();
+                  }}
+                  disabled={busy}
+                  className="inline-flex h-10 items-center rounded-xl border border-ink-200 bg-white px-5 font-code text-[9px] font-bold tracking-[0.16em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950 disabled:opacity-60"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void register()}
+                  disabled={busy}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-[13px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <UserPlus className="h-4 w-4" aria-hidden="true" />
+                  {busy ? "Writing to the register…" : "Add supplier"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function SuppliersView({ firstName, onToast }: { firstName: string; onToast: (m: string) => void }) {
+  const { suppliers, reachable, reload } = useSuppliers();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | SupplierStatus>("ALL");
+  const [addOpen, setAddOpen] = useState(false);
+  const [editing, setEditing] = useState<SupplierRow | null>(null);
+  const [editDraft, setEditDraft] = useState<SupplierDraft>(EMPTY_SUPPLIER_DRAFT);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  const q = search.trim().toLowerCase();
+  const filtered = useMemo(
+    () =>
+      suppliers.filter((s) => {
+        if (statusFilter !== "ALL" && s.status !== statusFilter) return false;
+        if (!q) return true;
+        return [
+          s.name,
+          s.registrationNo,
+          s.taxPin,
+          s.taxClearanceNo,
+          s.regulator,
+          s.regulatorNo,
+          s.email,
+          s.phone,
+          s.contactName,
+          s.categories.join(" "),
+        ]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q));
+      }),
+    [suppliers, statusFilter, q],
+  );
+
+  const counts = useMemo(
+    () => ({
+      total: suppliers.length,
+      active: suppliers.filter((s) => s.status === "ACTIVE").length,
+      suspended: suppliers.filter((s) => s.status === "SUSPENDED").length,
+      blacklisted: suppliers.filter((s) => s.status === "BLACKLISTED").length,
+    }),
+    [suppliers],
+  );
+
+  /* Escape closes the edit dialog; nothing closes while a write is in flight. */
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !editBusy) setEditing(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, editBusy]);
+
+  /* The intake is a modal over the roll — opened from the header or the
+     empty state; focus returns to whatever opened it when it closes. */
+  const openAdd = () => {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setAddOpen(true);
+  };
+
+  const closeAdd = () => {
+    setAddOpen(false);
+    requestAnimationFrame(() => openerRef.current?.focus());
+  };
+
+  const openEdit = (s: SupplierRow) => {
+    setEditing(s);
+    setEditDraft(draftFromSupplier(s));
+    setEditError("");
+    setConfirmDelete(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    if (!editDraft.name.trim() || !editDraft.registrationNo.trim()) {
+      setEditError("A supplier needs at least a name and a registration number.");
+      return;
+    }
+    setEditBusy(true);
+    setEditError("");
+    try {
+      const res = await fetch(`/api/suppliers/${editing.id}?XTransformPort=3031`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...editDraft, actor: firstName || "unknown" }),
+      });
+      if (!res.ok) {
+        setEditError(await sidecarError(res, `The register refused the change (HTTP ${res.status}).`));
+        return;
+      }
+      const name = editDraft.name.trim();
+      setEditing(null);
+      await reload();
+      onToast(`REGISTER UPDATED — ${name.toUpperCase()} · CHANGES WRITTEN TO THE AUDIT TRAIL`);
+    } catch {
+      setEditError("The sidecar is offline — the change was not written.");
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const changeStatus = async (s: SupplierRow, status: SupplierStatus) => {
+    try {
+      const res = await fetch(`/api/suppliers/${s.id}?XTransformPort=3031`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status, actor: firstName || "unknown" }),
+      });
+      if (!res.ok) {
+        onToast((await sidecarError(res, "CHANGE NOT WRITTEN")).toUpperCase());
+        return;
+      }
+      await reload();
+      onToast(
+        status === "ACTIVE"
+          ? `SUPPLIER REINSTATED — ${s.name.toUpperCase()}`
+          : `SUPPLIER ${status} — ${s.name.toUpperCase()}`,
+      );
+    } catch {
+      onToast("CHANGE NOT WRITTEN — quorum-mcp NOT RESPONDING");
+    }
+  };
+
+  const removeSupplier = async (s: SupplierRow) => {
+    try {
+      const res = await fetch(`/api/suppliers/${s.id}?XTransformPort=3031`, {
+        method: "DELETE",
+        headers: { "x-quorum-actor": firstName || "unknown" },
+      });
+      if (!res.ok) {
+        onToast((await sidecarError(res, "REMOVAL NOT WRITTEN")).toUpperCase());
+        return;
+      }
+      setConfirmDelete(null);
+      await reload();
+      onToast(`SUPPLIER REMOVED — ${s.name.toUpperCase()} · REMOVAL LOGGED`);
+    } catch {
+      onToast("REMOVAL NOT WRITTEN — quorum-mcp NOT RESPONDING");
+    }
+  };
+
+  const statusTabs: { id: "ALL" | SupplierStatus; label: string; n: number }[] = [
+    { id: "ALL", label: "ALL", n: counts.total },
+    { id: "ACTIVE", label: "ACTIVE", n: counts.active },
+    { id: "SUSPENDED", label: "SUSPENDED", n: counts.suspended },
+    { id: "BLACKLISTED", label: "BLACKLISTED", n: counts.blacklisted },
+  ];
+
+  return (
+    <ViewShell
+      fig="16"
+      title="Supplier register"
+      sub="Every bidder the platform knows — held with the registration detail Zambia's regime asks a bidder to carry: PACRA number, ZRA tax clearance, sector registration. The agent reads this roll when it checks a bid; you keep it true. New entries can start straight off the published ZPPA e-GP record."
+      action={
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1.5 font-code text-[8px] font-semibold tracking-[0.18em] text-ink-600">
+            <span className="relative flex h-1.5 w-1.5">
+              {reachable === true && (
+                <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
+              )}
+              <span
+                className={cn(
+                  "relative inline-flex h-1.5 w-1.5 rounded-full",
+                  reachable === true && "bg-brand-600",
+                  reachable === false && "bg-ink-400",
+                  reachable === null && "animate-pulse bg-ink-300",
+                )}
+                aria-hidden="true"
+              />
+            </span>
+            {reachable === null ? "LINKING" : reachable ? "REGISTER LINKED" : "REGISTER OFFLINE"}
+          </span>
+          <button
+            type="button"
+            data-tour="suppliers-add"
+            onClick={openAdd}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-4 font-code text-[9px] font-bold tracking-[0.18em] text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-colors hover:bg-brand-700"
+          >
+            <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+            REGISTER A SUPPLIER
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-5">
+        {/* The roll — given the full width of the workspace so every column shows */}
+        <div className="min-w-0">
+          <div data-tour="suppliers-roll" className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
+            <header className="border-b border-ink-100 px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">On the register</h2>
+                  <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
+                    {counts.total} SUPPLIER{counts.total === 1 ? "" : "S"} · {filtered.length} SHOWN
+                  </p>
+                </div>
+                <label className="relative block">
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-300"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Name, TIN, registration…"
+                    aria-label="Search the supplier register"
+                    className="h-9 w-52 rounded-full border border-ink-200 bg-paper pl-9 pr-3 text-[12.5px] text-ink-900 outline-none transition-colors placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                  />
+                </label>
+              </div>
+              <div data-tour="suppliers-filters" className="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by status">
+                {statusTabs.map((t) => {
+                  const on = statusFilter === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={on}
+                      onClick={() => setStatusFilter(t.id)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-code text-[8px] font-bold tracking-[0.14em] transition-colors",
+                        on
+                          ? "border-ink-950 bg-ink-950 text-white"
+                          : "border-ink-200 bg-white text-ink-500 hover:border-ink-400 hover:text-ink-800",
+                      )}
+                    >
+                      {t.label}
+                      <span className={cn("tabular", on ? "text-brand-400" : "text-ink-300")}>{t.n}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </header>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[880px] border-collapse text-left" aria-label="Supplier register">
+                <thead>
+                  <tr className="border-b border-ink-100 bg-paper">
+                    {["SUPPLIER", "ZRA TAX", "SECTOR REGISTRATION", "CONTACT", "STATUS", "ACTIONS"].map((h) => (
+                      <th
+                        key={h}
+                        scope="col"
+                        className={cn(
+                          "px-5 py-3 font-code text-[8px] font-bold tracking-[0.18em] text-ink-500",
+                          h === "ACTIONS" && "text-right",
+                        )}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((s) => {
+                    const standing = clearanceStanding(s.taxClearanceExpiry);
+                    return (
+                      <tr key={s.id} className="border-b border-ink-50 last:border-b-0 hover:bg-paper/60">
+                        <td className="px-5 py-4 align-top">
+                          <p className="text-[13.5px] font-semibold leading-snug text-ink-950">{s.name}</p>
+                          <p className="mt-1 font-code text-[8.5px] tracking-[0.14em] text-ink-400">
+                            REG {s.registrationNo}
+                          </p>
+                          <p className="mt-1 font-code text-[7.5px] tracking-[0.14em] text-ink-300">
+                            ADDED BY {(s.addedBy || "—").toUpperCase()} · {shortDateOf(s.createdAt)}
+                          </p>
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <p className="font-code text-[9px] tracking-[0.12em] text-ink-600">
+                            PIN {s.taxPin || "—"}
+                          </p>
+                          <p className="mt-1 font-code text-[9px] tracking-[0.12em] text-ink-600">
+                            TC {s.taxClearanceNo || "—"}
+                          </p>
+                          {s.taxClearanceExpiry && (
+                            <p className="mt-1 font-code text-[8px] tracking-[0.12em] text-ink-400">
+                              EXP {shortDateOf(s.taxClearanceExpiry)}
+                            </p>
+                          )}
+                          {standing && (
+                            <span
+                              className={cn(
+                                "mt-1.5 inline-flex rounded-full border px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.12em]",
+                                standing.tone,
+                              )}
+                            >
+                              {standing.label}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <p className="font-code text-[9px] tracking-[0.12em] text-ink-600">
+                            {s.regulator ? `${s.regulator} · ${s.regulatorNo || "—"}` : "NOT REQUIRED"}
+                          </p>
+                          {s.categories.length > 0 && (
+                            <div className="mt-1.5 flex max-w-[220px] flex-wrap gap-1">
+                              {s.categories.map((c) => (
+                                <span
+                                  key={c}
+                                  className="rounded-full border border-ink-200 bg-white px-2 py-0.5 font-code text-[7.5px] tracking-[0.08em] text-ink-500"
+                                >
+                                  {c.toUpperCase()}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <p className="text-[12px] font-medium text-ink-800">{s.contactName || "—"}</p>
+                          <p className="mt-1 text-[11px] text-ink-500">{s.email || "—"}</p>
+                          <p className="mt-0.5 font-code text-[9px] tracking-[0.08em] text-ink-500">{s.phone || "—"}</p>
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <SupplierStatusChip status={s.status} />
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(s)}
+                              title={`Edit ${s.name}`}
+                              aria-label={`Edit ${s.name}`}
+                              className="grid h-8 w-8 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-paper hover:text-ink-900"
+                            >
+                              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                            {s.status === "ACTIVE" ? (
+                              <SupplierRowAction onClick={() => void changeStatus(s, "SUSPENDED")} title="Suspend pending resolution">
+                                SUSPEND
+                              </SupplierRowAction>
+                            ) : (
+                              <SupplierRowAction onClick={() => void changeStatus(s, "ACTIVE")} title="Return to active">
+                                {s.status === "BLACKLISTED" ? "REINSTATE" : "REACTIVATE"}
+                              </SupplierRowAction>
+                            )}
+                            {s.status !== "BLACKLISTED" && (
+                              <SupplierRowAction tone="danger" onClick={() => void changeStatus(s, "BLACKLISTED")} title="Exclude this firm">
+                                BLACKLIST
+                              </SupplierRowAction>
+                            )}
+                            {confirmDelete === s.id ? (
+                              <>
+                                <SupplierRowAction tone="confirm" onClick={() => void removeSupplier(s)} title="Confirm removal">
+                                  CONFIRM
+                                </SupplierRowAction>
+                                <SupplierRowAction onClick={() => setConfirmDelete(null)} title="Keep this supplier">
+                                  CANCEL
+                                </SupplierRowAction>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelete(s.id)}
+                                title={`Remove ${s.name}`}
+                                aria-label={`Remove ${s.name}`}
+                                className="grid h-8 w-8 place-items-center rounded-lg text-ink-300 transition-colors hover:bg-brand-50 hover:text-brand-700"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filtered.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-5 py-12 text-center">
+                        <p className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-900">
+                          {suppliers.length === 0 ? "No suppliers on the register yet" : "Nothing matches this filter"}
+                        </p>
+                        <p className="mx-auto mt-2 max-w-md text-[12.5px] leading-relaxed text-ink-500">
+                          {suppliers.length === 0
+                            ? "Register the firms your entity deals with — or pull one straight off the published ZPPA record; the intake fills itself. The agent reads this roll when it checks bids."
+                            : "Clear the search or switch the status filter to see the rest of the roll."}
+                        </p>
+                        {suppliers.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={openAdd}
+                            className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-ink-200 bg-white px-4 font-code text-[8.5px] font-bold tracking-[0.16em] text-ink-700 transition-colors hover:border-ink-950 hover:text-ink-950"
+                          >
+                            <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                            ADD THE FIRST SUPPLIER
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <p className="mt-3 font-code text-[8px] tracking-[0.18em] text-ink-400">
+            EVERY ADD, EDIT, SUSPENSION AND REMOVAL IS APPENDED TO THE AUDIT TRAIL — THE REGISTER IS NEVER SILENT.
+          </p>
+        </div>
+
+      </div>
+
+      <AddSupplierModal
+        open={addOpen}
+        firstName={firstName}
+        existing={suppliers}
+        onClose={closeAdd}
+        onRegistered={async (name) => {
+          await reload();
+          onToast(`SUPPLIER REGISTERED — ${name.toUpperCase()} ADDED TO THE PLATFORM REGISTER`);
+        }}
+      />
+
+      {/* Edit dialog — the dossier, re-read and corrected */}
+      <AnimatePresence>
+        {editing && (
+          <motion.div
+            key="supplier-edit"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[70] grid place-items-center bg-night/70 p-4 backdrop-blur-sm"
+            onClick={() => {
+              if (!editBusy) setEditing(null);
+            }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Edit ${editing.name}`}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{ duration: 0.28, ease: EASE }}
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_30px_80px_rgba(11,12,15,0.35)] sm:p-7"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="font-code text-[8px] font-semibold tracking-[0.24em] text-ink-400">EDIT SUPPLIER</p>
+                  <h3 className="mt-1 truncate font-display text-[20px] font-black tracking-[-0.015em] text-ink-950">
+                    {editing.name}
+                  </h3>
+                  <p className="mt-1 font-code text-[8.5px] tracking-[0.16em] text-ink-400">
+                    REG {editing.registrationNo} · ADDED {shortDateOf(editing.createdAt)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!editBusy) setEditing(null);
+                  }}
+                  aria-label="Close without saving"
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-paper hover:text-ink-900"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="mt-5">
+                <SupplierFormFields idPrefix="edit" draft={editDraft} onChange={setEditDraft} />
+              </div>
+
+              {editError && (
+                <p role="alert" className="mt-4 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5 text-[12px] leading-relaxed text-brand-800">
+                  {editError}
+                </p>
+              )}
+
+              <div className="mt-6 flex flex-wrap items-center justify-end gap-2.5 border-t border-ink-100 pt-5">
+                <button
+                  type="button"
+                  onClick={() => setEditing(null)}
+                  disabled={editBusy}
+                  className="inline-flex h-10 items-center rounded-xl border border-ink-200 bg-white px-5 font-code text-[9px] font-bold tracking-[0.16em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950 disabled:opacity-60"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void saveEdit()}
+                  disabled={editBusy}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-[13px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {editBusy ? "Writing…" : "Save changes"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </ViewShell>
+  );
+}
+
+/* The guards as the side-car keeps them — server truth, named changes. */
+type GuardSettings = {
+  priceVariancePct: 15 | 25 | 40;
+  checklist: "STANDARD" | "STRICT";
+  registryCrossCheck: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+};
+
+const GUARD_DEFAULTS: GuardSettings = {
+  priceVariancePct: 25,
+  checklist: "STANDARD",
+  registryCrossCheck: true,
+  updatedAt: null,
+  updatedBy: null,
+};
+
+const varianceLabelOf = (pct: 15 | 25 | 40) => `${pct}%` as "15%" | "25%" | "40%";
+const checklistLabelOf = (c: GuardSettings["checklist"]) => (c === "STRICT" ? ("STRICT · 16/16" as const) : ("STANDARD · 12/16" as const));
+
+function RulesView({
+  firstName,
+  onToast,
+  onOpenActivity,
+}: {
+  firstName: string;
+  onToast: (m: string) => void;
+  onOpenActivity: () => void;
+}) {
+  const [guards, setGuards] = useState<GuardSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [register, setRegister] = useState<{ total: number; flagged: number } | null>(null);
+
+  /* The page reads server truth on mount — the pills are never a local wish. */
+  const load = useCallback(() => {
+    let stale = false;
+    setLoadFailed(false);
+    fetch("/api/guards?XTransformPort=3031")
+      .then((r) => {
+        if (!r.ok) throw new Error(`guards service returned ${r.status}`);
+        return r.json();
+      })
+      .then((d: { guards?: GuardSettings }) => {
+        if (!stale && d.guards) setGuards(d.guards);
+      })
+      .catch(() => {
+        if (!stale) setLoadFailed(true);
+      });
+    return () => {
+      stale = true;
+    };
+  }, []);
+  useEffect(load, [load]);
+
+  /* The register the cross-check reads — shown live beside guard 03. */
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/suppliers?XTransformPort=3031")
+      .then((r) => r.json())
+      .then((d: { suppliers?: { status?: string }[] }) => {
+        if (!alive) return;
+        const list = d.suppliers ?? [];
+        setRegister({
+          total: list.length,
+          flagged: list.filter((s) => s.status === "SUSPENDED" || s.status === "BLACKLISTED").length,
+        });
+      })
+      .catch(() => {
+        /* register unreadable — the guard line simply stays quiet */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const shown = guards ?? GUARD_DEFAULTS;
+  const actor = firstName.trim() || "unknown officer";
+  const locked = !guards || saving;
+
+  /* Optimistic: the pill moves at once; a refusal puts it back and says so. */
+  const setGuard = async (
+    patch: Partial<Pick<GuardSettings, "priceVariancePct" | "checklist" | "registryCrossCheck">>,
+    label: string
+  ) => {
+    if (!guards || saving) return;
+    const prior = guards;
+    setSaving(true);
+    setGuards({ ...guards, ...patch });
+    try {
+      const res = await fetch("/api/guards?XTransformPort=3031", {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-quorum-actor": actor },
+        body: JSON.stringify({ ...patch, actor }),
+      });
+      const d = (await res.json()) as { guards?: GuardSettings; error?: string };
+      if (!res.ok || !d.guards) throw new Error(d.error ?? `refused (${res.status})`);
+      setGuards(d.guards);
+      onToast(`GUARD UPDATED — ${label} · LOGGED AS ${String(d.guards.updatedBy ?? actor).toUpperCase()}`);
+    } catch (err) {
+      setGuards(prior);
+      onToast(`GUARD UPDATE REFUSED — ${err instanceof Error ? err.message.toUpperCase() : "NO ANSWER FROM THE SIDE-CAR"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cards: { no: string; title: string; desc: string; control: ReactNode }[] = [
     {
       no: "01",
       title: "Price variance flag",
       desc: "Flag any bid priced above the framework median by more than —",
       control: (
         <GuardPills
-          value={variance}
+          value={varianceLabelOf(shown.priceVariancePct)}
           options={["15%", "25%", "40%"] as const}
-          onChange={(v) => {
-            setVariance(v);
-            onToast(`GUARD UPDATED — PRICE VARIANCE NOW ${v} · WRITTEN TO THE AUDIT TRAIL`);
-          }}
+          onChange={(v) => void setGuard({ priceVariancePct: Number(v.slice(0, -1)) as 15 | 25 | 40 }, `PRICE VARIANCE NOW ${v}`)}
           groupLabel="Price variance threshold"
+          disabled={locked}
         />
       ),
     },
@@ -4099,13 +7390,11 @@ function RulesView({ onToast }: { onToast: (m: string) => void }) {
       desc: "Minimum documents present before a run may complete —",
       control: (
         <GuardPills
-          value={checklist}
+          value={checklistLabelOf(shown.checklist)}
           options={["STANDARD · 12/16", "STRICT · 16/16"] as const}
-          onChange={(v) => {
-            setChecklist(v);
-            onToast(`GUARD UPDATED — CHECKLIST MODE ${v} · WRITTEN TO THE AUDIT TRAIL`);
-          }}
+          onChange={(v) => void setGuard({ checklist: v === "STRICT · 16/16" ? "STRICT" : "STANDARD" }, `CHECKLIST MODE ${v}`)}
           groupLabel="Document checklist mode"
+          disabled={locked}
         />
       ),
     },
@@ -4114,15 +7403,20 @@ function RulesView({ onToast }: { onToast: (m: string) => void }) {
       title: "Registry cross-check",
       desc: "Match every bidder against the open registry before a finding is raised —",
       control: (
-        <GuardPills
-          value={registry ? "ON" : "OFF"}
-          options={["ON", "OFF"] as const}
-          onChange={(v) => {
-            setRegistry(v === "ON");
-            onToast(`GUARD UPDATED — REGISTRY CROSS-CHECK ${v} · WRITTEN TO THE AUDIT TRAIL`);
-          }}
-          groupLabel="Registry cross-check"
-        />
+        <>
+          <GuardPills
+            value={shown.registryCrossCheck ? "ON" : "OFF"}
+            options={["ON", "OFF"] as const}
+            onChange={(v) => void setGuard({ registryCrossCheck: v === "ON" }, `REGISTRY CROSS-CHECK ${v}`)}
+            groupLabel="Registry cross-check"
+            disabled={locked}
+          />
+          <p className="mt-3 font-code text-[7.5px] tracking-[0.16em] text-ink-400">
+            {register
+              ? `REGISTER — ${register.total} REGISTERED · ${register.flagged} SUSPENDED OR BLACKLISTED`
+              : "REGISTER — NOT REACHED YET"}
+          </p>
+        </>
       ),
     },
   ];
@@ -4135,8 +7429,28 @@ function RulesView({ onToast }: { onToast: (m: string) => void }) {
     >
       {/* Full-width: guards flow edge-to-edge in a two-column grid,
           with the standing-rule rail as a full-width row beneath. */}
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-        {guards.map((g, i) => (
+      {!guards && (
+        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-ink-100 bg-white px-4 py-3 sm:mb-6">
+          <span
+            className={cn("h-1.5 w-1.5 rounded-full", loadFailed ? "bg-red-500" : "animate-pulse bg-amber-400")}
+            aria-hidden="true"
+          />
+          <p className="font-code text-[8px] font-semibold tracking-[0.22em] text-ink-500">
+            {loadFailed ? "GUARD SERVICE UNREACHABLE — SETTINGS NOT LOADED" : "SYNCING GUARDS WITH THE SIDE-CAR…"}
+          </p>
+          {loadFailed && (
+            <button
+              type="button"
+              onClick={() => load()}
+              className="ml-auto font-code text-[8px] font-bold tracking-[0.18em] text-brand-700 transition-colors hover:text-brand-800"
+            >
+              RETRY
+            </button>
+          )}
+        </div>
+      )}
+      <div data-tour="rules-guards" className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+        {cards.map((g, i) => (
           <motion.div
             key={g.no}
             initial={{ opacity: 0, y: 20 }}
@@ -4151,6 +7465,7 @@ function RulesView({ onToast }: { onToast: (m: string) => void }) {
           </motion.div>
         ))}
         <motion.div
+          data-tour="rules-locked"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2, ease: EASE }}
@@ -4173,12 +7488,27 @@ function RulesView({ onToast }: { onToast: (m: string) => void }) {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-2">
-        <StandingRuleCard onToast={onToast} />
-        <div className="flex items-start gap-3 rounded-2xl border border-ink-100 bg-sand p-5">
+        <StandingRuleCard />
+        <div data-tour="rules-audit" className="flex items-start gap-3 rounded-2xl border border-ink-100 bg-sand p-5">
           <ShieldCheck className="h-4 w-4 shrink-0 text-brand-700" aria-hidden="true" />
-          <p className="font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-600">
-            EVERY GUARD CHANGE IS LOGGED — NAME, TIMESTAMP, BEFORE &amp; AFTER VALUES.
-          </p>
+          <div className="min-w-0">
+            <p className="font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-600">
+              EVERY GUARD CHANGE IS LOGGED — NAME, TIMESTAMP, BEFORE &amp; AFTER VALUES.
+            </p>
+            <p className="mt-2 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-brand-800">
+              {shown.updatedAt
+                ? `LAST CHANGE — ${stampOf(shown.updatedAt)} · BY ${String(shown.updatedBy ?? "unknown").toUpperCase()}`
+                : "NO GUARD CHANGES YET — THE CARVED SETTINGS STAND."}
+            </p>
+            <button
+              type="button"
+              onClick={onOpenActivity}
+              className="mt-2 inline-flex items-center gap-1.5 font-code text-[7.5px] font-bold tracking-[0.18em] text-ink-500 transition-colors hover:text-ink-950"
+            >
+              READ THE TRAIL
+              <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </div>
     </ViewShell>
@@ -4218,7 +7548,7 @@ function RunsView({
         </div>
         <div className="grid content-start gap-4 sm:grid-cols-2 sm:gap-6">
           <NewRunCard onNewRun={onNewRun} />
-          <StandingRuleCard onToast={onToast} />
+          <StandingRuleCard />
         </div>
       </div>
     </ViewShell>
@@ -4289,7 +7619,7 @@ function FeedView({ onToast }: { onToast: (m: string) => void }) {
           <AgentFeed />
         </div>
         <div className="grid content-start gap-4 sm:gap-6">
-          <PortalSync onToast={onToast} />
+          <PortalSync />
           <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
             <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
             <div className="relative">
@@ -4311,109 +7641,6 @@ function FeedView({ onToast }: { onToast: (m: string) => void }) {
 
 /* ── The screen ──────────────────────────────────────────────────────────── */
 
-/* ── The flow guide: upload → agent runs → human gate → award ─────────── */
-
-const FLOW_STEPS = [
-  { num: "01", label: "BRIEF THE AGENT", sub: "Upload the tender pack" },
-  { num: "02", label: "AGENT RUNS", sub: "Every claim cited" },
-  { num: "03", label: "HUMAN GATE", sub: "The committee reads" },
-  { num: "04", label: "AWARD LOGGED", sub: "Decision on the ledger" },
-] as const;
-
-const FLOW_SUB_CURRENT = [
-  "START WITH THE PACK",
-  "QUORUM-AGENT IS READING",
-  "YOUR GAVEL — ACTION NEEDED",
-  "SEE THE LEDGER",
-];
-
-function FlowGuide({
-  current,
-  complete,
-  onStep,
-}: {
-  current: number;
-  complete: boolean;
-  onStep: (step: number) => void;
-}) {
-  return (
-    <motion.section
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.55, delay: 0.02, ease: EASE }}
-      aria-label="The flow — from upload to award"
-      className="mt-8 overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]"
-    >
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-5 py-3.5">
-        <p className="flex items-center gap-2.5 font-code text-[9px] font-semibold tracking-[0.24em] text-ink-500">
-          <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
-          THE FLOW — UPLOAD TO AWARD
-        </p>
-        <p className="font-code text-[8.5px] font-semibold tracking-[0.18em] text-ink-400" aria-live="polite">
-          {complete ? (
-            <span className="text-ink-950">LOOP CLOSED · 04 OF 04 · RUN ANOTHER ANY TIME</span>
-          ) : (
-            `STEP ${current + 1} OF 4`
-          )}
-        </p>
-      </header>
-      <div className="grid grid-cols-1 gap-px bg-ink-100 sm:grid-cols-2 xl:grid-cols-4">
-        {FLOW_STEPS.map((s, i) => {
-          const done = complete || i < current;
-          const isCurrent = !complete && i === current;
-          return (
-            <button
-              key={s.num}
-              type="button"
-              onClick={() => onStep(i)}
-              aria-current={isCurrent ? "step" : undefined}
-              className="flex items-start gap-3 bg-white px-5 py-4 text-left transition-colors hover:bg-paper"
-            >
-              <span
-                className={cn(
-                  "grid h-7 w-7 shrink-0 place-items-center rounded-full border font-code text-[9px] font-bold",
-                  done
-                    ? "border-ink-950 bg-ink-950 text-white"
-                    : isCurrent
-                      ? "border-brand-600 bg-brand-50 text-brand-700"
-                      : "border-ink-200 text-ink-300"
-                )}
-                aria-hidden="true"
-              >
-                {done ? <CircleCheck className="h-3.5 w-3.5" /> : s.num}
-              </span>
-              <span className="min-w-0">
-                <span
-                  className={cn(
-                    "flex items-center gap-2 font-code text-[9px] font-bold tracking-[0.16em]",
-                    isCurrent ? "text-ink-950" : done ? "text-ink-700" : "text-ink-400"
-                  )}
-                >
-                  {s.label}
-                  {isCurrent && (
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
-                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" aria-hidden="true" />
-                    </span>
-                  )}
-                </span>
-                <span className={cn("mt-1 block truncate text-[12px]", isCurrent ? "font-medium text-ink-800" : "text-ink-500")}>
-                  {isCurrent ? FLOW_SUB_CURRENT[i] : done ? "DONE" : s.sub}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </motion.section>
-  );
-}
-
-/* Session flow tracker — how far this officer has walked the loop:
-   briefed a run with a real pack → watched the agent → sat the gate →
-   logged the award. Drives the FlowGuide on the overview. */
-type FlowState = { refs: string[]; decided: boolean; awarded: boolean };
-
 export function Dashboard({
   user,
   onSignOut,
@@ -4431,9 +7658,30 @@ export function Dashboard({
   const [filter, setFilter] = useState<RunFilter>("all");
   const [active, setActive] = useState<SectionId>("mc-overview");
   const [navOpen, setNavOpen] = useState(false);
+  /* Desktop sidebar: the whole rail collapses, and the choice is remembered. */
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("quorum.navCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setNavCollapsedPersisted = useCallback((collapsed: boolean) => {
+    setNavCollapsed(collapsed);
+    try {
+      window.localStorage.setItem("quorum.navCollapsed", collapsed ? "1" : "0");
+    } catch {
+      /* private mode — the choice simply won't survive reloads */
+    }
+  }, []);
   const [modalOpen, setModalOpen] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
-  const [flow, setFlow] = useState<FlowState>({ refs: [], decided: false, awarded: false });
+
+  /* The guided walkthrough: which chapter and step is spotlit right now, and
+     which chapters this officer has already toured in this session. */
+  const [tour, setTour] = useState<{ ch: number; step: number } | null>(null);
+  const [toured, setToured] = useState<number[]>([]);
 
   /* Live agent health — the pill and sidebar render what the stack reports. */
   const agent = useAgentStatus();
@@ -4458,9 +7706,6 @@ export function Dashboard({
   }, [navOpen]);
 
   const firstName = firstNameOf(user);
-  /* Full-width focus mode: the Approvals view is the committee's desk —
-     the navigation steps aside so the section spans the entire screen. */
-  const focusGates = active === "mc-gates";
   const hour = now?.getHours() ?? 10;
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
@@ -4475,12 +7720,6 @@ export function Dashboard({
 
   const findingRows = useMemo(() => buildFindingRows(findings, runs, verdicts), [findings, runs, verdicts]);
   const openFindings = findingRows.filter((r) => r.status === "OPEN").length;
-
-  /* Where the officer stands in the loop right now. */
-  const userLive = runs.some((r) => flow.refs.includes(r.id) && (r.status === "running" || r.status === "queued"));
-  const userGate = queue.some((g) => flow.refs.includes(g.tender));
-  const flowCurrent = userLive ? 1 : userGate ? 2 : flow.decided ? 3 : 0;
-  const flowComplete = flow.awarded && !userLive && !userGate;
 
   const switchTo = (id: SectionId) => {
     setNavOpen(false);
@@ -4501,7 +7740,6 @@ export function Dashboard({
     }
     if (!res.ok) throw new Error(`The run service could not start this review (HTTP ${res.status}). Check the tender reference and try again.`);
     setModalOpen(false);
-    setFlow((f) => ({ ...f, refs: [...f.refs, ref] }));
     /* Guide the officer to the register — the run goes live in front of them. */
     setActive("mc-runs");
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
@@ -4540,23 +7778,68 @@ export function Dashboard({
   const signGate = async (g: GateItem) => {
     if (!(await decideGate(g, "APPROVE"))) return;
     onToast(`GATE SIGNED — ${g.tender} AWARDED · DECISION LOGGED`);
-    /* The officer has sat a gate and closed the loop at least once. */
-    setFlow((f) => ({ ...f, decided: true, awarded: true }));
   };
 
   const returnGate = async (g: GateItem) => {
     if (!(await decideGate(g, "REJECT"))) return;
     onToast(`${g.tender} RETURNED — AGENT TASKED WITH CLARIFICATION`);
-    /* A return is still a committee decision — the loop just re-opens. */
-    setFlow((f) => ({ ...f, decided: true }));
   };
 
-  /* The flow guide is clickable — each step jumps to where the work happens. */
-  const handleFlowStep = (step: number) => {
-    if (step === 0) setModalOpen(true);
-    else if (step === 1) switchTo("mc-runs");
-    else if (step === 2) switchTo("mc-gates");
-    else switchTo("mc-ledger");
+  /* ── The guided walkthrough ─────────────────────────────────────────────
+     A chapter points at a section (or its own URL) and carries an ordered
+     list of [data-tour] targets; <TourLayer> finds, scrolls to and
+     spotlights each one. Steps that need the wizard open say so with an
+     action, executed the moment the step becomes current. */
+  const tourChapter = tour ? WALKTHROUGH[tour.ch] : undefined;
+  const tourSteps = tourChapter?.tour;
+
+  /* Move the tour to a step, running its action if it carries one — a step
+     that needs the wizard open says so, and this opens it as we arrive. */
+  const goTourStep = (i: number) => {
+    if (!tour) return;
+    const s = WALKTHROUGH[tour.ch]?.tour?.[i];
+    if (s?.action === "open-wizard") setModalOpen(true);
+    setTour({ ...tour, step: i });
+  };
+
+  const startTour = (ch: number) => {
+    const chapter = WALKTHROUGH[ch];
+    if (!chapter) return;
+    /* The handbook lives at its own address — send the tour there instead. */
+    if (chapter.href) {
+      window.location.href = `${chapter.href}?tour=1`;
+      return;
+    }
+    if (!chapter.tour?.length) return;
+    setModalOpen(false);
+    if (chapter.section) {
+      setNavOpen(false);
+      setActive(chapter.section);
+      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+    }
+    if (chapter.tour[0]?.action === "open-wizard") setModalOpen(true);
+    /* A step that lives in the rail needs the rail on screen — bring it back
+       for the tour without touching the officer's saved preference. */
+    if (chapter.tour.some((s) => s.target.startsWith("nav-"))) setNavCollapsed(false);
+    setTour({ ch, step: 0 });
+  };
+
+  const markToured = (ch: number) =>
+    setToured((prev) => (prev.includes(ch) ? prev : [...prev, ch]));
+
+  const finishTour = () => {
+    if (!tour) return;
+    markToured(tour.ch);
+    onToast(`WALKTHROUGH COMPLETE — CHAPTER ${String(tour.ch + 1).padStart(2, "0")} OF ${WALKTHROUGH.length}`);
+    setTour(null);
+  };
+
+  const nextTourChapter = () => {
+    if (!tour) return;
+    const next = tour.ch + 1;
+    markToured(tour.ch);
+    setTour(null);
+    if (next < WALKTHROUGH.length) requestAnimationFrame(() => startTour(next));
   };
 
   const renderView = () => {
@@ -4591,7 +7874,15 @@ export function Dashboard({
       case "mc-findings":
         return <FindingsView rows={findingRows} onOpenRun={() => switchTo("mc-runs")} />;
       case "mc-reports":
-        return <ReportPacksView runs={runs} verdicts={verdicts} onToast={onToast} />;
+        return (
+          <ReportPacksView
+            runs={runs}
+            verdicts={verdicts}
+            findings={findings}
+            onToast={onToast}
+            onOpenApprovals={() => switchTo("mc-gates")}
+          />
+        );
       case "mc-sources":
         return <SourcesView onToast={onToast} firstName={firstName} />;
       case "mc-ledger":
@@ -4599,13 +7890,22 @@ export function Dashboard({
       case "mc-committee":
         return <CommitteeView user={user} onToast={onToast} />;
       case "mc-rules":
-        return <RulesView onToast={onToast} />;
+        return <RulesView firstName={firstName} onToast={onToast} onOpenActivity={() => switchTo("mc-activity")} />;
       case "mc-stack":
         return <StackConsole onToast={onToast} />;
       case "mc-settings":
         return <SettingsView user={user} agent={agent} onSignOut={onSignOut} onToast={onToast} />;
       case "mc-walkthrough":
-        return <WalkthroughView onOpen={switchTo} onNewRun={() => setModalOpen(true)} />;
+        return (
+          <WalkthroughView
+            onOpen={switchTo}
+            onNewRun={() => setModalOpen(true)}
+            onTour={startTour}
+            done={toured}
+          />
+        );
+      case "mc-suppliers":
+        return <SuppliersView firstName={firstName} onToast={onToast} />;
       default:
         return null;
     }
@@ -4617,21 +7917,30 @@ export function Dashboard({
         href="#mc-main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[90] focus:rounded-lg focus:bg-ink-950 focus:px-4 focus:py-2 focus:text-[13px] focus:font-semibold focus:text-white"
       >
-        Skip to mission control
+        Skip to workspace
       </a>
 
-      {/* Desktop sidebar — steps aside while the Approvals view holds the screen */}
+      {/* Desktop sidebar — present on every section; collapses entirely on request */}
       <AnimatePresence>
-        {!focusGates && (
+        {!navCollapsed && (
           <motion.aside
             initial={{ x: "-100%" }}
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ duration: 0.32, ease: EASE }}
             className="fixed inset-y-0 left-0 z-40 hidden w-[264px] flex-col border-r border-white/5 bg-night lg:flex"
-            aria-label="Mission control sidebar"
+            aria-label="Workspace sidebar"
           >
             <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-50" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => setNavCollapsedPersisted(true)}
+              aria-label="Collapse sidebar"
+              title="Collapse the sidebar"
+              className="absolute right-3 top-6 z-10 grid h-8 w-8 place-items-center rounded-lg text-ink-500 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+            </button>
             <div className="relative flex h-full flex-col">
               <SidebarContent
                 active={active}
@@ -4662,7 +7971,7 @@ export function Dashboard({
           <button
             type="button"
             onClick={() => setNavOpen(true)}
-            aria-label="Open mission control menu"
+            aria-label="Open workspace menu"
             aria-expanded={navOpen}
             className="grid h-10 w-10 place-items-center rounded-full border border-white/15 text-white"
           >
@@ -4680,10 +7989,7 @@ export function Dashboard({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className={cn(
-                "fixed inset-0 z-[60] bg-night/70 backdrop-blur-sm",
-                !focusGates && "lg:hidden"
-              )}
+              className="fixed inset-0 z-[60] bg-night/70 backdrop-blur-sm lg:hidden"
               onClick={() => setNavOpen(false)}
               aria-hidden="true"
             />
@@ -4692,11 +7998,8 @@ export function Dashboard({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ duration: 0.32, ease: EASE }}
-              className={cn(
-                "fixed inset-y-0 left-0 z-[61] w-[290px] bg-night",
-                !focusGates && "lg:hidden"
-              )}
-              aria-label="Mission control menu"
+              className="fixed inset-y-0 left-0 z-[61] w-[290px] bg-night lg:hidden"
+              aria-label="Workspace menu"
             >
               <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-50" aria-hidden="true" />
               <div className="relative flex h-full flex-col">
@@ -4727,28 +8030,32 @@ export function Dashboard({
         )}
       </AnimatePresence>
 
-      {/* Main column — no gutter while the Approvals view holds the screen */}
-      <div className={cn("lg:pl-[264px]", focusGates && "lg:pl-0")}>
+      {/* Main column — shifts with the sidebar */}
+      <div
+        className={cn(
+          "transition-[padding] duration-300 ease-out",
+          navCollapsed ? "lg:pl-0" : "lg:pl-[264px]"
+        )}
+      >
         {/* Sticky utility bar */}
         <div className="sticky top-0 z-30 border-b border-ink-100 bg-paper/85 backdrop-blur-xl">
           <div
             className="mx-auto flex h-14 w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-8"
           >
             <div className="flex min-w-0 items-center gap-3">
-              {focusGates && (
+              {navCollapsed && (
                 <button
                   type="button"
-                  onClick={() => setNavOpen(true)}
-                  aria-label="Open mission control menu"
-                  aria-expanded={navOpen}
-                  title="Open the menu"
+                  onClick={() => setNavCollapsedPersisted(false)}
+                  aria-label="Expand sidebar"
+                  title="Expand the sidebar"
                   className="hidden h-9 w-9 shrink-0 place-items-center rounded-lg border border-ink-200 bg-white text-ink-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 lg:grid"
                 >
-                  <Menu className="h-4 w-4" aria-hidden="true" />
+                  <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
               <p className="truncate font-code text-[9px] font-semibold tracking-[0.22em] text-ink-400">
-                MISSION CONTROL <span className="text-ink-200">/</span>{" "}
+                WORKSPACE <span className="text-ink-200">/</span>{" "}
                 <span className="text-ink-900">
                   {SECTION_LABEL[active] ?? "Overview"}
                 </span>
@@ -4794,7 +8101,7 @@ export function Dashboard({
               <div className="min-w-0">
                 <p className="flex items-center gap-2.5 font-code text-[10px] font-semibold uppercase tracking-[0.3em] text-ink-500">
                   <span className="inline-block h-[2px] w-6 bg-brand-600" aria-hidden="true" />
-                  FIG. 04 — Mission control
+                  FIG. 04 — Workspace
                 </p>
                 <h1
                   id="mc-greeting"
@@ -4814,6 +8121,7 @@ export function Dashboard({
                 </p>
                 <button
                   type="button"
+                  data-tour="ov-new-run"
                   onClick={() => setModalOpen(true)}
                   className="group inline-flex h-11 items-center gap-2 rounded-xl bg-brand-600 px-5 text-[14px] font-semibold text-white shadow-[0_10px_26px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700"
                 >
@@ -4823,11 +8131,8 @@ export function Dashboard({
               </div>
             </div>
 
-            {/* The guided flow — upload to award, always showing the next move */}
-            <FlowGuide current={flowCurrent} complete={flowComplete} onStep={handleFlowStep} />
-
             {/* Stats */}
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div data-tour="ov-stats" className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
               <StatCard
                 label="RUNS IN PROGRESS"
                 value={activeRuns}
@@ -4888,14 +8193,14 @@ export function Dashboard({
               <AgentFeed />
             </div>
             <div className="grid content-start gap-4 sm:gap-6">
-              <PortalSync onToast={onToast} />
-              <StandingRuleCard onToast={onToast} />
+              <PortalSync />
+              <StandingRuleCard />
             </div>
           </div>
 
           {/* Bottom strip */}
           <p className="mt-10 border-t border-ink-100 pt-5 text-center font-code text-[8px] tracking-[0.24em] text-ink-400">
-            QUORUM · MISSION CONTROL · SESSION {initialsOf(user?.name ?? "Q")} · AUDIT-GRADE LOGS · NO TRACKERS
+            QUORUM · WORKSPACE · SESSION {initialsOf(user?.name ?? "Q")} · AUDIT-GRADE LOGS · NO TRACKERS
           </p>
               </motion.div>
             ) : (
@@ -4919,6 +8224,21 @@ export function Dashboard({
         onLaunch={launchRun}
         pastRefs={runs.map((r) => r.id)}
       />
+
+      {/* The guided walkthrough — a spotlight layer over the real pages. */}
+      {tour && tourChapter && tourSteps?.length ? (
+        <TourLayer
+          chapterNo={tour.ch + 1}
+          chapterTotal={WALKTHROUGH.length}
+          chapterTitle={tourChapter.title}
+          steps={tourSteps}
+          index={Math.min(tour.step, tourSteps.length - 1)}
+          onIndex={goTourStep}
+          onClose={() => setTour(null)}
+          onFinish={finishTour}
+          onNextChapter={tour.ch + 1 < WALKTHROUGH.length ? nextTourChapter : undefined}
+        />
+      ) : null}
     </div>
   );
 }

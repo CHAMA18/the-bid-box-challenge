@@ -325,6 +325,31 @@ describe("plan_review — the depth decision for one pack", () => {
     expect(fallback.note).toContain("llm plan failed");
     expect(calls).toBe(1);
   });
+
+  test("safety floor: an LLM plan cannot switch off deep-value parsing when the pack has bid values", async () => {
+    const cfg = { baseUrl: "http://llama.internal:8000/v1", model: "llama-3.1-70b-instruct" };
+    const disables: FetchLike = async () =>
+      new Response(
+        JSON.stringify({
+          model: "llama-3.1-70b-instruct",
+          choices: [{ message: { content: '{"parseMarkdownValues":false,"focusRules":["PRICE-OUTLIER"],"maxDrafts":2,"note":"skip values"}' } }],
+        }),
+      );
+    const floorFiles = ["01-tender-notice.md", "02-bid-a.md", "03-bid-b.md"];
+    const floorSources: Record<string, string> = {
+      "01-tender-notice.md": "# NOTICE\n**Budget ceiling:** KES 1,860,000,000 (VAT inclusive)\n",
+      "02-bid-a.md": "**Bidder:** Alpha Medical\n**Bid value:** KES 1,772,000,000\n",
+      "03-bid-b.md": "**Bidder:** Beta Screening\n**Bid value:** KES 3,940,000,000\n",
+    };
+    const floorPack = buildPack(floorFiles, floorSources);
+    const plan = await llmPlanFromPack(floorFiles, floorPack, "run-plan-floor", cfg, disables);
+    expect(plan.source).toBe("llm");
+    expect(plan.parseMarkdownValues).toBe(true); // floor held — model said false
+    expect(plan.note).toContain("parse floor");
+    /* ...and the flagship check still bites end-to-end under the floored plan. */
+    const { kept } = flagPack(floorPack, floorFiles, plan);
+    expect(kept.some((f) => f.rule === "R-OVER-BUDGET")).toBe(true);
+  });
 });
 
 describe("flagPack under the plan: over-budget and markdown value outliers", () => {

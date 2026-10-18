@@ -56,6 +56,24 @@ measurement protocol instead:
 > this file, with the officers' consent, or the pilot reports that the comparison
 > could not be run.
 
+## 3.5 The public evidence base — what is verifiable today
+
+No officer has been contacted yet — that is stated as fact in §3 and §5. What the
+buildathon courts *can* check today is a public, sourced context for every claim
+about the desk Quorum targets (links live as of 2026-10-17):
+
+| # | Researchable fact | Source |
+| --- | --- | --- |
+| 1 | The law caps the desk's time: tender evaluation **must complete within 30 days** (PPAD Act 2015, s.80(6)) — and the 2020 Regulations compress national/county specific-tender stages toward **7 days**, so an officer-side bottleneck is a compliance risk, not an inconvenience | [PPAD regulations, National Treasury PDF](https://www.treasury.go.ke/sites/default/files/PPDA/Public-Procurement-and-Asset-Disposal-Regulations-2020.pdf) · [Act text](https://eacc.go.ke/default/wp-content/uploads/2018/06/PPDA.pdf) |
+| 2 | The desk is high-volume: Open Contracting's Kenya dataset counts **259,709 tenders** published via Kenya's OCDS feeds | [Open Contracting data registry, Kenya](https://data.open-contracting.org/en/publication/147) |
+| 3 | Oversight cannot read everything: PPRA reports reviewing **5,064 of 50,142** published notices (~10%) in one financial year, flagging **2,127** — most packs are never independently re-read, which is the gap a citations-first desk tool addresses | [PPRA coverage reporting](https://capitalfm.africa/ppra-over-half-of-state-contractors-remain-hidden/) |
+| 4 | The named target office is real and framework-driven: KEMSA runs multi-year open international tenders for health products (e.g. `KEMSA/OIT04/2024-2026`), procuring via framework contracts for countrywide distribution | [KEMSA 2024–2026 tender doc](https://kemsa.go.ke/download/file/f7d087f56fd0ae0fb8d351eaa60ecb41.pdf) · [World Bank on KEMSA frameworks](https://openknowledge.worldbank.org/bitstreams/68cbe31b-e303-5613-b749-20bb046cd9f5/download) |
+| 5 | Rwanda's desk is already electronic: **UMUCYO is the single mandated e-procurement portal**, used by ~**200 procuring entities and 5,000+ bidders**, with electronic evaluation inside the same portal — the multi-portal path Quorum demonstrates is on the national trajectory | [RPPA UMUCYO user survey](https://www.rppa.gov.rw/fileadmin/user_upload/RPPA/LIBRARY/REPORTS/Research_Report/Umucyo_User_Satisfaction_Survey_Final_Report.pdf) · [portal](https://www.umucyo.gov.rw) |
+
+What none of these sources gives the project is somebody who has *done* the job:
+a desk officer's timing, habits, or pain — that remains the pilot's measured
+protocol (§3 above), deliberately unbuilt until an office engages.
+
 ## 4. Pilot-intake channel (live in this build)
 
 The landing page's "Run a pilot tender — unedited, on live notices" checklist posts to

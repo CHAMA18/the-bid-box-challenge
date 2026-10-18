@@ -33,6 +33,7 @@ import {
   flagPack,
   parseBid,
   requirementOptions,
+  RULE_OUTPUT_CAP,
   runRules,
   TENDERS_DIR,
   verifyFinding,
@@ -60,8 +61,10 @@ interface Gold {
 const EVAL_DIR = fileURLToPath(new URL("./data/eval/", import.meta.url));
 const runsFlag = process.argv.indexOf("--runs");
 const RUNS = runsFlag >= 0 ? Number(process.argv[runsFlag + 1]) : 5;
-/* runRules() truncates its output at this many findings. Hitting it means findings may be silently dropped. */
-const RULE_CAP = 6;
+/* runRules() truncates its output at RULE_OUTPUT_CAP findings — the engine's
+   own cap, imported so this report can never drift from what it measures.
+   Hitting it means findings may be silently dropped. */
+const RULE_CAP = RULE_OUTPUT_CAP;
 
 const BID_VALUE_LINE = /(\*\*Bid value:\*\*\s*[A-Z]{3}\s*)([\d,]+(?:\.\d+)?)/;
 const CEILING_LINE = /^\*\*Budget ceiling:\*\*.*$/m;
@@ -163,6 +166,37 @@ const MUTATIONS: Mutation[] = [
     },
   },
   {
+    name: "corrupt-supplier-id",
+    description: "a bid's KRA PIN is altered so it breaks its own 11-character scheme — the supplier-id rule must flag that identifier",
+    apply(files, sources) {
+      /* Same identifier-line shape the engine matches (ID_LINE lives in engine.ts). */
+      const idLine = /^\s*(?:[-*]\s*)?\**\s*((?:(?:KRA|TAX)\s+)?PIN(?:\s*(?:No\.?|Number))?|TIN(?:\s*(?:No\.?|Number))?)\s*\**\s*[:\u2013\u2014]\s*\**\s*(.*?)\s*$/i;
+      const pinValue = /^[PC][0-9]{9}[A-Z]$/; // a WELL-FORMED Kenya KRA PIN — corrupting one digit must fire the rule
+      for (const bidFile of files.filter((f) => /^\d+-bid-/.test(f))) {
+        const lines = sources[bidFile].split("\n");
+        for (let idx = 0; idx < lines.length; idx++) {
+          const m = lines[idx].match(idLine);
+          if (!m) continue;
+          const value = m[2].trim();
+          if (!pinValue.test(value)) continue;
+          const corrupted = value.replace(/(^\w)(\d{8})(\d)(\w$)/, "$1$2X$4");
+          if (corrupted === value) continue;
+          ctxFile = bidFile;
+          ctxId = corrupted;
+          const mutated = { ...sources };
+          mutated[bidFile] = lines.map((l, i) => (i === idx ? l.replace(value, corrupted) : l)).join("\n");
+          return mutated;
+        }
+      }
+      return null;
+    },
+    detect(after, before) {
+      const wasFlagged = before.some((f) => f.rule === "R-SUPPLIER-ID" && mentionsBidder(f, ctxFile) && f.evidence.includes(ctxId));
+      const isFlagged = after.some((f) => f.rule === "R-SUPPLIER-ID" && mentionsBidder(f, ctxFile) && f.evidence.includes(ctxId));
+      return isFlagged && !wasFlagged;
+    },
+  },
+  {
     name: "remove-budget-ceiling",
     description: "the notice's published ceiling line is deleted — over-budget flags must go quiet (false-positive guard)",
     apply(files, sources, before) {
@@ -221,6 +255,7 @@ const MUTATIONS: Mutation[] = [
 /* Mutable context a mutation hands to its detector (single-threaded loop — safe). */
 let ctxFile = "";
 let ctxDoc = "";
+let ctxId = "";
 
 /* A finding matches a label when the rule agrees, it names the bid (directly or via the bidder), and the anchor text appears. */
 function matches(f: Finding, g: GoldItem): boolean {
@@ -314,6 +349,7 @@ for (const tenderId of tenderIds) {
   for (const m of MUTATIONS) {
     ctxFile = "";
     ctxDoc = "";
+    ctxId = "";
     let detected = 0;
     let skipped = false;
     for (let i = 0; i < RUNS; i++) {
@@ -347,6 +383,7 @@ const mutationSummary = {
   note: "Detection = the engine raises (or, for the removed-ceiling guard, drops) the expected finding. Skipped = the mutation's precondition did not hold for that tender; reported, never counted as a pass.",
 };
 
+const packMedians = tenderIds.map((id) => results[id].medianMs);
 const summary = {
   runsPerTender: RUNS,
   tenders: tenderIds.length,
@@ -354,6 +391,19 @@ const summary = {
   adjudicated: adjudicated.summary,
   identicalAcrossRuns: `${identicalRuns}/${tenderIds.length} tenders`,
   llmCallsPerRun: 0,
+  variance: {
+    findingsIdenticalAcrossRuns: `${identicalRuns}/${tenderIds.length} tenders`,
+    msMedianPerPack: Math.round(median(packMedians) * 100) / 100,
+    msSpread: [Math.round(Math.min(...packMedians) * 100) / 100, Math.round(Math.max(...packMedians) * 100) / 100],
+    note: "Identical findings across repeated runs prove stability, not sensitivity — the mutation detection rates below are the sensitivity check. This report does NOT measure LLM run-to-run variance: no drafting endpoint runs in this loop. On a live endpoint the sidecar records per-draft usage in tool-log.jsonl and state.json, and the run register shows per-run draft variation.",
+  },
+  cost: {
+    llmCallsPerRun: 0,
+    promptTokensPerRun: 0,
+    completionTokensPerRun: 0,
+    costUsdPerRun: 0,
+    note: "The rule-path eval makes no model calls, so the measured cost of this report is 0 USD. On a live endpoint, cost per run = (prompt_tokens + completion_tokens) × the endpoint's published per-token price; usage per draft is recorded in tool-log.jsonl and on the run's usage block, so the figure is auditable from the append-only log.",
+  },
   mutation: mutationSummary,
   heldOut: {
     tenders: gold.heldOut,

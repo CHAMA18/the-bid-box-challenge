@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-10-16T14:29:36.908Z",
+  "generatedAt": "2026-10-17T10:35:02.693Z",
   "labeller": "one human reviewer, one pass over the source documents, written before the engine was run on them. Not independently double-labelled.",
   "covered_means": "a rule in the engine is designed to raise this finding type. covered:false items measure what the rule set does not claim to catch. Coverage flags track the CURRENT rule set: when a rule lands (e.g. plan_review deep-value parsing of markdown bid values, 2026-10-16), the flags it covers flip to true — the labels themselves are never edited after their original single pass.",
   "summary": {
-    "runsPerTender": 5,
+    "runsPerTender": 3,
     "tenders": 7,
     "original": {
       "goldLabels": 42,
@@ -25,10 +25,26 @@
     },
     "identicalAcrossRuns": "7/7 tenders",
     "llmCallsPerRun": 0,
+    "variance": {
+      "findingsIdenticalAcrossRuns": "7/7 tenders",
+      "msMedianPerPack": 0.56,
+      "msSpread": [
+        0.46,
+        1.62
+      ],
+      "note": "Identical findings across repeated runs prove stability, not sensitivity — the mutation detection rates below are the sensitivity check. This report does NOT measure LLM run-to-run variance: no drafting endpoint runs in this loop. On a live endpoint the sidecar records per-draft usage in tool-log.jsonl and state.json, and the run register shows per-run draft variation."
+    },
+    "cost": {
+      "llmCallsPerRun": 0,
+      "promptTokensPerRun": 0,
+      "completionTokensPerRun": 0,
+      "costUsdPerRun": 0,
+      "note": "The rule-path eval makes no model calls, so the measured cost of this report is 0 USD. On a live endpoint, cost per run = (prompt_tokens + completion_tokens) × the endpoint's published per-token price; usage per draft is recorded in tool-log.jsonl and on the run's usage block, so the figure is auditable from the append-only log."
+    },
     "mutation": {
-      "repeatsPerMutation": 5,
-      "executed": 26,
-      "skipped": 2,
+      "repeatsPerMutation": 3,
+      "executed": 27,
+      "skipped": 8,
       "overallDetectionRate": 100,
       "note": "Detection = the engine raises (or, for the removed-ceiling guard, drops) the expected finding. Skipped = the mutation's precondition did not hold for that tender; reported, never counted as a pass."
     },
@@ -77,10 +93,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 1.11,
+      "medianMs": 1.52,
       "msRange": [
-        0.88,
-        6.18
+        1.1,
+        6.94
       ],
       "mutations": [
         {
@@ -92,6 +108,11 @@
           "name": "hide-required-document",
           "detectionRate": 100,
           "skipped": false
+        },
+        {
+          "name": "corrupt-supplier-id",
+          "detectionRate": null,
+          "skipped": true
         },
         {
           "name": "remove-budget-ceiling",
@@ -138,10 +159,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.99,
+      "medianMs": 1.62,
       "msRange": [
-        0.93,
-        1.14
+        1.5,
+        12.73
       ],
       "mutations": [
         {
@@ -153,6 +174,11 @@
           "name": "hide-required-document",
           "detectionRate": 100,
           "skipped": false
+        },
+        {
+          "name": "corrupt-supplier-id",
+          "detectionRate": null,
+          "skipped": true
         },
         {
           "name": "remove-budget-ceiling",
@@ -177,10 +203,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.47,
+      "medianMs": 0.66,
       "msRange": [
-        0.41,
-        16.73
+        0.49,
+        0.8
       ],
       "mutations": [
         {
@@ -190,6 +216,11 @@
         },
         {
           "name": "hide-required-document",
+          "detectionRate": 100,
+          "skipped": false
+        },
+        {
+          "name": "corrupt-supplier-id",
           "detectionRate": 100,
           "skipped": false
         },
@@ -216,10 +247,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.62,
+      "medianMs": 0.5,
       "msRange": [
-        0.59,
-        0.69
+        0.41,
+        0.68
       ],
       "mutations": [
         {
@@ -231,6 +262,11 @@
           "name": "hide-required-document",
           "detectionRate": 100,
           "skipped": false
+        },
+        {
+          "name": "corrupt-supplier-id",
+          "detectionRate": null,
+          "skipped": true
         },
         {
           "name": "remove-budget-ceiling",
@@ -264,10 +300,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.67,
+      "medianMs": 0.56,
       "msRange": [
-        0.57,
-        0.75
+        0.53,
+        1.78
       ],
       "mutations": [
         {
@@ -279,6 +315,11 @@
           "name": "hide-required-document",
           "detectionRate": 100,
           "skipped": false
+        },
+        {
+          "name": "corrupt-supplier-id",
+          "detectionRate": null,
+          "skipped": true
         },
         {
           "name": "remove-budget-ceiling",
@@ -310,10 +351,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.61,
+      "medianMs": 0.54,
       "msRange": [
-        0.55,
-        0.65
+        0.5,
+        0.55
       ],
       "mutations": [
         {
@@ -325,6 +366,11 @@
           "name": "hide-required-document",
           "detectionRate": 100,
           "skipped": false
+        },
+        {
+          "name": "corrupt-supplier-id",
+          "detectionRate": null,
+          "skipped": true
         },
         {
           "name": "remove-budget-ceiling",
@@ -349,10 +395,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.47,
+      "medianMs": 0.46,
       "msRange": [
-        0.45,
-        0.52
+        0.37,
+        0.84
       ],
       "mutations": [
         {
@@ -364,6 +410,11 @@
           "name": "hide-required-document",
           "detectionRate": 100,
           "skipped": false
+        },
+        {
+          "name": "corrupt-supplier-id",
+          "detectionRate": null,
+          "skipped": true
         },
         {
           "name": "remove-budget-ceiling",

@@ -8,7 +8,6 @@ import { Hero } from "@/components/quorum/hero";
 import { Overview } from "@/components/quorum/overview";
 import { RuleBand } from "@/components/quorum/rule-band";
 import { UseCases } from "@/components/quorum/use-cases";
-import { Platform } from "@/components/quorum/platform";
 import { Film } from "@/components/quorum/film";
 import { InsideRun } from "@/components/quorum/inside-box";
 import { ReportMock } from "@/components/quorum/report-mock";
@@ -24,7 +23,7 @@ import type { AuthMode, AuthUser } from "@/lib/auth-types";
 /**
  * Quorum — agentic tender review for public procurement.
  * Three views on one route: the landing page, the full-screen
- * authentication screen (#/register, #/login) and Mission Control
+ * authentication screen (#/register, #/login) and the workspace
  * (#/dashboard) — all back-button friendly via the URL hash.
  * The non-negotiable rule stands everywhere: Quorum prepares the file,
  * the committee awards the tender.
@@ -207,7 +206,6 @@ export default function Home() {
                 <Overview />
                 <RuleBand />
                 <UseCases />
-                <Platform />
                 <Film />
                 <InsideRun />
                 <ReportMock />

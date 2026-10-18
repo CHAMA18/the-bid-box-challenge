@@ -13,7 +13,7 @@ flowchart TB
 
     %% ═══════════ BROWSER (MCP CLIENT SIDE-SURFACE) ═══════════
     subgraph BROWSER["Browser  ·  Next.js 16  ·  :3000"]
-        MC["Mission Control dashboard<br/>(run register · HUMAN GATE queue · decision ledger)"]
+        MC["Workspace dashboard<br/>(run register · HUMAN GATE queue · decision ledger)"]
         LC["Live stack console<br/>(health · tools · streaming audit)"]
     end
 

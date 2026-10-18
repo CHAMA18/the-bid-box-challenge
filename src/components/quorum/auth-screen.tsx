@@ -311,7 +311,7 @@ function SuccessPanel({
     onEnterWorkspace();
   };
 
-  /* Sign-ins open Mission Control automatically — no extra click. */
+  /* Sign-ins open the workspace automatically — no extra click. */
   useEffect(() => {
     if (!autoEnter) return;
     const t = setTimeout(enter, 1900);
@@ -362,7 +362,7 @@ function SuccessPanel({
         {autoEnter && (
           <div className="mx-auto mt-7 w-full max-w-sm" aria-hidden="true">
             <div className="flex items-center justify-between font-code text-[8.5px] tracking-[0.2em] text-ink-400">
-              <span>OPENING MISSION CONTROL</span>
+              <span>OPENING WORKSPACE</span>
               <span>SESSION · HTTPONLY</span>
             </div>
             <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-ink-100">
@@ -381,7 +381,7 @@ function SuccessPanel({
           onClick={enter}
           className="group mt-8 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-ink-950 px-7 text-[15px] font-semibold text-white transition-all hover:bg-brand-600"
         >
-          Enter mission control
+          Enter workspace
           <ArrowRight
             className="h-4.5 w-4.5 transition-transform group-hover:translate-x-1"
             aria-hidden="true"

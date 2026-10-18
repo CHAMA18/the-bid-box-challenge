@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * StackConsole — the "Tools & models" view in mission control.
+ * StackConsole — the "Tools & models" view in the workspace.
  *
  * Everything here is LIVE and wired to the real quorum-mcp mini-service on
  * :3031 (reached through the gateway with XTransformPort):
@@ -325,7 +325,7 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
 
       {/* tools + launcher */}
       <section aria-label="MCP tools" className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <div className="rounded-2xl border border-ink-100 bg-white p-5 lg:col-span-3">
+        <div data-tour="stack-tools" className="rounded-2xl border border-ink-100 bg-white p-5 lg:col-span-3">
           <div className="flex items-center justify-between gap-3">
             <MonoLabel>OUR OWN MCP SERVER — FIVE TOOLS</MonoLabel>
             <MonoLabel className="text-ink-300">POST /mcp · JSON-RPC 2.0</MonoLabel>
@@ -343,7 +343,7 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
           </ul>
         </div>
         <div className="flex flex-col gap-4 lg:col-span-2">
-          <div className="rounded-2xl border border-ink-100 bg-night p-5 text-white">
+          <div data-tour="stack-graphs" className="rounded-2xl border border-ink-100 bg-night p-5 text-white">
             <MonoLabel className="text-ink-300">RUN THE GRAPH — LIVE</MonoLabel>
             <p className="mt-2.5 text-[13px] leading-relaxed text-ink-200">
               Fire <span className="font-code text-[11.5px] text-white">review_graph</span> at the MRI tender. Reads via
@@ -535,7 +535,7 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
       </section>
 
       {/* audit log */}
-      <section aria-label="Tool call audit log" ref={logAnchor}>
+      <section aria-label="Tool call audit log" data-tour="stack-log" ref={logAnchor}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <MonoLabel>TOOL LOG — EVERY CALL, APPEND-ONLY</MonoLabel>
           <MonoLabel className="text-ink-300">

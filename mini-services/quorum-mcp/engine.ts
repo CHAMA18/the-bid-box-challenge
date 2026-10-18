@@ -178,6 +178,23 @@ export const RULE_FAMILIES = [
 ] as const;
 export type RuleFamily = (typeof RULE_FAMILIES)[number];
 
+/* ── 3.6 The tunable guards ────────────────────────────────────────────────
+   The Rules & guards page writes these; the engine obeys them at flag time.
+   A pure caller (the offline harness) that passes none gets the historical
+   baseline — outliers at 2× the peer median, STANDARD checklist, no register. */
+export interface EngineGuards {
+  /* Flag bids above the peer median by more than this percent. */
+  priceVariancePct: number;
+  checklist: "STANDARD" | "STRICT";
+  registryCrossCheck: boolean;
+}
+
+export const ENGINE_DEFAULT_GUARDS: EngineGuards = {
+  priceVariancePct: 100,
+  checklist: "STANDARD",
+  registryCrossCheck: false,
+};
+
 const MARKDOWN_BID_VALUE = /\*\*Bid value:\*\*\s*([A-Z]{3})\s*([\d][\d,]*(?:\.\d+)?)/;
 const MARKDOWN_CEILING = /\*\*Budget ceiling:\*\*\s*([A-Z]{3})\s*([\d][\d,]*(?:\.\d+)?)/;
 
@@ -253,12 +270,19 @@ export async function llmPlanFromPack(
     const raw = JSON.parse(m[0]) as { parseMarkdownValues?: boolean; focusRules?: string[]; maxDrafts?: number; note?: string };
     const focus = [...new Set((raw.focusRules ?? []).filter((r): r is RuleFamily => (RULE_FAMILIES as readonly string[]).includes(r)))];
     const maxDrafts = Math.max(1, Math.min(4, Math.round(Number(raw.maxDrafts ?? base.maxDrafts) || base.maxDrafts)));
+    /* Safety floor: deep-value parsing feeds OVER-BUDGET and VALUE-OUTLIER — the
+       flagship checks. A planner (especially a small one) may add parsing, but must
+       not switch it off when the pack demonstrably contains markdown bid values;
+       flagPack would otherwise silently starve those rules. */
+    const parseMarkdownValues = !!(raw.parseMarkdownValues || base.parseMarkdownValues) && base.pack.markdownValueBids > 0;
+    const note = (raw.note ?? "model-led plan").slice(0, 200)
+      + (base.parseMarkdownValues && parseMarkdownValues && !raw.parseMarkdownValues ? " · parse floor kept deep-value parsing on (bid values present)" : "");
     return {
       ...base,
-      parseMarkdownValues: !!raw.parseMarkdownValues && base.pack.markdownValueBids > 0,
+      parseMarkdownValues,
       focusRules: focus.length ? focus : base.focusRules,
       maxDrafts,
-      note: (raw.note ?? "model-led plan").slice(0, 200),
+      note,
       source: "llm",
       model: completion.model,
     };
@@ -642,8 +666,10 @@ export function bidNamesDocument(bidText: string, option: string): boolean {
   });
 }
 
-/* Required documents named in a notice ("- [REQUIRED] …") that a bid does not reference. */
-export function docMissingFindings(bids: BidDoc[], notice: string, noticeFile: string): Finding[] {
+/* Required documents named in a notice ("- [REQUIRED] …") that a bid does not
+   reference. The checklist guard decides the stakes: STANDARD flags a missing
+   document to the committee; STRICT escalates every one to HIGH. */
+export function docMissingFindings(bids: BidDoc[], notice: string, noticeFile: string, strict = false): Finding[] {
   const findings: Finding[] = [];
   const requiredDocs = [...notice.matchAll(/^- \[REQUIRED\]\s*(.+)$/gm)].map((m) => m[1].trim());
   for (const bid of bids) {
@@ -654,9 +680,9 @@ export function docMissingFindings(bids: BidDoc[], notice: string, noticeFile: s
         findings.push({
           id: "",
           rule: "R-DOC-MISSING",
-          severity: "MEDIUM",
+          severity: strict ? "HIGH" : "MEDIUM",
           item: `${bid.bidder} — ${req}`,
-          evidence: `Tender notice lists "${req}" as REQUIRED; the bid does not reference it.`,
+          evidence: `Tender notice lists "${req}" as REQUIRED; the bid does not reference it.${strict ? " Raised under the STRICT checklist — completeness findings escalate to HIGH." : ""}`,
           citation: `${noticeFile}, eligibility checklist`,
         });
       }
@@ -745,6 +771,57 @@ export function buyerMissingFindings(notice: string, noticeFile: string): Findin
   ];
 }
 
+/* ── Platform register cross-check ─────────────────────────────────────────
+   When the registry guard is ON, every bidder is matched against the platform
+   supplier register before findings stand. A bidder whose register entry is
+   SUSPENDED or BLACKLISTED is flagged — cited to the bid itself — so the
+   committee sets the bid aside before award. */
+
+const LEGAL_SUFFIX = new Set(["ltd", "limited", "inc", "plc", "llc", "co"]);
+
+export interface RegistryEntry {
+  name: string;
+  status: string;
+}
+
+function nameTokens(s: string): Set<string> {
+  return new Set(
+    s
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 1 && !LEGAL_SUFFIX.has(t)),
+  );
+}
+
+/* Equal-significant-token match: every token of the shorter name appears in the
+   longer ("COASTLINE SCREENING" ↔ "Coastline Screening Ltd"). */
+export function registryMatch(bidder: string, entryName: string): boolean {
+  const a = nameTokens(bidder);
+  const b = nameTokens(entryName);
+  if (a.size === 0 || b.size === 0) return false;
+  const [small, big] = a.size <= b.size ? [a, b] : [b, a];
+  return [...small].every((t) => big.has(t));
+}
+
+export function registryFindings(bids: BidDoc[], registry: RegistryEntry[]): Finding[] {
+  const flagged = registry.filter((e) => e.status === "SUSPENDED" || e.status === "BLACKLISTED");
+  if (!flagged.length) return [];
+  const findings: Finding[] = [];
+  for (const bid of bids) {
+    const hit = flagged.find((e) => registryMatch(bid.bidder, e.name));
+    if (!hit) continue;
+    findings.push({
+      id: "",
+      rule: "R-REGISTRY-STATUS",
+      severity: "HIGH",
+      item: bid.bidder,
+      evidence: `Platform supplier register: "${hit.name}" stands ${hit.status} — a bid from a ${hit.status.toLowerCase()} supplier must be set aside before award.`,
+      citation: `${bid.source}, bidder cover page`,
+    });
+  }
+  return findings;
+}
+
 /* OCDS awards above the tender's published value are flagged, citing the record and path. */
 export function runAwardRules(records: OcdsRecord[]): Finding[] {
   const findings: Finding[] = [];
@@ -766,8 +843,16 @@ export function runAwardRules(records: OcdsRecord[]): Finding[] {
   return findings;
 }
 
-export function runRules(bids: BidDoc[], notice: string, noticeFile: string): Finding[] {
+/* Bounded output: at most this many findings stand per rule pass. The cap sits
+   above what the sharpest guard produces on the shipped packs, so nothing a
+   tuned guard catches is silently dropped. */
+export const RULE_OUTPUT_CAP = 8;
+
+export function runRules(bids: BidDoc[], notice: string, noticeFile: string, guards: EngineGuards = ENGINE_DEFAULT_GUARDS): Finding[] {
   const findings: Finding[] = [];
+  /* The price-variance guard sets where an outlier starts: 25% → anything
+     above 1.25× the peer median is flagged. */
+  const cutoff = 1 + guards.priceVariancePct / 100;
   const all = bids.flatMap((b) => parseBid(b.text, b.bidder, b.source));
   const byItem = new Map<string, LineItem[]>();
   for (const li of all) {
@@ -781,7 +866,7 @@ export function runRules(bids: BidDoc[], notice: string, noticeFile: string): Fi
       if (!peers.length) continue;
       const mid = Math.floor(peers.length / 2);
       const median = peers.length % 2 ? peers[mid] : (peers[mid - 1] + peers[mid]) / 2;
-      if (median > 0 && li.unit > median * 2) {
+      if (median > 0 && li.unit > median * cutoff) {
         findings.push({
           id: "",
           rule: "R-PRICE-OUTLIER",
@@ -793,7 +878,7 @@ export function runRules(bids: BidDoc[], notice: string, noticeFile: string): Fi
       }
     }
   }
-  findings.push(...docMissingFindings(bids, notice, noticeFile));
+  findings.push(...docMissingFindings(bids, notice, noticeFile, guards.checklist === "STRICT"));
   for (const bid of bids) {
     for (const line of bid.text.split("\n")) {
       if (/^\s*no\s+(?:deviations?|alternative)/i.test(line)) continue;
@@ -810,7 +895,7 @@ export function runRules(bids: BidDoc[], notice: string, noticeFile: string): Fi
       }
     }
   }
-  /* OCDS bid values: a bid more than twice the median of its peers is flagged, citing the record and path. */
+  /* OCDS bid values: a bid above the guard's cutoff over the median of its peers is flagged, citing the record and path. */
   const valued = bids.filter((b) => b.value !== undefined && b.value > 0);
   for (const b of valued) {
     const value = b.value as number;
@@ -818,7 +903,7 @@ export function runRules(bids: BidDoc[], notice: string, noticeFile: string): Fi
     if (!peers.length) continue;
     const mid = Math.floor(peers.length / 2);
     const median = peers.length % 2 ? peers[mid] : (peers[mid - 1] + peers[mid]) / 2;
-    if (median > 0 && value > median * 2) {
+    if (median > 0 && value > median * cutoff) {
       findings.push({
         id: "",
         rule: "R-VALUE-OUTLIER",
@@ -829,7 +914,7 @@ export function runRules(bids: BidDoc[], notice: string, noticeFile: string): Fi
       });
     }
   }
-  return findings.slice(0, 6);
+  return findings.slice(0, RULE_OUTPUT_CAP);
 }
 
 /* ── 4. LangGraph.js — review graph (halts at the gate) ──────────────────── */
@@ -858,6 +943,10 @@ export interface EngineRefs {
   gates: Gate[];
   save(): void;
   raiseGate(g: Gate): void;
+  /* The live guards and the supplier register — read at flag time, so the
+     settings on the Rules page govern the very next run. */
+  guards(): EngineGuards;
+  registry(): RegistryEntry[];
 }
 
 let refs: EngineRefs;
@@ -906,17 +995,20 @@ export function buildPack(files: string[], sources: Record<string, string>) {
 }
 
 /**
- * Pure: run every deterministic rule over a built pack, under a review plan.
- * When the plan enables deep value parsing, markdown "**Bid value:**" lines join
- * OCDS values, and published ceilings turn into over-budget findings — each cited
- * to the bid's own value line. Findings whose citation does not name a document
- * in the tender are returned as `rejected`, never kept.
+ * Pure: run every deterministic rule over a built pack, under a review plan
+ * and the current guards. When the plan enables deep value parsing, markdown
+ * "**Bid value:**" lines join OCDS values, and published ceilings turn into
+ * over-budget findings — each cited to the bid's own value line. Findings whose
+ * citation does not name a document in the tender are returned as `rejected`,
+ * never kept.
  */
 export function flagPack(
   pack: ReturnType<typeof buildPack>,
   files: string[],
   plan?: ReviewPlan,
+  obeys?: { guards?: EngineGuards; registry?: RegistryEntry[] },
 ): { kept: Finding[]; rejected: Finding[] } {
+  const guards = obeys?.guards ?? ENGINE_DEFAULT_GUARDS;
   const p = plan ?? planFromPack(files, pack);
   const bids: BidDoc[] = p.parseMarkdownValues
     ? pack.bids.map((b) => {
@@ -947,11 +1039,12 @@ export function flagPack(
     }
   }
   const all = [
-    ...runRules(bids, "", ""),
-    ...pack.notices.flatMap((n) => docMissingFindings(bids, n.text, n.file)),
+    ...runRules(bids, "", "", guards),
+    ...pack.notices.flatMap((n) => docMissingFindings(bids, n.text, n.file, guards.checklist === "STRICT")),
     ...pack.notices.filter((n) => n.file.endsWith(".md")).flatMap((n) => buyerMissingFindings(n.text, n.file)),
     ...supplierIdFindings(bids),
     ...runAwardRules(pack.records),
+    ...(guards.registryCrossCheck ? registryFindings(bids, obeys?.registry ?? []) : []),
     ...overBudget,
   ];
   const kept: Finding[] = [];
@@ -1095,6 +1188,13 @@ export async function mcpDraftRedline(args: Record<string, unknown>) {
 async function nodeLoadDocuments(s: typeof ReviewState.State) {
   progress(s.runId, "▸ tender_documents_list — via server-filesystem MCP");
   const files = await listTenderDocs(s.tenderId, s.runId);
+  /* No pack, no review: with zero documents the graph could only produce
+     placeholder gates ("bidder" / "NOT STATED IN BID") — fail the run cleanly
+     instead of raising a gate for tender there is no evidence about. */
+  if (files.length === 0)
+    throw new Error(
+      `no staged documents for tender "${s.tenderId}" — stage the pack (POST /api/tenders/:ref/docs) before launching a review`,
+    );
   const sources: Record<string, string> = {};
   for (const f of files) sources[f] = await readTenderFile(`${s.tenderId}/${f}`, s.runId);
   const pack = buildPack(files, sources);
@@ -1125,7 +1225,22 @@ async function nodeExtract(s: typeof ReviewState.State) {
 }
 
 async function nodeFlag(s: typeof ReviewState.State) {
-  const { kept, rejected } = flagPack({ bids: s.bids, records: s.records, notices: s.notices }, Object.keys(s.sources), s.plan ?? undefined);
+  const guards = refs.guards();
+  progress(
+    s.runId,
+    `▸ guards — price variance >${guards.priceVariancePct}% · checklist ${guards.checklist} · registry cross-check ${guards.registryCrossCheck ? "ON" : "OFF"}`,
+  );
+  const registry = refs.registry();
+  if (guards.registryCrossCheck) {
+    const matched = s.bids.filter((b) => registry.some((e) => registryMatch(b.bidder, e.name))).length;
+    progress(s.runId, `▸ registry cross-check — ${matched} of ${s.bids.length} bidders matched on the platform register`);
+  }
+  const { kept, rejected } = flagPack(
+    { bids: s.bids, records: s.records, notices: s.notices },
+    Object.keys(s.sources),
+    s.plan ?? undefined,
+    { guards, registry },
+  );
   /* Uncited flags never reach the ledger — logged as rejected instead. */
   for (const f of rejected) {
     appendLog({
@@ -1376,21 +1491,23 @@ async function nodeDraft(s: typeof ReviewState.State) {
 async function nodeGate(s: typeof ReviewState.State) {
   const t0 = performance.now();
   const gateId = `gate_${Math.random().toString(36).slice(2, 8)}`;
-  const lead = s.bids[0]?.bidder ?? "bidder";
-  /* The bid value is read from the lead bidder's own filing, never assumed. */
+  /* Gate inputs state only what the pack itself says. When the lead bidder
+     or its value is absent from the documents the field is omitted — the UI
+     renders "—" — rather than a fabricated placeholder like "bidder". */
+  const lead = s.bids[0]?.bidder;
   const lead0 = s.bids[0];
   const leadValue =
     lead0?.value !== undefined
       ? `${lead0.currency ?? ""} ${lead0.value.toLocaleString()}`.trim()
-      : (lead0?.text.match(/\*\*Bid value:\*\*\s*(KES[^\n]+)/)?.[1]?.trim() ?? "NOT STATED IN BID");
+      : (lead0?.text.match(/\*\*Bid value:\*\*\s*(KES[^\n]+)/)?.[1]?.trim() ?? undefined);
   const gate: Gate = {
     id: gateId,
     runId: s.runId,
     tenderId: s.tenderId,
     tool: "file_gate_submission",
     inputs: {
-      bidder: lead,
-      value: leadValue,
+      ...(lead ? { bidder: lead } : {}),
+      ...(leadValue ? { value: leadValue } : {}),
       attachments: s.drafts.length + s.findings.length + 1,
       findings: s.findings.map((f) => f.id),
       drafts: s.drafts.map((d) => d.id),

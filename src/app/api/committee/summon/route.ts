@@ -3,15 +3,20 @@ import { getUserFromToken, SESSION_COOKIE } from "@/lib/auth";
 import { recordSummons } from "@/lib/committee";
 
 /**
- * POST /api/committee/summon — issue a real quorum call: the summons is
- * persisted (SystemSetting.committee_last_summons_at) and the recomputed
- * state — with the actual number of seats still pending — is returned.
+ * POST /api/committee/summon — issue a real quorum call. A summons mints the
+ * sitting: a fresh Jitsi room (open source, no accounts), the register frozen
+ * into the door list, and the minutes open on the desk. One sitting at a
+ * time — summoning while one is open returns it, it does not mint a second
+ * room. The recomputed state (with the actual number of seats pending) and
+ * `minted` are returned.
  */
 export async function POST(req: NextRequest) {
   try {
     const token = req.cookies.get(SESSION_COOKIE)?.value;
     const user = await getUserFromToken(token).catch(() => null);
-    const state = await recordSummons(user);
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const agenda = typeof body.agenda === "string" ? body.agenda : undefined;
+    const state = await recordSummons(user, agenda);
     return NextResponse.json(state);
   } catch (err) {
     console.error("[api/committee/summon] failed:", err);

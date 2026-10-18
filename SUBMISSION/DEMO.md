@@ -4,7 +4,7 @@
 moment is a refusal: the gate rejecting the operator until a named human signs.*
 
 **Pre-flight (before recording):** `bun run dev` (web :3000) + `bun run mcp`
-(sidecar :3031) running; landing page open; Mission Control open in a second tab;
+(sidecar :3031) running; landing page open; Workspace open in a second tab;
 committee roster has at least one PRESENT member who is not the signed-in officer.
 
 ---
@@ -21,7 +21,7 @@ with their READ / WRITES / IRREVERSIBLE kinds, the third-party filesystem server
 
 ## 0:25–1:20 — The run
 
-**Do:** Mission Control → **New evaluation** → pick the sample tender
+**Do:** Workspace → **New evaluation** → pick the sample tender
 `KE-KCS-2026-042` → launch.
 
 **Say (over the live progress trail):** "Watch the plan node: the agent inspected the
@@ -58,6 +58,22 @@ The gate signs with **your session identity** — the named human on the record.
 
 **Show:** sha-256 seal → `transmit_submission` → receipt written → run flips to
 **FILED**, receipt ID (`SUB-…`) on the ledger.
+
+## The refusal, as a recorded artifact
+
+The main recording may predate the refusals. If so, splice **`.freebuff/Demo
+Part 2 - The Refusal.mp4`** (~61 s) over section 1:20–2:20 — it shows the same
+three beats, played from genuinely captured HTTP bodies (422 no-name, 503
+fail-closed roster read, gate still PENDING, nothing filed). Every body on the
+slides is verbatim from the live run of 2026-10-17; replay them yourself:
+
+```bash
+GATE=$(curl -s localhost:3031/api/runs | python3 -c "import json,sys;print(json.load(sys.stdin)['runs'][0]['gateId'])")
+curl -s -X POST localhost:3031/api/gates/$GATE/decision -H 'content-type: application/json' -d '{"decision":"APPROVE"}'
+# → {"error":"A named human is required — provide the approving officer's full name.","code":422}
+curl -s -X POST localhost:3031/api/gates/$GATE/decision -H 'content-type: application/json' -d '{"decision":"APPROVE","approver":"Mallory Intruder"}'
+# → {"error":"The committee roster could not be read — approval refused.","code":503}   (fail-closed when the web app is down)
+```
 
 ## 2:20–3:00 — The record
 

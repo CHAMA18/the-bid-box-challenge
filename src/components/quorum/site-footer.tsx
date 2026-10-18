@@ -5,18 +5,19 @@ import { QuorumLogo } from "@/components/quorum/logo";
 const PRODUCT_LINKS = [
   { label: "Overview", href: "#overview" },
   { label: "Use cases", href: "#use-cases" },
-  { label: "Platform", href: "#platform" },
   { label: "Inside the run", href: "#inside" },
   { label: "The report", href: "#report" },
   { label: "Pricing", href: "#pricing" },
   { label: "Get started", href: "#get-started" },
 ];
 
+/* The four national OCDS portals the data programme reads — linked at the
+   publisher's own address, as published on the OCP registry. */
 const DATA_LINKS = [
-  { label: "NOCOPO — Nigeria", href: "#platform" },
-  { label: "GPP — Uganda", href: "#platform" },
-  { label: "PPIP — Kenya", href: "#platform" },
-  { label: "Umucyo — Rwanda", href: "#platform" },
+  { label: "NOCOPO — Nigeria", href: "http://nocopo.bpp.gov.ng/OpenData.aspx" },
+  { label: "GPP — Uganda", href: "https://gpp.ppda.go.ug/public/open-data/ocds/ocds-datasets" },
+  { label: "PPIP — Kenya", href: "https://tenders.go.ke/ocds" },
+  { label: "Umucyo — Rwanda", href: "https://ocds.umucyo.gov.rw/OpenData" },
 ];
 
 const STANDARDS = ["MCP", "OCDS", "Open weights", "Human-in-the-loop"];
@@ -70,7 +71,12 @@ export function SiteFooter() {
             <ul className="mt-4 space-y-2.5">
               {DATA_LINKS.map((l) => (
                 <li key={l.label}>
-                  <a href={l.href} className="text-[14px] text-ink-300 transition-colors hover:text-white">
+                  <a
+                    href={l.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[14px] text-ink-300 transition-colors hover:text-white"
+                  >
                     {l.label}
                   </a>
                 </li>

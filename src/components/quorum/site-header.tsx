@@ -12,7 +12,6 @@ import { ThemeToggle } from "@/components/quorum/theme-toggle";
 const NAV = [
   { label: "Overview", href: "#overview" },
   { label: "Use cases", href: "#use-cases" },
-  { label: "Platform", href: "#platform" },
   { label: "Pricing", href: "#pricing" },
 ];
 
@@ -102,7 +101,7 @@ export function SiteHeader({
                 className="group inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-950 px-4 text-[13px] font-semibold text-white transition-all hover:bg-brand-600"
               >
                 <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-                Mission control
+                Workspace
                 <ArrowUpRight
                   className="h-3.5 w-3.5 opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
                   aria-hidden="true"
@@ -210,7 +209,7 @@ export function SiteHeader({
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-ink-950 px-4 py-3.5 text-[15px] font-semibold text-white"
                   >
                     <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-                    Mission control
+                    Workspace
                     <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>

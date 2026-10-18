@@ -96,7 +96,7 @@ The public portals split the tender cycle in two, and this README states the spl
 - **Stop at the gate.** The review graph ends at `propose_gate`. The edge from the gate to filing does not exist in the graph — no prompt, tool misuse or model turn can file an award. Only a *named* human on the committee roster can release the sealed filing.
 - **Prove everything.** One append-only line per tool call lands in `tool-log.jsonl`, and each approved filing writes a sha-256-sealed receipt into `data/submissions/`.
 
-The product surfaces this as **Mission Control** (live run register, human-gate queue, decision ledger, agent feed) and a **live stack console** on the landing page.
+The product surfaces this as **Workspace** (live run register, human-gate queue, decision ledger, agent feed) and a **live stack console** on the landing page.
 
 ---
 
@@ -257,7 +257,7 @@ Copy `.env.example` — every variable is optional; the product runs fully witho
 
 | Variable | Used by | Purpose |
 | --- | --- | --- |
-| `LLM_BASE_URL` | quorum-mcp | Any OpenAI-compatible chat-completions endpoint for redline drafting. Intended setup: an **open-weights model served in-region** (vLLM, TGI, Ollama) so procurement data stays in the jurisdiction. |
+| `LLM_BASE_URL` | quorum-mcp | Any OpenAI-compatible chat-completions endpoint for redline drafting. Intended setup: an **open-weights model served in-region** — e.g. Ollama on the same box: `http://localhost:11434/v1` (vLLM and TGI also work) — so procurement data stays in the jurisdiction. The live-audit numbers in `10-cost-and-audit.md` were measured exactly that way. |
 | `LLM_MODEL` | quorum-mcp | Model name the endpoint serves. |
 | `LLM_API_KEY` | quorum-mcp | Bearer token, only if the endpoint requires one. |
 | `QUORUM_WEB_URL` | quorum-mcp | Where the sidecar reads the committee roster (default `http://127.0.0.1:3000`). |
@@ -277,7 +277,7 @@ Copy `.env.example` — every variable is optional; the product runs fully witho
 **The 90-second evaluator walkthrough**
 
 1. **Landing page → the live stack console.** Health (incl. third-party fs-MCP status), the five tools with their READ/WRITES/IRREVERSIBLE kind, the architecture map, and the streaming audit log.
-2. **Sign in** (or register) → Mission Control.
+2. **Sign in** (or register) → Workspace.
 3. **New evaluation** (sidebar CTA) → step 02 DOCUMENTS: drop real tender files (they mirror to Firebase Storage) → pick the checks → launch.
 4. Watch the orchestrated run: documents read over MCP → requirements pinned → findings flagged, each cited → redlines drafted by the configured LLM (or the template fallback).
 5. The run parks at the **human gate**. Open the gate, sign as the named approver — only then is the bundle sealed (sha-256) and filed, with a receipt written to `data/submissions/`.
@@ -302,7 +302,7 @@ curl -s localhost:3031/mcp -X POST -H 'content-type: application/json' \
 
 - **Landing** (`/`) — product story, live stack console, film (also embedded in this README: [Demo film](#demo-film)).
 - **Auth** (`/#/login`, `/#/register`) — email/passphrase + Google Sign-In (Firebase project `public-tender`; identity mirror + document storage), with the optional workspace invite code field.
-- **Mission Control** (`/#/dashboard`) — flow guide, live stats, run register with SOURCED REPORT downloads, human-gate queue with named sign-off, decision ledger, agent feed, portal sync, committee roll-call, settings with team members.
+- **Workspace** (`/#/dashboard`) — live stats, run register with start times and SOURCED REPORT downloads, human-gate queue with named sign-off, decision ledger, agent feed, portal sync, committee roll-call, settings with team members.
 
 ---
 
@@ -317,6 +317,8 @@ curl -s localhost:3031/mcp -X POST -H 'content-type: application/json' \
 **Current state of the deployment:**
 
 - With no `LLM_BASE_URL` configured, redline drafting runs on the deterministic template fallback rather than a live model — capabilities are unaffected; prose quality is. Wire an in-region endpoint to upgrade that layer.
+- Run-to-run variance and cost are measured for **both** paths (`SUBMISSION/10-cost-and-audit.md`): the deterministic rule path (identical findings across repeats; 0 tokens → 0 USD) and, since 2026-10-17, the live-model path on an in-region open-weights endpoint (Ollama, `llama3.2:3b`) — 4 runs audited: findings stable, draft texts distinct run-to-run, 668–988 tokens/run, 7.7 s median per model call, 0 USD marginal cost. `bun live-audit.ts` regenerates the artifact at any time from the append-only log; a hosted endpoint's cost is the published formula (tokens × price), never a guessed number.
+- With a small planner, the model-led plan could disable deep-value parsing on packs whose bid values demand it — one such run was logged as evidence, and the engine now applies a planner **safety floor** (parsing may be added, never removed while bid values are present), pinned by a dedicated test. That trade-off is documented rather than hidden.
 - The e-GP portal receipt is labeled `egp-portal (simulated)` — sealing and receipts are real (sha-256, persisted), the transmission is a demo stub until wired to a live portal integration.
 - Beneficial-ownership / registry matching is exposed via the source-request queue as a pending source, not yet a live connector.
 - No HTTPS yet: the certbot step is staged but waits on the Route 53 A record for `quorum.chungu-chama.com` (blocked by the IAM permissions boundary on the deploying user; HTTP still works over the Elastic IP).
