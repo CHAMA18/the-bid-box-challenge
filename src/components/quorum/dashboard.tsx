@@ -2110,7 +2110,7 @@ function GateQueue({
           </span>
         </header>
 
-        <div className="flex-1 space-y-3 px-4 py-4" aria-live="polite">
+        <div className="grid flex-1 items-start gap-3 px-4 py-4 sm:grid-cols-2 2xl:grid-cols-3" aria-live="polite">
           <AnimatePresence initial={false}>
             {queue.map((g) => (
               <motion.article
@@ -7601,11 +7601,11 @@ function GatesView({
       title="Approvals"
       sub="The stop only a human can pass. The agent assembles the file and halts; the committee reads the cited flags and decides — by name, on the record."
     >
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-span-2">
+      <div className="grid content-start gap-4 sm:gap-6">
+        <div className="min-w-0">
           <GateQueue queue={queue} ledger={ledger} firstName={firstName} onSign={onSign} onReturn={onReturn} />
         </div>
-        <div className="grid content-start gap-4 sm:gap-6">
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
           <GavelProtocolCard />
           <button
             type="button"

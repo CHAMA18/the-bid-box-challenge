@@ -1,6 +1,64 @@
 {
   "gates": [
     {
+      "id": "gate_gpar6s",
+      "runId": "run_b0f8f4ba",
+      "tenderId": "RW-RURA-2027-021",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "Kigali Meter Works",
+        "value": "RWF 2,150,000,000",
+        "attachments": 6,
+        "findings": [
+          "F-01",
+          "F-02",
+          "F-03"
+        ],
+        "drafts": [
+          "draft_9t9vv4",
+          "draft_utpos9"
+        ]
+      },
+      "status": "PENDING",
+      "createdAt": "2026-10-18T16:31:05.789Z"
+    },
+    {
+      "id": "gate_qm0azl",
+      "runId": "run_9e60a09e",
+      "tenderId": "KE-PHC-2026-311",
+      "tool": "file_gate_submission",
+      "inputs": {
+        "bidder": "NYOTA ENERGY",
+        "value": "KES 12,460,000",
+        "attachments": 11,
+        "findings": [
+          "F-01",
+          "F-02",
+          "F-03",
+          "F-04",
+          "F-05",
+          "F-06",
+          "F-07",
+          "F-08"
+        ],
+        "drafts": [
+          "draft_anjy1o",
+          "draft_zotrh3"
+        ]
+      },
+      "status": "EXECUTED",
+      "createdAt": "2026-10-18T16:21:57.724Z",
+      "approver": "Dr. Nkhensani Bilmon",
+      "note": "Quorum present (5/9). Findings reviewed; over-budget and value-outlier bids flagged for clarification. Award proceeds to NYOTA ENERGY per committee minute 01/2026.",
+      "decidedAt": "2026-10-18T16:26:16.352Z",
+      "executedAt": "2026-10-18T16:26:16.365Z",
+      "receipt": {
+        "submissionId": "SUB-MVE1F63T",
+        "hash": "eafbe77a7b24153dc1ac342ceabd0175",
+        "portal": "egp-portal (simulated)"
+      }
+    },
+    {
       "id": "gate_21dubw",
       "runId": "run_91080519",
       "tenderId": "KE-MSA-2026-090",
@@ -166,6 +224,286 @@
     }
   ],
   "runs": [
+    {
+      "id": "run_b0f8f4ba",
+      "tenderId": "RW-RURA-2027-021",
+      "status": "AWAITING_GATE",
+      "startedAt": "2026-10-18T16:31:05.773Z",
+      "updatedAt": "2026-10-18T16:31:05.790Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender RW-RURA-2027-021",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 1 documents read · 3 bids · 1 awards · 1 OCDS records",
+        "▸ plan_review — heuristic · value parsing OCDS only · focus VALUE-OUTLIER > AWARD-OVER-BUDGET > DOC-MISSING > SPEC-DEVIATION · maxDrafts 2",
+        "▸ extract_requirements — 0 SHALL/must clauses pinned",
+        "▸ guards — price variance >25% · checklist STANDARD · registry cross-check ON",
+        "▸ registry cross-check — 0 of 3 bidders matched on the platform register",
+        "▸ flag_finding — 3 findings flagged, each cited",
+        "▸ verify_findings — 3/3 confirmed in their cited document",
+        "▸ draft_redline — template (no model configured) for R-VALUE-OUTLIER",
+        "▸ draft_redline — template (no model configured) for R-AWARD-OVER-BUDGET",
+        "▸ 2 redline draft(s) ready for committee (plan: maxDrafts 2, focus VALUE-OUTLIER, AWARD-OVER-BUDGET, DOC-MISSING) · 0 from the model, 2 template · 0 tokens",
+        "⏸ human gate raised (gate_gpar6s) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate"
+      ],
+      "requirements": [],
+      "findings": [
+        {
+          "id": "F-01",
+          "rule": "R-VALUE-OUTLIER",
+          "severity": "HIGH",
+          "item": "Volta Metering",
+          "evidence": "Bid value RWF 6,100,000,000 vs peer median 2,225,000,000 (2.7×).",
+          "citation": "ocds-release.json, ocid ocds-rw-rura-2027-021, bids.details[1].value"
+        },
+        {
+          "id": "F-02",
+          "rule": "R-DOC-MISSING",
+          "severity": "MEDIUM",
+          "item": "Volta Metering — rura type approval letter",
+          "evidence": "Tender notice lists \"rura type approval letter\" as REQUIRED; the bid does not reference it.",
+          "citation": "ocds-release.json, eligibility checklist"
+        },
+        {
+          "id": "F-03",
+          "rule": "R-AWARD-OVER-BUDGET",
+          "severity": "HIGH",
+          "item": "Volta Metering",
+          "evidence": "Award RWF 2,600,000,000 exceeds the published tender value RWF 2,400,000,000.",
+          "citation": "ocds-release.json, ocid ocds-rw-rura-2027-021, awards[0].value"
+        }
+      ],
+      "drafts": [
+        {
+          "id": "draft_9t9vv4",
+          "findingId": "F-01",
+          "original": "Bid value RWF 6,100,000,000 vs peer median 2,225,000,000 (2.7×).",
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-VALUE-OUTLIER on Volta Metering prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (LLM_BASE_URL and LLM_MODEL are not set); template guard applied so the run never stalls.",
+          "model": "template (no model configured)",
+          "source": "template",
+          "usage": {
+            "promptTokens": 0,
+            "completionTokens": 0
+          },
+          "latencyMs": 0
+        },
+        {
+          "id": "draft_utpos9",
+          "findingId": "F-03",
+          "original": "Award RWF 2,600,000,000 exceeds the published tender value RWF 2,400,000,000.",
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-AWARD-OVER-BUDGET on Volta Metering prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (LLM_BASE_URL and LLM_MODEL are not set); template guard applied so the run never stalls.",
+          "model": "template (no model configured)",
+          "source": "template",
+          "usage": {
+            "promptTokens": 0,
+            "completionTokens": 0
+          },
+          "latencyMs": 0
+        }
+      ],
+      "usage": {
+        "drafts": 2,
+        "llmDrafts": 0,
+        "promptTokens": 0,
+        "completionTokens": 0
+      },
+      "plan": {
+        "pack": {
+          "files": 1,
+          "bids": 3,
+          "ocdsRecords": 1,
+          "markdownValueBids": 0,
+          "ocdsValueBids": 3
+        },
+        "parseMarkdownValues": false,
+        "focusRules": [
+          "VALUE-OUTLIER",
+          "AWARD-OVER-BUDGET",
+          "DOC-MISSING",
+          "SPEC-DEVIATION"
+        ],
+        "maxDrafts": 2,
+        "note": "heuristic: 0 markdown bid value(s) — deep-value parsing off (nothing to parse)",
+        "source": "heuristic"
+      },
+      "gateId": "gate_gpar6s"
+    },
+    {
+      "id": "run_9e60a09e",
+      "tenderId": "KE-PHC-2026-311",
+      "status": "FILED",
+      "startedAt": "2026-10-18T16:21:57.661Z",
+      "updatedAt": "2026-10-18T16:26:16.365Z",
+      "progress": [
+        "▸ review_graph invoked — langgraph.js · tender KE-PHC-2026-311",
+        "▸ tender_documents_list — via server-filesystem MCP",
+        "▸ 4 documents read · 3 bids · 0 awards · 0 OCDS records",
+        "▸ plan_review — heuristic · value parsing DEEP (markdown + OCDS) · focus OVER-BUDGET > VALUE-OUTLIER > PRICE-OUTLIER > DOC-MISSING > SPEC-DEVIATION · maxDrafts 2",
+        "▸ extract_requirements — 5 SHALL/must clauses pinned",
+        "▸ guards — price variance >25% · checklist STANDARD · registry cross-check ON",
+        "▸ registry cross-check — 0 of 3 bidders matched on the platform register",
+        "▸ flag_finding — 8 findings flagged, each cited",
+        "▸ verify_findings — 8/8 confirmed in their cited document",
+        "▸ draft_redline — template (no model configured) for R-OVER-BUDGET",
+        "▸ draft_redline — template (no model configured) for R-VALUE-OUTLIER",
+        "▸ 2 redline draft(s) ready for committee (plan: maxDrafts 2, focus OVER-BUDGET, VALUE-OUTLIER, PRICE-OUTLIER) · 0 from the model, 2 template · 0 tokens",
+        "⏸ human gate raised (gate_qm0azl) — filing blocked until a named human signs",
+        "✓ review graph complete — the graph itself stops at the gate",
+        "✓ Dr. Nkhensani Bilmon signed the gate — bundle filed · SUB-MVE1F63T"
+      ],
+      "requirements": [
+        {
+          "id": "REQ-01",
+          "clause": "SHALL deliver solar-powered vaccine refrigerators of at least 100 litres, WHO-prequalified or equivalent",
+          "page": 1
+        },
+        {
+          "id": "REQ-02",
+          "clause": "SHALL supply solar panels of at least 200 W with a charge controller per unit",
+          "page": 1
+        },
+        {
+          "id": "REQ-03",
+          "clause": "SHALL install and commission each unit at its facility within sixty (60) days of contract signature",
+          "page": 1
+        },
+        {
+          "id": "REQ-04",
+          "clause": "SHALL provide a five-year service contract with response within 72 hours",
+          "page": 1
+        },
+        {
+          "id": "REQ-05",
+          "clause": "must declare any deviation from these specifications in the specifications matrix",
+          "page": 1
+        }
+      ],
+      "findings": [
+        {
+          "id": "F-01",
+          "rule": "R-PRICE-OUTLIER",
+          "severity": "HIGH",
+          "item": "Solar vaccine refrigerator 100L × 12 — HIGHLAND REFRIGERATION",
+          "evidence": "Unit price KES 1,190,000 vs peer median KES 408,500 (2.9×) on line item \"solar vaccine refrigerator\".",
+          "citation": "04-bid-highland-refrigeration.md, price schedule"
+        },
+        {
+          "id": "F-02",
+          "rule": "R-PRICE-OUTLIER",
+          "severity": "HIGH",
+          "item": "Solar panel 200W with controller × 12 — HIGHLAND REFRIGERATION",
+          "evidence": "Unit price KES 150,000 vs peer median KES 59,500 (2.5×) on line item \"solar panel 200w\".",
+          "citation": "04-bid-highland-refrigeration.md, price schedule"
+        },
+        {
+          "id": "F-03",
+          "rule": "R-PRICE-OUTLIER",
+          "severity": "HIGH",
+          "item": "Five-year service contract × 1 — NYOTA ENERGY",
+          "evidence": "Unit price KES 6,400,000 vs peer median KES 2,175,000 (2.9×) on line item \"five-year service contract\".",
+          "citation": "02-bid-nyota-energy.md, price schedule"
+        },
+        {
+          "id": "F-04",
+          "rule": "R-SPEC-DEVIATION",
+          "severity": "HIGH",
+          "item": "HIGHLAND REFRIGERATION",
+          "evidence": "Alternative offered for the panel: lithium-ion battery storage in place of the specified sealed lead-acid; see annex B.",
+          "citation": "04-bid-highland-refrigeration.md, specifications matrix"
+        },
+        {
+          "id": "F-05",
+          "rule": "R-VALUE-OUTLIER",
+          "severity": "HIGH",
+          "item": "HIGHLAND REFRIGERATION",
+          "evidence": "Bid value KES 18,738,000 vs peer median 10,277,000 (1.8×).",
+          "citation": "04-bid-highland-refrigeration.md, bid value line"
+        },
+        {
+          "id": "F-06",
+          "rule": "R-DOC-MISSING",
+          "severity": "MEDIUM",
+          "item": "NYOTA ENERGY — local content declaration",
+          "evidence": "Tender notice lists \"local content declaration\" as REQUIRED; the bid does not reference it.",
+          "citation": "01-tender-notice.md, eligibility checklist"
+        },
+        {
+          "id": "F-07",
+          "rule": "R-DOC-MISSING",
+          "severity": "MEDIUM",
+          "item": "MWANGAZA COLD CHAIN — solar product performance certificate",
+          "evidence": "Tender notice lists \"solar product performance certificate\" as REQUIRED; the bid does not reference it.",
+          "citation": "01-tender-notice.md, eligibility checklist"
+        },
+        {
+          "id": "F-08",
+          "rule": "R-OVER-BUDGET",
+          "severity": "HIGH",
+          "item": "HIGHLAND REFRIGERATION",
+          "evidence": "Bid value KES 18,738,000 exceeds the budget ceiling KES 15,000,000 (notice: 01-tender-notice.md).",
+          "citation": "04-bid-highland-refrigeration.md, bid value line"
+        }
+      ],
+      "drafts": [
+        {
+          "id": "draft_anjy1o",
+          "findingId": "F-08",
+          "original": "Bid value KES 18,738,000 exceeds the budget ceiling KES 15,000,000 (notice: 01-tender-notice.md).",
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-OVER-BUDGET on HIGHLAND REFRIGERATION prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (LLM_BASE_URL and LLM_MODEL are not set); template guard applied so the run never stalls.",
+          "model": "template (no model configured)",
+          "source": "template",
+          "usage": {
+            "promptTokens": 0,
+            "completionTokens": 0
+          },
+          "latencyMs": 0
+        },
+        {
+          "id": "draft_zotrh3",
+          "findingId": "F-05",
+          "original": "Bid value KES 18,738,000 vs peer median 10,277,000 (1.8×).",
+          "proposed": "Insert: \"The Buyer reserves the right to seek written clarification of R-VALUE-OUTLIER on HIGHLAND REFRIGERATION prior to award, and to disqualify bids left unclarified after five (5) working days.\"",
+          "rationale": "LLM call failed (LLM_BASE_URL and LLM_MODEL are not set); template guard applied so the run never stalls.",
+          "model": "template (no model configured)",
+          "source": "template",
+          "usage": {
+            "promptTokens": 0,
+            "completionTokens": 0
+          },
+          "latencyMs": 0
+        }
+      ],
+      "usage": {
+        "drafts": 2,
+        "llmDrafts": 0,
+        "promptTokens": 0,
+        "completionTokens": 0
+      },
+      "plan": {
+        "pack": {
+          "files": 4,
+          "bids": 3,
+          "ocdsRecords": 0,
+          "markdownValueBids": 3,
+          "ocdsValueBids": 0
+        },
+        "parseMarkdownValues": true,
+        "focusRules": [
+          "OVER-BUDGET",
+          "VALUE-OUTLIER",
+          "PRICE-OUTLIER",
+          "DOC-MISSING",
+          "SPEC-DEVIATION"
+        ],
+        "maxDrafts": 2,
+        "note": "heuristic: 3 markdown bid value(s) + published ceiling — deep-value parsing on",
+        "source": "heuristic"
+      },
+      "gateId": "gate_qm0azl"
+    },
     {
       "id": "run_91080519",
       "tenderId": "KE-MSA-2026-090",
@@ -1291,5 +1629,5 @@
     "updatedAt": null,
     "updatedBy": null
   },
-  "seq": 110
+  "seq": 142
 }
