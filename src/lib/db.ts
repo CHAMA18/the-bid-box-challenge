@@ -107,7 +107,41 @@ interface StoreShape {
   invites: InviteRow[];
 }
 
-const FILE = path.join(process.cwd(), "db", "quorum-store.json");
+/**
+ * Store location. In `next dev` the cwd is the repo root, so the store lands
+ * in <repo>/db/. In standalone production the server chdirs into
+ * `.next/standalone` — leaving the store there means EVERY rebuild (`next
+ * build` wipes .next) destroys accounts, sessions and gate receipts. So the
+ * path resolves to the repo root (walking up until package.json +
+ * mini-services/quorum-mcp is seen), honours QUORUM_STORE_PATH, and migrates
+ * a legacy standalone store on first touch.
+ */
+function resolveStoreFile(): string {
+  if (process.env.QUORUM_STORE_PATH) return path.resolve(process.env.QUORUM_STORE_PATH);
+  const repoRoot = (() => {
+    let dir = process.cwd();
+    for (let i = 0; i < 8; i++) {
+      try {
+        if (
+          existsSync(path.join(dir, "package.json")) &&
+          existsSync(path.join(dir, "mini-services", "quorum-mcp"))
+        ) {
+          return dir;
+        }
+      } catch {
+        /* unreadable dir — keep walking */
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) return null;
+      dir = parent;
+    }
+    return null;
+  })();
+  return path.join(repoRoot ?? process.cwd(), "db", "quorum-store.json");
+}
+
+const FILE = resolveStoreFile();
+const LEGACY_FILE = path.join(process.cwd(), "db", "quorum-store.json");
 const DATE_FIELDS = ["createdAt", "updatedAt", "expiresAt", "claimedAt"] as const;
 
 function revive<T>(rows: unknown): T[] {
@@ -166,7 +200,21 @@ function load(): StoreShape {
     settings: {},
     invites: [],
   };
-  if (!existsSync(FILE)) return empty;
+  if (!existsSync(FILE)) {
+    /* One-time migration: a pre-fix build kept the store inside
+       .next/standalone/db (wiped on every rebuild). Rescue it to the
+       durable location so accounts, sessions and receipts survive. */
+    if (FILE !== LEGACY_FILE && existsSync(LEGACY_FILE)) {
+      try {
+        mkdirSync(path.dirname(FILE), { recursive: true });
+        const legacy = JSON.parse(readFileSync(LEGACY_FILE, "utf8"));
+        writeFileSync(FILE, JSON.stringify(legacy, null, 2));
+      } catch {
+        /* unreadable legacy file — start from the empty store */
+      }
+    }
+    if (!existsSync(FILE)) return empty;
+  }
   const raw = JSON.parse(readFileSync(FILE, "utf8")) as Partial<Record<keyof StoreShape, unknown>>;
   return {
     users: revive<UserRow>(raw.users),

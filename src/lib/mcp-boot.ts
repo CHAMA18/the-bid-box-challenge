@@ -11,6 +11,32 @@ export type McpBootResult = "running" | "spawned" | "unavailable";
 
 const PORT = 3031;
 
+/**
+ * Locate the sidecar entry script. In `next dev` the cwd is the repo root;
+ * in standalone production the server chdirs into `.next/standalone`, so a
+ * bare relative path breaks the spawn and the agent stack never self-heals.
+ * Walk up from the cwd until the repo layout (package.json + the sidecar
+ * script) is found, then fall back to the cwd-relative path.
+ */
+async function sidecarScript(): Promise<string | null> {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const rel = path.join("mini-services", "quorum-mcp", "index.ts");
+  let dir = process.cwd();
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(dir, rel);
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      /* unreadable dir — keep walking */
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
 async function portInUse(): Promise<boolean> {
   try {
     const net = await import("node:net");
@@ -36,8 +62,11 @@ export async function ensureMcpSidecar(): Promise<McpBootResult> {
   try {
     if (await portInUse()) return "running";
 
+    const script = await sidecarScript();
+    if (!script) return "unavailable";
+
     const { spawn } = await import("node:child_process");
-    const child = spawn("bun", ["mini-services/quorum-mcp/index.ts"], {
+    const child = spawn("bun", [script], {
       cwd: process.cwd(),
       detached: true,
       stdio: "ignore",
