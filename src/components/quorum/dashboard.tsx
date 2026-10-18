@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { QuorumLogo } from "@/components/quorum/logo";
 import { StackConsole } from "@/components/quorum/stack-console";
+import { TenderPackPreview, type TenderPackRow } from "@/components/quorum/tender-pack-preview";
 import { TourLayer, type TourStep } from "@/components/quorum/tour";
 import type { AuthUser } from "@/lib/auth-types";
 import { uploadTenderDocument } from "@/lib/firebase";
@@ -854,6 +855,7 @@ function NewRunModal({
   /* Sample tenders — comprehensive packs shipped with the agent stack. */
   const [samples, setSamples] = useState<SampleTenderRow[]>([]);
   const [samplesOpen, setSamplesOpen] = useState(false);
+  const [previewSample, setPreviewSample] = useState<TenderPackRow | null>(null);
   /* Where the current ref/title draft came from — shown inline, cleared the
      moment the officer edits (then it's theirs, not a suggestion). */
   const [refSource, setRefSource] = useState<"" | "sequence" | "fresh" | "document" | "sample">("");
@@ -1295,12 +1297,10 @@ function NewRunModal({
                               </p>
                             )}
                             {samples.map((s) => (
-                              <button
+                              <div
                                 key={s.ref}
-                                type="button"
                                 role="listitem"
-                                onClick={() => stageSample(s)}
-                                className="block w-full rounded-lg border border-ink-100 bg-white px-3.5 py-3 text-left transition-all hover:border-brand-400 hover:shadow-[0_2px_10px_rgba(217,38,22,0.07)]"
+                                className="block w-full rounded-lg border border-ink-100 bg-white px-3.5 py-3 transition-all hover:border-brand-400 hover:shadow-[0_2px_10px_rgba(217,38,22,0.07)]"
                               >
                                 <span className="flex flex-wrap items-center gap-2">
                                   <span className="font-code text-[10px] font-bold tracking-[0.08em] text-ink-950">{s.ref}</span>
@@ -1309,16 +1309,39 @@ function NewRunModal({
                                 </span>
                                 <span className="mt-1 block truncate text-[12.5px] font-medium text-ink-800">{s.title}</span>
                                 <span className="mt-1 block text-[11.5px] leading-relaxed text-ink-500">{s.challenges}</span>
-                                <span className="mt-1.5 flex items-center gap-1.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-brand-700">
-                                  <Plus className="h-2.5 w-2.5" aria-hidden="true" />
-                                  STAGE THIS PACK
+                                <span className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewSample(s)}
+                                    aria-label={`Preview the full contents of tender pack ${s.ref}`}
+                                    className="flex items-center gap-1.5 rounded-md border border-ink-200 px-2.5 py-1.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-700 transition-colors hover:border-ink-500 hover:bg-ink-50"
+                                  >
+                                    <Eye className="h-3 w-3" aria-hidden="true" />
+                                    PREVIEW PACK
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => stageSample(s)}
+                                    className="flex items-center gap-1.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-brand-700 transition-colors hover:text-brand-600"
+                                  >
+                                    <Plus className="h-2.5 w-2.5" aria-hidden="true" />
+                                    STAGE THIS PACK
+                                  </button>
                                 </span>
-                              </button>
+                              </div>
                             ))}
                           </div>
                         )}
                       </div>
                       {detailsError && <p role="alert" className="rounded-lg bg-brand-50 px-3.5 py-2.5 text-[12px] font-medium text-brand-800">{detailsError}</p>}
+                      <TenderPackPreview
+                        sample={previewSample}
+                        onClose={() => setPreviewSample(null)}
+                        onStage={(s) => {
+                          stageSample(s);
+                          setPreviewSample(null);
+                        }}
+                      />
                     </>
                   )}
 
