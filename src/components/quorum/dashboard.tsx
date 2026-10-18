@@ -296,7 +296,7 @@ const NAV_GROUPS: {
     group: "COMMAND",
     items: [
       { id: "mc-overview", label: "Overview", icon: Gauge },
-      { id: "mc-runs", label: "Agent runs", icon: Terminal, badge: "runs" },
+      { id: "mc-runs", label: "Evaluations", icon: Terminal, badge: "runs" },
       { id: "mc-gates", label: "Approvals", icon: Stamp, badge: "gates" },
       { id: "mc-activity", label: "Live activity", icon: Radio },
     ],
@@ -319,7 +319,7 @@ const NAV_GROUPS: {
   {
     group: "SUPPLIERS",
     items: [
-      { id: "mc-suppliers", label: "Supplier register", icon: Building2 },
+      { id: "mc-suppliers", label: "Suppliers", icon: Building2 },
     ],
   },
   {
@@ -1087,7 +1087,7 @@ function NewRunModal({
 
             {/* Step rail — 01 details · 02 documents · 03 scope */}
             <div data-tour="wiz-rail" className="mt-6 rounded-2xl border border-ink-100 bg-paper/70 px-3 py-3 sm:mt-7 sm:px-5 sm:py-4">
-              <ol className="flex items-center gap-2 sm:gap-3" aria-label="Run setup, three steps">
+              <ol className="flex items-center gap-2 sm:gap-3" aria-label="Evaluation setup, three steps">
               {WIZARD_STEPS.map((label, i) => {
                 const state = i === step ? "current" : i < step ? "done" : "todo";
                 return (
@@ -1202,10 +1202,10 @@ function NewRunModal({
                         {refSource !== "" && !detailsError && (
                           <p className="mt-1.5 flex items-center gap-1.5 font-code text-[8px] tracking-[0.14em] text-ink-400" aria-live="polite">
                             <CircleCheck className="h-2.5 w-2.5 text-brand-600" aria-hidden="true" />
-                            {refSource === "sequence" && "ASSIGNED BY QUORUM — CONTINUES THE REGISTER'S SEQUENCE · LOCKED"}
-                            {refSource === "fresh" && "ASSIGNED BY QUORUM — NEW REGISTRY SEQUENCE · LOCKED"}
+                            {refSource === "sequence" && "ASSIGNED BY QUORUM — CONTINUES YOUR REFERENCE SEQUENCE · LOCKED"}
+                            {refSource === "fresh" && "ASSIGNED BY QUORUM — NEW REFERENCE SEQUENCE · LOCKED"}
                             {refSource === "document" && "READ FROM THE STAGED PACK · LOCKED"}
-                            {refSource === "sample" && "SAMPLE PACK — LOADED FROM THE SAMPLE REGISTRY · LOCKED"}
+                            {refSource === "sample" && "SAMPLE PACK — LOADED FROM THE BUILT-IN PACKS · LOCKED"}
                           </p>
                         )}
                       </div>
@@ -1293,7 +1293,7 @@ function NewRunModal({
                           <div className="mt-2.5 space-y-2 rounded-xl border border-ink-100 bg-paper/60 p-2.5" role="list" aria-label="Sample tenders">
                             {samples.length === 0 && (
                               <p className="px-2 py-3 text-center font-code text-[9px] tracking-[0.14em] text-ink-400">
-                                SAMPLE REGISTRY UNREACHABLE — CHECK THE AGENT STACK
+                                SAMPLE PACKS COULDN’T BE LOADED — CHECK THAT THE AGENT SERVICE IS RUNNING
                               </p>
                             )}
                             {samples.map((s) => (
@@ -1560,7 +1560,7 @@ function NewRunModal({
                 </button>
               </div>
               {step === 2 && launching && (
-                <div className="mt-3 h-1 overflow-hidden rounded-full bg-ink-100" role="progressbar" aria-label="Launching run">
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-ink-100" role="progressbar" aria-label="Launching the evaluation">
                   <motion.div
                     className="h-full w-1/3 rounded-full bg-brand-600"
                     animate={{ x: ["-100%", "300%"] }}
@@ -1827,13 +1827,13 @@ function RunRegister({
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
           <div>
             <h2 id="mc-runs-h" className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">
-              Recent runs
+              Recent evaluations
             </h2>
             <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
-              LAST 7 DAYS · {filtered.length} OF {runs.length} RUNS
+              LAST 7 DAYS · {filtered.length} OF {runs.length} EVALUATIONS
             </p>
           </div>
-          <div data-tour="run-filters" className="flex items-center gap-1.5" role="group" aria-label="Filter runs">
+          <div data-tour="run-filters" className="flex items-center gap-1.5" role="group" aria-label="Filter evaluations">
             {RUN_FILTERS.map((f) => (
               <button
                 key={f.id}
@@ -1856,10 +1856,10 @@ function RunRegister({
         {/* Table */}
         <div data-tour="run-rows" className="overflow-x-auto">
           <table className="w-full min-w-[660px] border-collapse text-left">
-            <caption className="sr-only">Quorum run register — recent agent runs with status, findings and citations</caption>
+            <caption className="sr-only">Recent evaluations with their status, findings and citations</caption>
             <thead>
               <tr className="border-b border-ink-100 bg-paper/60">
-                {["RUN", "BIDS", "ISSUES", "SOURCED", "STATUS", "TIME", ""].map((h, i) => (
+                {["EVALUATION", "BIDS", "ISSUES", "SOURCED", "STATUS", "TIME", ""].map((h, i) => (
                   <th
                     key={i}
                     scope="col"
@@ -1999,7 +1999,7 @@ function RunRegister({
                                       URL.revokeObjectURL(url);
                                       onToast(`REPORT DOWNLOADED — ${run.id}`);
                                     })
-                                    .catch(() => onToast("REPORT FAILED — SIDECAR UNREACHABLE"));
+                                    .catch(() => onToast("REPORT FAILED — AGENT SERVICE UNREACHABLE"));
                                 }}
                                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-950 px-3 font-code text-[9px] font-bold tracking-[0.14em] text-white transition-colors hover:bg-brand-600"
                               >
@@ -2614,7 +2614,7 @@ function NewRunCard({ onNewRun }: { onNewRun: () => void }) {
       <div className="relative">
         <h3 className="font-display text-[15px] font-black tracking-[-0.01em]">Put the agent in a file</h3>
         <p className="mt-2.5 text-[12.5px] leading-relaxed text-ink-300">
-          Point Quorum at a tender — OCDS, a PDF pack or the email bag. Findings appear here as the run reads the file.
+          Point Quorum at a tender — OCDS, a PDF pack or the email bag. Findings appear here as the agent reads the file.
         </p>
         <button
           type="button"
@@ -2719,7 +2719,7 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
   return (
     <ViewShell
       fig="08"
-      title="Findings ledger"
+      title="Findings"
       sub="Every flag the agent has raised — classed, cited, and traceable to the page it came from. When the committee clears a gate, its flags clear with it."
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6">
@@ -2727,7 +2727,7 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
           <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
             <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
               <div>
-                <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">Ledger</h2>
+                <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">All findings</h2>
                 <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
                   {rows.length} FLAGS · {open} OPEN · 0 UNSOURCED
                 </p>
@@ -2753,7 +2753,7 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
             </header>
             <div data-tour="findings-rows" className="max-h-[520px] overflow-y-auto [scrollbar-width:thin]">
               <table className="w-full min-w-[620px] border-collapse text-left">
-                <caption className="sr-only">Findings ledger — every flag with its class, status and source</caption>
+                <caption className="sr-only">Findings — every flag with its class, status and source</caption>
                 <thead className="sticky top-0 z-10 bg-paper/95 backdrop-blur">
                   <tr className="border-b border-ink-100">
                     {["FINDING", "CLASS", "STATUS", "SOURCE", "RUN"].map((h) => (
@@ -2779,7 +2779,7 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
                           onOpenRun();
                         }
                       }}
-                      aria-label={`Open the run register at ${row.run}`}
+                      aria-label={`Show details for evaluation ${row.run}`}
                       className="cursor-pointer border-b border-ink-50 transition-colors hover:bg-paper"
                     >
                       <td className="max-w-[280px] py-3.5 pl-5 pr-4">
@@ -3179,8 +3179,8 @@ function ReportPacksView({
     <>
     <ViewShell
       fig="09"
-      title="Report packs"
-      sub="The sourced report is the deliverable — findings, citations and the audit hash, bound per run. A pack seals the moment the committee signs; after that it is evidence, not a document."
+      title="Reports"
+      sub="The sourced report is the deliverable — findings, citations and the audit hash, bound to each evaluation. A pack seals the moment the committee signs; after that it is evidence, not a document."
     >
       <div data-tour="reports-intro" className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)] sm:p-6">
         <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
@@ -3454,7 +3454,7 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
     }
   };
 
-  /* A real connection pass: the sidecar opens each published file, reads its
+  /* A real connection pass: the agent opens each published file, reads its
      first OCDS release and checks the publisher's portal. Batched so the
      card can show honest progress; every result is saved by the sidecar. */
   const connectDatasets = useCallback(
@@ -3493,7 +3493,7 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
   return (
     <ViewShell
       fig="10"
-      title="Sources & portals"
+      title="Data sources"
       sub="A finding is only as lawful as its source. Every bid is read against national portals, supplier registries and the OCDS record — and each finding cites which."
       action={
         <button
@@ -3845,7 +3845,7 @@ function AwardLedgerView({
   return (
     <ViewShell
       fig="11"
-      title="Award ledger"
+      title="Award history"
       sub="Every decision made at a gate — who signed, what they signed, and when. The agent writes everything else; only this page carries the gavel."
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
@@ -3873,7 +3873,7 @@ function AwardLedgerView({
           <div data-tour="ledger-rows" className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] border-collapse text-left">
-                <caption className="sr-only">Award ledger — decisions signed at the human gate</caption>
+                <caption className="sr-only">Award history — decisions signed at the approval gate</caption>
                 <thead>
                   <tr className="border-b border-ink-100 bg-paper/60">
                     {["TENDER", "DECISION", "SIGNED BY", "LOGGED"].map((h) => (
@@ -4364,7 +4364,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
   return (
     <ViewShell
       fig="12"
-      title="The committee"
+      title="Committee"
       sub={
         data
           ? `${capWord(countWord(data.seats))} seats, ${countWord(data.present)} present — the quorum the law asks for before an award counts. The agent attends every sitting; it holds no seat and no gavel.`
@@ -4974,7 +4974,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
             }}
             role="dialog"
             aria-modal="true"
-            aria-label="Register a committee member"
+            aria-label="Add a committee member"
           >
             <motion.div
               initial={{ opacity: 0, y: 18, scale: 0.98 }}
@@ -5356,7 +5356,7 @@ function SettingsView({
       value: health ? `${health.fsMcp.status.toUpperCase()} · ${health.fsMcp.tools.length} TOOLS` : "—",
     },
     { label: "Agent graphs", value: health ? String(health.graphs.length) : "—" },
-    { label: "Runs recorded", value: health ? health.counts.runs.toLocaleString("en-US") : "—" },
+    { label: "Evaluations recorded", value: health ? health.counts.runs.toLocaleString("en-US") : "—" },
     { label: "Tool calls logged", value: health ? health.counts.toolCalls.toLocaleString("en-US") : "—" },
   ];
 
@@ -5410,8 +5410,8 @@ function SettingsView({
 
         <div data-tour="settings-agent" className={`${cardClass} lg:col-span-2`}>
           <p className={labelClass}>AGENT CONNECTION</p>
-          <h3 className={titleClass}>Quorum sidecar</h3>
-          <p className="mt-1 text-[12.5px] text-ink-500">Live status reported by the MCP sidecar on port 3031.</p>
+          <h3 className={titleClass}>Agent service</h3>
+          <p className="mt-1 text-[12.5px] text-ink-500">Live status of the agent service — the part that reads the files, runs the review and logs every step.</p>
           <dl className="mt-5 grid grid-cols-1 divide-y divide-ink-100 sm:grid-cols-2 sm:divide-y-0">
             {connection.map((row) => (
               <div key={row.label} className="flex items-center justify-between gap-4 border-ink-100 py-3 sm:border-b sm:pr-4">
@@ -5452,7 +5452,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
     summary: "Your command deck. Every live run, every open approval and the agent's latest moves on one screen.",
     steps: [
       "Start with New evaluation — name the tender and stage its pack; the register below fills in as the agent reads.",
-      "Check the counters for runs in progress and approvals waiting on a named officer.",
+      "Check the counters for evaluations in progress and approvals waiting on a named officer.",
       "Begin each session here to see what needs your signature first.",
     ],
     tip: "If nothing is waiting, the committee has nothing to decide, and the agent has nothing to hand over.",
@@ -5482,7 +5482,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Details: enter the tender reference and the published title exactly as it appears, then pick the source format (OCDS, PDF pack or email bag).",
       "Documents: drop up to 12 files. Each one moves from RECEIVED to PARSING to INDEXED before you can continue. Real uploads also mirror to cloud storage, or stay in the local vault.",
       "Scope: choose which checks the review runs. Page-level citations stay on for every finding.",
-      "Launch: the run is queued and you land on Agent runs, where it goes live.",
+      "Launch: the evaluation is queued and you land on Evaluations, where it goes live.",
     ],
     tip: "Use the step rail to go back and correct details at any point before launch.",
     tour: [
@@ -5507,37 +5507,37 @@ const WALKTHROUGH: WalkthroughChapter[] = [
         target: "wiz-next",
         placement: "top",
         title: "The wizard refuses to guess",
-        body: "Continue advances only when the step is complete. On scope, this same button queues the run — and the register goes live behind it.",
+        body: "Continue advances only when the step is complete. On scope, this same button queues the evaluation — and it goes live straight away.",
       },
     ],
     launch: true,
   },
   {
     section: "mc-runs",
-    title: "Follow agent runs",
-    summary: "The register of every tender the agent is working on, with its status and what it has found so far.",
+    title: "Follow the evaluations",
+    summary: "Every tender the agent is working on, with its status and what it has found so far.",
     steps: [
       "RUNNING: the agent is still working through the checks.",
-      "GATE: the run has finished and is waiting for a committee decision.",
-      "COMPLETE: the run has been filed, returned or has failed.",
-      "Search and filter the register, or open a run's notes.",
+      "GATE: the evaluation has finished and is waiting for a committee decision.",
+      "COMPLETE: the evaluation has been filed, returned or has failed.",
+      "Search and filter the list, or open an evaluation's notes.",
     ],
-    tip: "A run in GATE is waiting on people, not on the agent.",
+    tip: "An evaluation in GATE is waiting on people, not on the agent.",
     tour: [
       {
         target: "run-register",
-        title: "The register of every run",
+        title: "Every evaluation, at a glance",
         body: "Newest first: the tender, its bids, issues found and the share of findings that carry a citation. Search narrows by reference, title or buyer.",
       },
       {
         target: "run-filters",
         title: "Filter to what needs you",
-        body: "IN PROGRESS · NEEDS APPROVAL · COMPLETED. A run in NEEDS APPROVAL is waiting on people, not on the agent.",
+        body: "IN PROGRESS · NEEDS APPROVAL · COMPLETED. An evaluation in NEEDS APPROVAL is waiting on people, not on the agent.",
       },
       {
         target: "run-rows",
         title: "Expand any row",
-        body: "The top findings and the run's audit trail open in place — every figure traces to a line in the tool log.",
+        body: "The top findings and the evaluation's audit trail open in place — every figure traces to a line in the tool log.",
       },
     ],
   },
@@ -5548,7 +5548,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
     steps: [
       "Review the flagged findings for the bid in question.",
       "Sign to award the tender, or return it for clarification.",
-      "Only committee members on the roster can sign. The sidecar refuses any other signature.",
+      "Only committee members on the roster can sign. The system refuses any other signature.",
     ],
     tip: "The agent prepares the file and never awards. Every decision is recorded under the name of the officer who signed.",
     tour: [
@@ -5560,7 +5560,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       {
         target: "gate-actions",
         title: "Award or return — by name",
-        body: "Award signs the decision under your name; Return sends it back with a task. Only roster names can sign — the sidecar refuses anyone else.",
+        body: "Award signs the decision under your name; Return sends it back with a task. Only roster names can sign — the system refuses anyone else.",
       },
       {
         target: "gate-ledger",
@@ -5577,7 +5577,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       "Each event shows the step, the tool it called and the time.",
       "Use the feed to trace how a finding was reached before you rely on it.",
     ],
-    tip: "Leave this open while a run is in progress to see it move in real time.",
+    tip: "Leave this open while an evaluation is in progress to see it move in real time.",
     tour: [
       {
         target: "agent-feed",
@@ -5587,14 +5587,14 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       {
         target: "agent-feed-stream",
         title: "Every line is a durable entry",
-        body: "The feed reads the same append-only log the sidecar writes to disk. Leave it open during a run and watch the file build.",
+        body: "The feed reads the same activity log the agent writes to disk. Leave it open during an evaluation and watch the file build.",
       },
     ],
   },
   {
     section: "mc-findings",
     title: "Review findings",
-    summary: "Every issue raised across all runs, grouped by class and tied to its source.",
+    summary: "Every issue raised across all evaluations, grouped by class and tied to its source.",
     steps: [
       "Classes: DOCUMENT, COMPLIANCE, REGISTRY, PRICING, ARITHMETIC, DISCLOSURE and LOGISTICS.",
       "Each finding carries a page, clause or registry citation.",
@@ -5611,17 +5611,17 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       {
         target: "findings-rows",
         title: "Read the source before the sentence",
-        body: "Each row carries its class, its state and the page, clause or registry ID it came from. Open a row for the run behind it.",
+        body: "Each row carries its class, its state and the page, clause or registry ID it came from. Open a row for the evaluation behind it.",
       },
     ],
   },
   {
     section: "mc-reports",
     title: "Read report packs",
-    summary: "A pack per run, ready to hand to the committee: the findings, their sources and the verdict.",
+    summary: "A pack per evaluation, ready to hand to the committee: the findings, their sources and the verdict.",
     steps: [
       "Open a run's pack to read the full set of findings.",
-      "The verdict shows whether the run was awarded or returned.",
+      "The verdict shows whether the evaluation was awarded or returned.",
     ],
     tip: "Packs are the document the committee reads at the sitting.",
     tour: [
@@ -5632,7 +5632,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
       },
       {
         target: "reports-list",
-        title: "One pack per finished run",
+        title: "One pack per finished evaluation",
         body: "Findings, citations, the sha-256 tag and the verdict. A pack seals on signature — before that it previews only.",
       },
       {
@@ -5649,7 +5649,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
     steps: [
       "See the registries the agent can read, country by country — coverage span, formats and the latest retrieval date.",
       "Expand a country to check a dataset's licence, counts and the publisher's own portal before leaning on it in a run.",
-      "Connect the portals: the sidecar opens each published file, reads its first OCDS release as proof, and checks the publisher's own portal — every result is dated and saved.",
+      "Connect the portals: the agent opens each published file, reads its first OCDS release as proof, and checks the publisher's own portal — every result is dated and saved.",
     ],
     tip: "A dataset the publisher stopped updating carries the registry's own flag — a gap downstream is never a silent pass.",
     tour: [
@@ -5804,7 +5804,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
   },
   {
     section: "mc-suppliers",
-    title: "Keep the supplier register",
+    title: "Keep the supplier list",
     summary: "The platform's roll of named bidders — every firm your entity deals with, with the registration detail a compliant bid must carry.",
     steps: [
       "Open Suppliers from the sidebar, then fill the Add Supplier intake on the right: name, registration number, ZRA tax detail and the sector regulator where one applies.",
@@ -5815,7 +5815,7 @@ const WALKTHROUGH: WalkthroughChapter[] = [
     tour: [
       {
         target: "suppliers-add",
-        title: "Register a supplier",
+        title: "Add a supplier",
         body: "The intake opens as a modal; pick a firm from the ZPPA roll and the record fills itself — or type a new one by hand.",
       },
       {
@@ -6940,7 +6940,7 @@ function SuppliersView({ firstName, onToast }: { firstName: string; onToast: (m:
   return (
     <ViewShell
       fig="16"
-      title="Supplier register"
+      title="Suppliers"
       sub="Every bidder the platform knows — held with the registration detail Zambia's regime asks a bidder to carry: PACRA number, ZRA tax clearance, sector registration. The agent reads this roll when it checks a bid; you keep it true. New entries can start straight off the published ZPPA e-GP record."
       action={
         <div className="flex flex-wrap items-center gap-3">
@@ -6980,7 +6980,7 @@ function SuppliersView({ firstName, onToast }: { firstName: string; onToast: (m:
             <header className="border-b border-ink-100 px-5 py-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">On the register</h2>
+                  <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">On the list</h2>
                   <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
                     {counts.total} SUPPLIER{counts.total === 1 ? "" : "S"} · {filtered.length} SHOWN
                   </p>
@@ -6995,7 +6995,7 @@ function SuppliersView({ firstName, onToast }: { firstName: string; onToast: (m:
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Name, TIN, registration…"
-                    aria-label="Search the supplier register"
+                    aria-label="Search suppliers"
                     className="h-9 w-52 rounded-full border border-ink-200 bg-paper pl-9 pr-3 text-[12.5px] text-ink-900 outline-none transition-colors placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
                   />
                 </label>
@@ -7447,7 +7447,7 @@ function RulesView({
   return (
     <ViewShell
       fig="13"
-      title="Rules & guards"
+      title="Rules & safeguards"
       sub="The thresholds the agent must obey inside a run. Three clauses are carved; the guards below are tunable — and every change is written to the audit trail with your name on it."
     >
       {/* Full-width: guards flow edge-to-edge in a two-column grid,
@@ -7562,8 +7562,8 @@ function RunsView({
   return (
     <ViewShell
       fig="05"
-      title="Run register"
-      sub="Every file the agent has opened — live, queued, at a gate or decided. Expand a run for its top findings and its audit trail."
+      title="Evaluations"
+      sub="Every file the agent has opened — live, queued, at a gate or decided. Expand an evaluation for its top findings and its audit trail."
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6">
         <div className="min-w-0">
@@ -7598,7 +7598,7 @@ function GatesView({
   return (
     <ViewShell
       fig="06"
-      title="Human gates"
+      title="Approvals"
       sub="The stop only a human can pass. The agent assembles the file and halts; the committee reads the cited flags and decides — by name, on the record."
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
@@ -7634,7 +7634,7 @@ function FeedView({ onToast }: { onToast: (m: string) => void }) {
   return (
     <ViewShell
       fig="07"
-      title="Agent feed"
+      title="Live activity"
       sub="The work, streaming. Ingest, checklist, registry, flags, citations — watch a run the way the committee will read it: line by line, every claim sourced."
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
@@ -8094,8 +8094,8 @@ export function Dashboard({
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search runs…"
-                  aria-label="Search runs by reference, title or buyer"
+                  placeholder="Search evaluations…"
+                  aria-label="Search evaluations by reference, title or buyer"
                   className="h-9 w-44 rounded-full border border-ink-200 bg-white pl-9 pr-3 text-[12.5px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:w-56 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15 lg:w-52"
                 />
               </div>
@@ -8157,9 +8157,9 @@ export function Dashboard({
             {/* Stats */}
             <div data-tour="ov-stats" className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
               <StatCard
-                label="RUNS IN PROGRESS"
+                label="EVALUATIONS IN PROGRESS"
                 value={activeRuns}
-                sub={activeRuns > 0 ? "AGENT IS READING A TENDER" : "AGENT IS IDLE — START A RUN"}
+                sub={activeRuns > 0 ? "AGENT IS READING A TENDER" : "AGENT IS IDLE — START AN EVALUATION"}
                 spark={SPARK_A}
                 delay={0.05}
               />

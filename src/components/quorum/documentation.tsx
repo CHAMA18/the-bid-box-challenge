@@ -58,10 +58,10 @@ const DOC_CHAPTERS: DocChapter[] = [
       {
         kind: "figure",
         src: "/docs/overview.png",
-        alt: "The Quorum workspace overview: greeting, live stat tiles and the recent-runs register with start times",
+        alt: "The Quorum workspace overview: greeting, live stat tiles and the recent evaluations list with start times",
         screen: "WORKSPACE · OVERVIEW · CAPTURED 18 OCT 2026",
         caption:
-          "The workspace as it stood when these pages were written: the run register, the gate queue and the live portal rail — every number read from the sidecar, none written by hand.",
+          "The workspace as it stood when these pages were written: the evaluations table, the approvals queue and the live sources rail — every number read straight from the agent service, none written by hand.",
       },
       {
         kind: "table",
@@ -71,7 +71,7 @@ const DOC_CHAPTERS: DocChapter[] = [
           ["Brief", "New evaluation wizard", "Name the tender and stage its documents — OCDS records, a PDF pack or the email bag."],
           ["Review", "Agent runs", "The agent reads the pack, extracts requirements and sweeps the rules. Findings appear with page-level citations."],
           ["Decide", "Approvals", "The gate. A committee member reads the cited findings and signs to award, or returns the tender for clarification."],
-          ["Record", "Award history", "The ledger appends the decision, the signer and the time. Nothing is edited; entries are only added."],
+          ["Record", "Award history", "The history appends the decision, the signer and the time. Nothing is edited; entries are only added."],
         ],
       },
       {
@@ -117,7 +117,7 @@ const DOC_CHAPTERS: DocChapter[] = [
         alt: "The Agent runs register: one row per tender with bids, issues found, sourced claims, status and time",
         screen: "WORKSPACE · AGENT RUNS · CAPTURED 18 OCT 2026",
         caption:
-          "The run register — one row per tender. Statuses are derived from what actually happened in each run: in progress, needs approval, or complete.",
+          "The evaluations table — one row per tender. Statuses are derived from what actually happened in each evaluation: in progress, needs approval, or complete.",
       },
       {
         kind: "table",
@@ -199,7 +199,7 @@ const DOC_CHAPTERS: DocChapter[] = [
         kind: "callout",
         tone: "tip",
         title: "Naming matters",
-        text: "The reference you type is the join key for everything afterwards: files, findings, gates and ledger rows. If the published document names the tender differently, keep the document's spelling — the agent matches on what the papers say.",
+        text: "The reference you type is the join key for everything afterwards: files, findings, gates and history rows. If the published document names the tender differently, keep the document's spelling — the agent matches on what the papers say.",
       },
     ],
   },
@@ -268,13 +268,13 @@ const DOC_CHAPTERS: DocChapter[] = [
         title: "The two decisions",
         head: ["DECISION", "WHAT IT RECORDS", "WHAT FOLLOWS"],
         rows: [
-          ["APPROVE", "The award, signed by the officer who decided.", "The filing executes and the ledger appends AWARDED with the signer and time."],
+          ["APPROVE", "The award, signed by the officer who decided.", "The filing executes and the history appends AWARDED with the signer and time."],
           ["REJECT / RETURN", "A return for clarification, with the signer recorded.", "The loop re-opens; findings become RE-CHECK while the agent re-verifies."],
         ],
       },
       {
         kind: "p",
-        text: "Signatures are enforced on the sidecar, not in the browser. An approval is refused unless the approver is a present member of the committee roster or the signed-in officer; if the roster cannot be read at all, the decision is refused rather than guessed. Nobody can approve into a name that isn't theirs.",
+        text: "Signatures are enforced by the agent service, not in the browser. An approval is refused unless the approver is a present member of the committee roster or the signed-in officer; if the roster cannot be read at all, the decision is refused rather than guessed. Nobody can approve into a name that isn't theirs.",
       },
       {
         kind: "steps",
@@ -348,7 +348,7 @@ const DOC_CHAPTERS: DocChapter[] = [
     id: "suppliers",
     kicker: "The register",
     title: "The supplier register",
-    lead: "Every bidder the platform knows, held on the sidecar with the registration detail Zambia's regime asks a bidder to carry.",
+    lead: "Every bidder the platform knows, held in the agent’s store with the registration detail Zambia's regime asks a bidder to carry.",
     blocks: [
       {
         kind: "p",
@@ -385,11 +385,11 @@ const DOC_CHAPTERS: DocChapter[] = [
         alt: "The Supplier register screen: an empty register with the REGISTER LINKED badge and the REGISTER A SUPPLIER button",
         screen: "WORKSPACE · SUPPLIER REGISTER · CAPTURED 18 OCT 2026",
         caption:
-          "A fresh register, saying so — empty until real firms are added. The badge reports the sidecar's live link to the supplier store; the intake opens as a dialog over the register, and every write lands in the audit log.",
+          "A fresh list, saying so — empty until real firms are added. The badge reports the agent service's live link to the supplier store; the intake opens as a dialog over the list, and every write lands in the audit log.",
       },
       {
         kind: "p",
-        text: "The intake opens with the published record at hand. The sidecar ships the ZPPA roll — a derived reading of Zambia's e-GP open contracting data, the Zambia Public Procurement Authority's record published through the Open Contracting Partnership. Pick a firm off the roll and the form fills itself: legal name, PACRA number, address, telephone and the supply categories its award history points to — every value exactly as published, and every field still the officer's to correct. The record suggests; the officer confirms.",
+        text: "The intake opens with the published record at hand. The agent service ships the ZPPA roll — a derived reading of Zambia's e-GP open contracting data, the Zambia Public Procurement Authority's record published through the Open Contracting Partnership. Pick a firm off the roll and the form fills itself: legal name, PACRA number, address, telephone and the supply categories its award history points to — every value exactly as published, and every field still the officer's to correct. The record suggests; the officer confirms.",
       },
       {
         kind: "figure",
@@ -475,7 +475,7 @@ const DOC_CHAPTERS: DocChapter[] = [
         items: [
           "See the registries an officer can check against: the Data sources screen reads the OCP Data Registry and lists every African dataset it publishes — country, publisher, coverage span, update frequency, formats and latest retrieval, each dated.",
           "Expand a country to inspect a dataset before leaning on it: licence, published counts, OCID prefix, and links back to the registry page, the publishing policy and the publisher's own portal.",
-          "Connect the portals: for every dataset the sidecar opens the published file, reads the first OCDS release and keeps its OCID as proof, then checks the publisher's own portal. Every check is dated and saved — a portal that fails is shown failed.",
+          "Connect the portals: for every dataset the agent opens the published file, reads the first OCDS release and keeps its OCID as proof, then checks the publisher's own portal. Every check is dated and saved — a portal that fails is shown failed.",
           "A dataset the publisher stopped updating carries the registry's own flag — findings that needed it are gaps in the file, never a silent pass.",
           "Request a source when a registry or portal is missing. It is logged, and its absence is visible rather than silent.",
         ],
@@ -490,7 +490,7 @@ const DOC_CHAPTERS: DocChapter[] = [
       },
       {
         kind: "p",
-        text: "The register is read as published: coverage dates, retrieval dates, formats, file sizes, licences and counts are the registry's own figures, and the screen names the retrieval date of the snapshot it draws. Where a publisher states no licence, the registry shows an em dash — and so does the screen. Beside it sits the connection record: the first OCDS release the sidecar read from the published file, and the last answer from the publisher's own portal — both dated, both checkable again.",
+        text: "The register is read as published: coverage dates, retrieval dates, formats, file sizes, licences and counts are the registry's own figures, and the screen names the retrieval date of the snapshot it draws. Where a publisher states no licence, the registry shows an em dash — and so does the screen. Beside it sits the connection record: the first OCDS release the agent read from the published file, and the last answer from the publisher's own portal — both dated, both checkable again.",
       },
       {
         kind: "callout",
@@ -512,13 +512,13 @@ const DOC_CHAPTERS: DocChapter[] = [
         head: ["RECORD", "CONTAINS", "WHERE"],
         rows: [
           ["Audit log", "Every tool call: actor, inputs, outputs, status, duration.", "The Live activity feed and Tools & models render it; the raw file lives at mini-services/quorum-mcp/data/tool-log.jsonl."],
-          ["Award ledger", "Every AWARDED and RETURNED decision with the signer and time.", "Award history in the sidebar."],
-          ["Durable state", "Runs, gates, source requests and the supplier register.", "mini-services/quorum-mcp/data/state.json."],
+          ["Award history", "Every AWARDED and RETURNED decision with the signer and time.", "Award history in the sidebar."],
+          ["Durable state", "Evaluations, gates, source requests and the supplier list.", "mini-services/quorum-mcp/data/state.json."],
         ],
       },
       {
         kind: "p",
-        text: "Rows in the ledger are appended, never edited. The same is true of the audit log: entries only accumulate. If you need to answer an audit question — who approved this, on what evidence, in what order — the answer is assembled from these three records and nothing else.",
+        text: "Rows in the award history are appended, never edited. The same is true of the audit log: entries only accumulate. If you need to answer an audit question — who approved this, on what evidence, in what order — the answer is assembled from these three records and nothing else.",
       },
       {
         kind: "figure",
@@ -547,8 +547,8 @@ const DOC_CHAPTERS: DocChapter[] = [
         title: "Who can do what",
         head: ["ROLE", "CAN", "CANNOT"],
         rows: [
-          ["Officer (signed in)", "Brief runs, stage documents, watch reviews, sit the committee, manage the supplier register.", "Award against the roster's rules — the sidecar refuses an approval that doesn't meet them."],
-          ["Committee member", "Read the file, decide gates as a named approver.", "Skip the roster check; the sidecar refuses a signature that isn't present or authorised."],
+          ["Officer (signed in)", "Brief runs, stage documents, watch reviews, sit the committee, manage the supplier list.", "Award against the roster's rules — the system refuses an approval that doesn't meet them."],
+          ["Committee member", "Read the file, decide gates as a named approver.", "The roster check is skipped for them; the system refuses a signature that isn't present or authorised."],
           ["Chair", "Sit the committee, sign decisions.", "Edit the ledger after the fact — entries are append-only."],
           ["Auditor", "Read runs, findings, the ledger and the audit log.", "Write anything."],
         ],
@@ -612,9 +612,9 @@ const DOC_CHAPTERS: DocChapter[] = [
         title: "Questions officers ask",
         items: [
           { term: "Can Quorum award the tender?", def: "No — by design. It prepares the file and stops at the gate. The committee signs." },
-          { term: "What if the sidecar is offline?", def: "Reads that depend on it pause, and approvals cannot be recorded until it is back. The interface shows AGENT · OFFLINE rather than pretending." },
+          { term: "What if the agent service is offline?", def: "Reads that depend on it pause, and approvals cannot be recorded until it is back. The interface shows AGENT · OFFLINE rather than pretending." },
           { term: "A finding is wrong. What now?", def: "Quote its citation back at the record. Findings that can't be anchored to a document never pass the pipeline; for the rest, the committee's return is the correction mechanism." },
-          { term: "Where does my data live?", def: "On your host: the sidecar's data directory for runs, gates, suppliers and logs; the local vault or cloud storage for documents, as configured." },
+          { term: "Where does my data live?", def: "On your host: the agent service's data directory for evaluations, gates, suppliers and logs; the local vault or cloud storage for documents, as configured." },
           { term: "Which jurisdictions are supported?", def: "The method register opens with Zambia — Public Procurement Act No. 8 of 2023 — and grows by jurisdiction; the engine validates only the identifier schemes it actually knows." },
         ],
       },
