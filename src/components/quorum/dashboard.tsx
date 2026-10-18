@@ -152,8 +152,26 @@ function useMissionData() {
   const [rawRuns, setRawRuns] = useState<BackendRun[]>([]);
   const [rawGates, setRawGates] = useState<BackendGate[]>([]);
   const [reachable, setReachable] = useState(false);
+  /* Tender registry — the sidecar knows each pack's proper name and buyer.
+     Runs and gates only carry the reference, so the views look the human
+     name up here instead of echoing the reference twice. */
+  const [registry, setRegistry] = useState<Record<string, { title: string; buyer: string }>>({});
+
+  const pullRegistry = useCallback(async () => {
+    try {
+      const d = await fetch("/api/sample-tenders?XTransformPort=3031").then((x) => x.json());
+      const map: Record<string, { title: string; buyer: string }> = {};
+      for (const s of (d.samples ?? []) as { ref: string; title?: string; buyer?: string }[]) {
+        if (s?.ref) map[s.ref] = { title: s.title || s.ref, buyer: s.buyer ?? "" };
+      }
+      setRegistry(map);
+    } catch {
+      /* cosmetic layer only — every view falls back to the reference */
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
+    void pullRegistry();
     try {
       const [r, g] = await Promise.all([
         fetch("/api/runs?XTransformPort=3031").then((x) => x.json()),
@@ -165,11 +183,12 @@ function useMissionData() {
     } catch {
       setReachable(false);
     }
-  }, []);
+  }, [pullRegistry]);
 
   useEffect(() => {
     let alive = true;
     const poll = async () => {
+      void pullRegistry();
       try {
         const [r, g] = await Promise.all([
           fetch("/api/runs?XTransformPort=3031").then((x) => x.json()),
@@ -189,17 +208,18 @@ function useMissionData() {
       alive = false;
       clearInterval(id);
     };
-  }, []);
+  }, [pullRegistry]);
 
   const runs = useMemo<McRun[]>(
     () =>
       rawRuns.map((r) => {
         const citations = r.findings.filter((f) => f.citation).length;
+        const known = registry[r.tenderId];
         return {
           id: r.tenderId,
           uid: r.id,
-          title: r.tenderId,
-          buyer: "",
+          title: known?.title ?? r.tenderId,
+          buyer: known?.buyer ?? "",
           bids: null,
           findings: r.findings.length,
           citations,
@@ -208,7 +228,7 @@ function useMissionData() {
           startedAt: clockOf(r.startedAt),
         };
       }),
-    [rawRuns]
+    [rawRuns, registry]
   );
 
   const queue = useMemo<GateItem[]>(
@@ -218,13 +238,13 @@ function useMissionData() {
         .map((g) => ({
           id: g.id,
           tender: g.tenderId,
-          title: g.tenderId,
+          title: registry[g.tenderId]?.title ?? g.tenderId,
           supplier: g.inputs.bidder ?? "—",
           value: g.inputs.value ?? "—",
           flags: g.inputs.findings?.length ?? 0,
           ago: clockOf(g.createdAt),
         })),
-    [rawGates]
+    [rawGates, registry]
   );
 
   const ledger = useMemo<LedgerRow[]>(

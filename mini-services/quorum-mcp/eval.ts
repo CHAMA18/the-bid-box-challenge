@@ -26,7 +26,7 @@
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolveDataDir } from "./paths";
 import {
   bidNamesDocument,
   buildPack,
@@ -58,7 +58,7 @@ interface Gold {
   data_quality_notes: string[];
 }
 
-const EVAL_DIR = fileURLToPath(new URL("./data/eval/", import.meta.url));
+const EVAL_DIR = resolveDataDir() + "eval/";
 const runsFlag = process.argv.indexOf("--runs");
 const RUNS = runsFlag >= 0 ? Number(process.argv[runsFlag + 1]) : 5;
 /* runRules() truncates its output at RULE_OUTPUT_CAP findings — the engine's

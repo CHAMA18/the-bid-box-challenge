@@ -10,8 +10,8 @@
  */
 
 import { createGunzip } from "node:zlib";
+import { resolveDataDir } from "./paths";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { OCP_AFRICA, type OcpAfricaDataset } from "./ocp-africa";
 
 export interface RegistryHandshake {
@@ -45,7 +45,7 @@ export interface PortalLinksFile {
   links: Record<string, PortalLink>;
 }
 
-const DATA_DIR = fileURLToPath(new URL("./data/", import.meta.url));
+const DATA_DIR = resolveDataDir();
 const LINKS_FILE = DATA_DIR + "portal-links.json";
 /* 256 KB of the published file is enough for its first releases — the
    handshake never downloads a full dataset. */

@@ -12,7 +12,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { resolveDataDir } from "./paths";
 
 export type ToolKind = "READ" | "WRITES" | "IRREVERSIBLE" | "GATE_DECISION";
 
@@ -117,7 +117,7 @@ export interface Run {
 }
 
 /* fileURLToPath decodes %20 etc. — .pathname breaks on paths with spaces. */
-const DATA = fileURLToPath(new URL("./data/", import.meta.url));
+const DATA = resolveDataDir();
 
 function cap(value: unknown, max = 420): unknown {
   const s = typeof value === "string" ? value : JSON.stringify(value);

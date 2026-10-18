@@ -5,14 +5,14 @@
 
 import { join } from "node:path";
 import { readdir } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { appendLog, shaOf, type Draft, type Finding, type Gate, type Requirement, type ReviewPlan, type Run } from "./store";
+import { resolveDataDir } from "./paths";
 export type { Finding } from "./store";
 
 export type { ReviewPlan };
 
-export const TENDERS_DIR = fileURLToPath(new URL("./data/tenders/", import.meta.url));
+export const TENDERS_DIR = resolveDataDir() + "tenders/";
 
 /* ── 1. Third-party MCP server we did NOT write ────────────────────────────
    @modelcontextprotocol/server-filesystem (official). Why not hand-roll it:
@@ -1666,7 +1666,7 @@ async function nodeTransmit(s: typeof FileState.State) {
   const submissionId = `SUB-${Date.now().toString(36).toUpperCase()}`;
   const receipt = { submissionId, hash: s.hash, portal: "egp-portal (simulated)" };
   await Bun.write(
-    fileURLToPath(new URL(`./data/submissions/${submissionId}.json`, import.meta.url)),
+    resolveDataDir() + `submissions/${submissionId}.json`,
     JSON.stringify({ gate, receipt }, null, 2)
   );
   appendLog({
