@@ -14,7 +14,7 @@ import { DocumentationView } from "@/components/quorum/documentation";
 export const metadata: Metadata = {
   title: "Documentation — Quorum",
   description:
-    "The complete Quorum handbook: the agentic review pipeline, every rule the agent applies, the gate protocol, the supplier register and Zambia's procurement law — written for first-time officers and auditors alike.",
+    "The complete Quorum handbook: the agentic review pipeline, every rule the agent applies, the gate protocol, the supplier list and Zambia's procurement law — written for first-time officers and auditors alike.",
 };
 
 export default function DocsPage() {

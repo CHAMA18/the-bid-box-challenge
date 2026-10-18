@@ -6152,7 +6152,7 @@ function SupplierRowAction({
   );
 }
 
-/* Polls the sidecar's supplier register — the platform's single source of
+/* Polls the agent service's supplier store — the platform's single source of
    truth for named bidders. Nothing is invented on the client. */
 function useSuppliers() {
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);

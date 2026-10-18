@@ -53,7 +53,7 @@ const DOC_CHAPTERS: DocChapter[] = [
       },
       {
         kind: "p",
-        text: "The platform has three faces on one address. The landing page explains the product. The sign-in screen authenticates officials. The workspace behind #/dashboard is where the work happens: runs, findings, approvals, the supplier register, and these documents.",
+        text: "The platform has three faces on one address. The landing page explains the product. The sign-in screen authenticates officials. The workspace behind #/dashboard is where the work happens: evaluations, findings, approvals, the supplier list, and these documents.",
       },
       {
         kind: "figure",
@@ -347,7 +347,7 @@ const DOC_CHAPTERS: DocChapter[] = [
   {
     id: "suppliers",
     kicker: "The register",
-    title: "The supplier register",
+    title: "The supplier list",
     lead: "Every bidder the platform knows, held in the agent’s store with the registration detail Zambia's regime asks a bidder to carry.",
     blocks: [
       {
@@ -436,7 +436,7 @@ const DOC_CHAPTERS: DocChapter[] = [
         rows: [
           ["Price variance flag", "15% · 25% · 40%", "Flag any bid priced above the framework median by more than the chosen threshold — the very next run is reviewed under it."],
           ["Document checklist", "Standard 12/16 · Strict 16/16", "Missing required documents are flagged to the committee; strict mode escalates every missing document to HIGH."],
-          ["Registry overlay", "On · Off", "Every bidder is matched against the supplier register while a review runs — a suspended or blacklisted entry is flagged before award."],
+          ["Registry overlay", "On · Off", "Every bidder is matched against the supplier list while a review runs — a suspended or blacklisted entry is flagged before award."],
         ],
       },
       {
