@@ -2316,11 +2316,19 @@ interface OcpLinks {
   links: Record<string, OcpPortalLink>;
 }
 
+/* The committee's own switch, kept by the sidecar: which portals are in use.
+   Absent from the map means enabled — the registry's record is never edited. */
+interface OcpPortalState {
+  updatedAt: string;
+  overrides: Record<string, { enabled: boolean; at: string; by: string }>;
+}
+
 interface OcpRegistry {
   source: { registry: string; via: string; retrieved: string; scope: string; licenseNote: string; note: string };
   countries: OcpCountry[];
   datasets: OcpDataset[];
   links: OcpLinks;
+  state?: OcpPortalState;
 }
 
 const ISO_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -2363,25 +2371,92 @@ function useOcpRegistry() {
     };
   }, [nonce]);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
-  return { data, failed, reload };
+  return { data, failed, reload, setData };
+}
+
+/* The portal switch — the committee turns a source off and on. A real
+   switch: role, checked state, keyboard focus, and a knob that moves. */
+function PortalSwitch({
+  on,
+  mixed,
+  busy,
+  ariaLabel,
+  title,
+  onToggle,
+}: {
+  on: boolean;
+  mixed?: boolean;
+  busy?: boolean;
+  ariaLabel: string;
+  title: string;
+  onToggle: () => void;
+}) {
+  return (
+    <span
+      role="switch"
+      aria-checked={mixed ? "mixed" : on}
+      aria-label={ariaLabel}
+      title={title}
+      tabIndex={busy ? -1 : 0}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!busy) onToggle();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!busy) onToggle();
+        }
+      }}
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border align-middle transition-colors duration-200",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+        mixed ? "border-ink-950 bg-white" : on ? "border-ink-950 bg-ink-950" : "border-ink-300 bg-white",
+        busy && "cursor-wait opacity-60",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "block h-3.5 w-3.5 rounded-full shadow-[0_1px_2px_rgba(11,12,15,0.35)] transition-all duration-200",
+          mixed
+            ? "mx-auto translate-x-0 bg-ink-950"
+            : on
+              ? "ml-[18px] bg-white"
+              : "ml-[3px] bg-ink-400",
+        )}
+      />
+    </span>
+  );
 }
 
 /* One dataset, exactly as the registry publishes it — licence, coverage,
    counts, formats, and the publisher's own portal, each linked back. The
    connection line is a real check: the registry handshake that opened the
-   published file (with the first OCDS release it read) and the portal probe. */
+   published file (with the first OCDS release it read) and the portal probe.
+   The committee can switch any portal off — the row says who set it and when,
+   and the sidecar leaves it out of the connection passes until it's back on. */
 function OcpDatasetRow({
   d,
   link,
   onRecheck,
   rechecking,
   busy,
+  enabled,
+  override,
+  toggling,
+  onToggle,
 }: {
   d: OcpDataset;
   link?: OcpPortalLink;
   onRecheck?: (id: number) => void;
   rechecking?: boolean;
   busy?: boolean;
+  enabled: boolean;
+  override?: { enabled: boolean; at: string; by: string };
+  toggling?: boolean;
+  onToggle?: (id: number, enabled: boolean) => void;
 }) {
   const licenceIsUrl = d.license?.startsWith("http") ?? false;
   const counts = (
@@ -2398,100 +2473,133 @@ function OcpDatasetRow({
     "inline-flex items-center gap-1 rounded-md border border-ink-200 px-2 py-1 font-code text-[7px] font-bold tracking-[0.14em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950";
   return (
     <li className="border-t border-ink-100 px-5 py-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-code text-[9.5px] font-bold tracking-[0.1em] text-ink-950">{d.publisher}</span>
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 font-code text-[7px] font-bold tracking-[0.14em] text-white",
-            d.stale ? "bg-brand-600" : "bg-ink-950"
-          )}
-        >
-          {d.stale ? "NO LONGER UPDATED" : "UPDATING"}
-        </span>
-      </div>
-      <p className="mt-1 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
-        RECORD {d.coverageFrom} → {d.coverageTo}
-        {d.updateFrequency ? ` · ${d.updateFrequency.toUpperCase()}` : ""}
-        {" · "}RETRIEVED {d.lastRetrieved}
-        {d.retrievedNote ? ` (${d.retrievedNote})` : ""}
-        {d.ocidPrefix ? ` · ${d.ocidPrefix}` : ""}
-      </p>
-      <p className="mt-0.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
-        {!d.license
-          ? "LICENCE — NOT STATED ON THE REGISTRY"
-          : licenceIsUrl
-            ? "LICENCE — PUBLISHER'S OWN TERMS"
-            : `LICENCE — ${d.license.toUpperCase()}`}
-        {files ? ` · ${files.toUpperCase()}` : ""}
-      </p>
-      {counts.length > 0 && (
-        <p className="mt-0.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-500">
-          {counts.map(([k, n]) => `${k} ${n.toLocaleString("en-US")}`).join(" · ")}
-        </p>
-      )}
-      <p className="mt-0.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em]">
-        {link ? (
-          link.registry.ok ? (
-            <>
-              <span className="font-bold text-ink-950">LINKED</span>
-              <span className="text-ink-400">
-                {" "}
-                {codeStamp(link.checkedAt)} · REGISTRY HTTP {link.registry.status} ·{" "}
-                {Math.max(1, Math.round(link.registry.bytes / 1024))} KB READ · FIRST OCDS RELEASE{" "}
-                {link.registry.ocid} ·{" "}
-              </span>
-              {link.portal.ok ? (
-                <span className="text-ink-400">PORTAL HTTP {link.portal.status}</span>
-              ) : (
-                <span className="text-brand-700">
-                  PORTAL {(link.portal.error ?? "UNREACHABLE").toUpperCase()}
-                </span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-code text-[9.5px] font-bold tracking-[0.1em] text-ink-950">{d.publisher}</span>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 font-code text-[7px] font-bold tracking-[0.14em] text-white",
+                d.stale ? "bg-brand-600" : "bg-ink-950"
               )}
-            </>
-          ) : (
-            <span className="text-brand-700">
-              LINK FAILED — {(link.registry.error ?? "UNKNOWN").toUpperCase()} · CHECKED {codeStamp(link.checkedAt)}
+            >
+              {d.stale ? "NO LONGER UPDATED" : "UPDATING"}
             </span>
-          )
-        ) : (
-          <span className="text-ink-400">NOT YET CONNECTED — USE THE CONNECT BUTTON AT THE TOP OF THIS CARD</span>
+            {!enabled && (
+              <span className="rounded-full bg-ink-400 px-2 py-0.5 font-code text-[7px] font-bold tracking-[0.14em] text-white">
+                OFF
+              </span>
+            )}
+          </div>
+          {override && (
+            <p className="mt-0.5 font-code text-[7px] tracking-[0.16em] text-ink-400">
+              {enabled ? "IN USE" : "NOT READ BY THE AGENT"} — SET BY {override.by.toUpperCase() || "UNKNOWN"} · {codeStamp(override.at).toUpperCase()}
+            </p>
+          )}
+        </div>
+        {onToggle && (
+          <PortalSwitch
+            on={enabled}
+            busy={toggling}
+            ariaLabel={`${enabled ? "Disable" : "Enable"} the ${d.publisher} portal`}
+            title={
+              enabled
+                ? `Turn the ${d.publisher} portal off — the sidecar will leave it out of the connection passes and it will not be read`
+                : `Turn the ${d.publisher} portal back on — it rejoins the connection passes immediately`
+            }
+            onToggle={() => onToggle(d.publicationId, !enabled)}
+          />
         )}
-      </p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <a href={d.registryUrl} target="_blank" rel="noreferrer" className={linkClass}>
-          REGISTRY PAGE
-          <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
-        </a>
-        {d.portalUrl && (
-          <a href={d.portalUrl} target="_blank" rel="noreferrer" className={linkClass}>
-            PUBLISHER PORTAL
+      </div>
+      <div className={cn(!enabled && "opacity-55")} aria-disabled={!enabled}>
+        <p className="mt-1 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
+          RECORD {d.coverageFrom} → {d.coverageTo}
+          {d.updateFrequency ? ` · ${d.updateFrequency.toUpperCase()}` : ""}
+          {" · "}RETRIEVED {d.lastRetrieved}
+          {d.retrievedNote ? ` (${d.retrievedNote})` : ""}
+          {d.ocidPrefix ? ` · ${d.ocidPrefix}` : ""}
+        </p>
+        <p className="mt-0.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
+          {!d.license
+            ? "LICENCE — NOT STATED ON THE REGISTRY"
+            : licenceIsUrl
+              ? "LICENCE — PUBLISHER'S OWN TERMS"
+              : `LICENCE — ${d.license.toUpperCase()}`}
+          {files ? ` · ${files.toUpperCase()}` : ""}
+        </p>
+        {counts.length > 0 && (
+          <p className="mt-0.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-500">
+            {counts.map(([k, n]) => `${k} ${n.toLocaleString("en-US")}`).join(" · ")}
+          </p>
+        )}
+        <p className="mt-0.5 font-code text-[7.5px] leading-[1.9] tracking-[0.14em]">
+          {link ? (
+            link.registry.ok ? (
+              <>
+                <span className="font-bold text-ink-950">LINKED</span>
+                <span className="text-ink-400">
+                  {" "}
+                  {codeStamp(link.checkedAt)} · REGISTRY HTTP {link.registry.status} ·{" "}
+                  {Math.max(1, Math.round(link.registry.bytes / 1024))} KB READ · FIRST OCDS RELEASE{" "}
+                  {link.registry.ocid} ·{" "}
+                </span>
+                {link.portal.ok ? (
+                  <span className="text-ink-400">PORTAL HTTP {link.portal.status}</span>
+                ) : (
+                  <span className="text-brand-700">
+                    PORTAL {(link.portal.error ?? "UNREACHABLE").toUpperCase()}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-brand-700">
+                LINK FAILED — {(link.registry.error ?? "UNKNOWN").toUpperCase()} · CHECKED {codeStamp(link.checkedAt)}
+              </span>
+            )
+          ) : (
+            <span className="text-ink-400">NOT YET CONNECTED — USE THE CONNECT BUTTON AT THE TOP OF THIS CARD</span>
+          )}
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <a href={d.registryUrl} target="_blank" rel="noreferrer" className={linkClass}>
+            REGISTRY PAGE
             <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
           </a>
-        )}
-        {d.licenseUrl && (
-          <a href={d.licenseUrl} target="_blank" rel="noreferrer" className={linkClass}>
-            LICENCE
-            <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
-          </a>
-        )}
-        {d.policyUrl && (
-          <a href={d.policyUrl} target="_blank" rel="noreferrer" className={linkClass}>
-            PUBLISHING POLICY
-            <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
-          </a>
-        )}
-        {onRecheck && (
-          <button
-            type="button"
-            onClick={() => onRecheck(d.publicationId)}
-            disabled={rechecking || busy}
-            className={cn(linkClass, "disabled:cursor-not-allowed disabled:opacity-50")}
-            title="Open the published file again, read its first release, and re-check the publisher's portal"
-          >
-            <RefreshCw className={cn("h-2.5 w-2.5", rechecking && "animate-spin")} aria-hidden="true" />
-            {rechecking ? "CHECKING" : "RE-CHECK"}
-          </button>
-        )}
+          {d.portalUrl && (
+            <a href={d.portalUrl} target="_blank" rel="noreferrer" className={linkClass}>
+              PUBLISHER PORTAL
+              <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
+            </a>
+          )}
+          {d.licenseUrl && (
+            <a href={d.licenseUrl} target="_blank" rel="noreferrer" className={linkClass}>
+              LICENCE
+              <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
+            </a>
+          )}
+          {d.policyUrl && (
+            <a href={d.policyUrl} target="_blank" rel="noreferrer" className={linkClass}>
+              PUBLISHING POLICY
+              <ArrowUpRight className="h-2.5 w-2.5" aria-hidden="true" />
+            </a>
+          )}
+          {onRecheck && (
+            <button
+              type="button"
+              onClick={() => onRecheck(d.publicationId)}
+              disabled={!enabled || rechecking || busy}
+              className={cn(linkClass, "disabled:cursor-not-allowed disabled:opacity-50")}
+              title={
+                !enabled
+                  ? "The portal is switched off — turn it on to re-check it"
+                  : "Open the published file again, read its first release, and re-check the publisher's portal"
+              }
+            >
+              <RefreshCw className={cn("h-2.5 w-2.5", rechecking && "animate-spin")} aria-hidden="true" />
+              {rechecking ? "CHECKING" : "RE-CHECK"}
+            </button>
+          )}
+        </div>
       </div>
     </li>
   );
@@ -3407,7 +3515,7 @@ function RequestsPanel({ requests }: { requests: SourceRequestRow[] }) {
 
 function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; firstName: string }) {
   const standards = ["OCDS 1.1", "MCP TOOLS", "LLM DRAFTING", "PAGE CITATIONS"];
-  const { data: registry, failed: registryFailed, reload: reloadRegistry } = useOcpRegistry();
+  const { data: registry, failed: registryFailed, reload: reloadRegistry, setData: setRegistry } = useOcpRegistry();
   const [openCountry, setOpenCountry] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [connectProgress, setConnectProgress] = useState<{ done: number; total: number } | null>(null);
@@ -3416,9 +3524,13 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
   /* Connection truth, straight from the sidecar's saved checks. */
   const links = registry?.links?.links ?? {};
   const datasets = registry?.datasets ?? [];
+  const overrides = registry?.state?.overrides ?? {};
+  const enabledOf = useCallback((id: number) => overrides[String(id)]?.enabled ?? true, [overrides]);
+  const disabledDatasets = datasets.filter((d) => !enabledOf(d.publicationId));
+  const disabledCount = disabledDatasets.length;
   const linkedCount = datasets.filter((d) => links[String(d.publicationId)]?.registry.ok).length;
   const portalUpCount = datasets.filter((d) => links[String(d.publicationId)]?.portal.ok).length;
-  const missingLinks = datasets.length - linkedCount;
+  const missingLinks = datasets.filter((d) => enabledOf(d.publicationId) && !links[String(d.publicationId)]?.registry.ok).length;
 
   /* Live source requests from the quorum-mcp sidecar — pending ones show
      up right on the page; every request is audit-logged on the sidecar. */
@@ -3430,6 +3542,42 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
   const [reqError, setReqError] = useState("");
   const [reqBusy, setReqBusy] = useState(false);
   const reqNameRef = useRef<HTMLInputElement | null>(null);
+
+  /* The committee's switch — one place, one truth. Optimistic on purpose:
+     the row moves the instant it is clicked, the sidecar's saved state
+     replaces it a beat later, and a failed POST rolls the row back. */
+  const [pendingToggleIds, setPendingToggleIds] = useState<number[]>([]);
+  const isToggling = useCallback((id: number) => pendingToggleIds.includes(id), [pendingToggleIds]);
+  const togglePortals = useCallback(
+    async (ids: number[], enabled: boolean, okMsg: string) => {
+      if (ids.length === 0) return;
+      const snapshot = registry;
+      const now = new Date().toISOString();
+      if (snapshot) {
+        const next = { ...(snapshot.state?.overrides ?? {}) };
+        for (const id of ids) next[String(id)] = { enabled, at: now, by: firstName || "you" };
+        setRegistry({ ...snapshot, state: { updatedAt: now, overrides: next } });
+      }
+      setPendingToggleIds((p) => [...p, ...ids]);
+      try {
+        const res = await fetch("/api/portal-state?XTransformPort=3031", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ publicationIds: ids, enabled, actor: firstName || "unknown" }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = (await res.json()) as { state?: OcpPortalState };
+        if (snapshot && d.state) setRegistry({ ...snapshot, state: d.state });
+        onToast(okMsg);
+      } catch {
+        if (snapshot) setRegistry(snapshot);
+        onToast("THE SWITCH DID NOT LAND — THE PORTAL IS UNCHANGED");
+      } finally {
+        setPendingToggleIds((p) => p.filter((x) => !ids.includes(x)));
+      }
+    },
+    [firstName, onToast, registry, setRegistry],
+  );
 
   const loadRequests = useCallback(() => {
     fetch("/api/source-requests?XTransformPort=3031")
@@ -3556,7 +3704,7 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
                   {registry
                     ? `${registry.countries.length} COUNTRIES · ${registry.datasets.length} DATASETS · ${linkedCount}/${registry.datasets.length} LINKED · ${
                         registry.datasets.filter((d) => d.stale).length
-                      } NO LONGER UPDATED`
+                      } NO LONGER UPDATED${disabledCount > 0 ? ` · ${disabledCount} SWITCHED OFF` : ""}`
                     : registryFailed
                       ? "THE REGISTRY SNAPSHOT COULD NOT BE READ"
                       : "READING THE OCP DATA REGISTRY…"}
@@ -3569,10 +3717,14 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
                 </span>
                 <button
                   type="button"
-                  onClick={() => void connectDatasets(datasets.map((d) => d.publicationId))}
-                  disabled={!registry || connecting || rechecking !== null}
+                  onClick={() => void connectDatasets(datasets.filter((d) => enabledOf(d.publicationId)).map((d) => d.publicationId))}
+                  disabled={!registry || connecting || rechecking !== null || disabledCount === datasets.length}
                   className="inline-flex h-8 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 font-code text-[8px] font-bold tracking-[0.16em] text-ink-600 transition-colors hover:border-ink-950 hover:text-ink-950 disabled:cursor-not-allowed disabled:opacity-50"
-                  title="Open every published file, read its first OCDS release, and check the publisher's portal — each result is dated and saved"
+                  title={
+                    disabledCount === datasets.length
+                      ? "Every portal is switched off — turn one on and the connection pass can run again"
+                      : "Open every published file in use, read its first OCDS release, and check the publisher's portal — each result is dated and saved. Portals switched off are skipped."
+                  }
                 >
                   {connecting ? (
                     <RefreshCw className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -3607,53 +3759,97 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
                   const rows = (registry?.datasets ?? []).filter((d) => d.country === c.country);
                   const open = openCountry === c.country;
                   const status = c.stale === 0 ? "UPDATING" : c.stale === c.datasets ? "ARCHIVED" : "PARTIAL";
+                  /* The country's master switch: all-on flips the whole
+                     country off; mixed or all-off brings every portal back. */
+                  const offInCountry = rows.filter((d) => !enabledOf(d.publicationId)).length;
+                  const allOn = offInCountry === 0;
+                  const mixedCountry = offInCountry > 0 && offInCountry < rows.length;
+                  const countryBusy = rows.some((d) => pendingToggleIds.includes(d.publicationId));
+                  const masterToggle = () => {
+                    const ids = rows.map((d) => d.publicationId);
+                    const turnOn = !allOn;
+                    const n = ids.length;
+                    void togglePortals(
+                      ids,
+                      turnOn,
+                      turnOn
+                        ? `${c.country.toUpperCase()} ON — ${n} PORTAL${n === 1 ? "" : "S"} BACK IN THE PASS`
+                        : `${c.country.toUpperCase()} OFF — ${n} PORTAL${n === 1 ? "" : "S"} OUT OF THE PASS`,
+                    );
+                  };
                   return (
                     <li key={c.country} className="border-b border-ink-50 last:border-b-0">
-                      <button
-                        type="button"
-                        onClick={() => setOpenCountry(open ? null : c.country)}
-                        aria-expanded={open}
-                        className="flex w-full flex-wrap items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-sand/50"
-                      >
-                        <span
-                          className={cn("h-2 w-2 shrink-0 rounded-full", c.stale > 0 ? "bg-brand-600" : "bg-ink-950")}
-                          aria-hidden="true"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="font-code text-[10px] font-bold tracking-[0.12em] text-ink-950">
-                              {c.country.toUpperCase()}
-                            </span>
-                            <span className="rounded border border-ink-200 px-1 py-px font-code text-[7px] tracking-[0.16em] text-ink-400">
-                              {c.iso}
-                            </span>
-                            <span
-                              className={cn(
-                                "rounded-full px-2 py-0.5 font-code text-[7px] font-bold tracking-[0.16em] text-white",
-                                status === "UPDATING" ? "bg-ink-950" : status === "PARTIAL" ? "bg-brand-600" : "bg-ink-400"
+                      <div className="flex w-full items-center gap-3 px-5 py-4">
+                        <button
+                          type="button"
+                          onClick={() => setOpenCountry(open ? null : c.country)}
+                          aria-expanded={open}
+                          className="flex min-w-0 flex-1 flex-wrap items-center gap-3 text-left transition-colors hover:bg-sand/50"
+                        >
+                          <span
+                            className={cn("h-2 w-2 shrink-0 rounded-full", offInCountry === rows.length ? "bg-ink-300" : c.stale > 0 ? "bg-brand-600" : "bg-ink-950")}
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={cn(
+                                  "font-code text-[10px] font-bold tracking-[0.12em]",
+                                  offInCountry === rows.length ? "text-ink-400" : "text-ink-950",
+                                )}
+                              >
+                                {c.country.toUpperCase()}
+                              </span>
+                              <span className="rounded border border-ink-200 px-1 py-px font-code text-[7px] tracking-[0.16em] text-ink-400">
+                                {c.iso}
+                              </span>
+                              <span
+                                className={cn(
+                                  "rounded-full px-2 py-0.5 font-code text-[7px] font-bold tracking-[0.16em] text-white",
+                                  status === "UPDATING" ? "bg-ink-950" : status === "PARTIAL" ? "bg-brand-600" : "bg-ink-400"
+                                )}
+                                title={
+                                  status === "UPDATING"
+                                    ? "Every dataset from this country is still being updated by its publisher"
+                                    : status === "PARTIAL"
+                                      ? "Some datasets from this country are no longer updated by their publishers"
+                                      : "Every dataset from this country is no longer updated by its publisher"
+                                }
+                              >
+                                {status}
+                              </span>
+                              {offInCountry > 0 && (
+                                <span className="rounded-full bg-ink-400 px-2 py-0.5 font-code text-[7px] font-bold tracking-[0.16em] text-white">
+                                  {offInCountry === rows.length ? "ALL OFF" : `${offInCountry} OFF`}
+                                </span>
                               )}
-                              title={
-                                status === "UPDATING"
-                                  ? "Every dataset from this country is still being updated by its publisher"
-                                  : status === "PARTIAL"
-                                    ? "Some datasets from this country are no longer updated by their publishers"
-                                    : "Every dataset from this country is no longer updated by its publisher"
-                              }
-                            >
-                              {status}
+                            </span>
+                            <span className="mt-1 block font-code text-[7.5px] tracking-[0.18em] text-ink-400">
+                              {c.datasets} {c.datasets === 1 ? "DATASET" : "DATASETS"} · {c.publishers.length}{" "}
+                              {c.publishers.length === 1 ? "PUBLISHER" : "PUBLISHERS"} · RECORD {c.coverageFrom} →{" "}
+                              {c.coverageTo} · RETRIEVED {c.lastRetrieved}
                             </span>
                           </span>
-                          <span className="mt-1 block font-code text-[7.5px] tracking-[0.18em] text-ink-400">
-                            {c.datasets} {c.datasets === 1 ? "DATASET" : "DATASETS"} · {c.publishers.length}{" "}
-                            {c.publishers.length === 1 ? "PUBLISHER" : "PUBLISHERS"} · RECORD {c.coverageFrom} →{" "}
-                            {c.coverageTo} · RETRIEVED {c.lastRetrieved}
-                          </span>
-                        </span>
-                        <ChevronDown
-                          className={cn("h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform", open && "rotate-180")}
-                          aria-hidden="true"
+                          <ChevronDown
+                            className={cn("h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform", open && "rotate-180")}
+                            aria-hidden="true"
+                          />
+                        </button>
+                        <PortalSwitch
+                          on={allOn}
+                          mixed={mixedCountry}
+                          busy={countryBusy}
+                          ariaLabel={`Turn ${c.country}'s ${rows.length} portal${rows.length === 1 ? "" : "s"} ${allOn ? "off" : "on"}`}
+                          title={
+                            allOn
+                              ? `Turn all ${rows.length} of ${c.country}'s portals off — none of them will be probed or read`
+                              : mixedCountry
+                                ? `${offInCountry} of ${rows.length} of ${c.country}'s portals are off — click to bring them all back on`
+                                : `Turn ${c.country}'s portals back on — they rejoin the connection passes immediately`
+                          }
+                          onToggle={masterToggle}
                         />
-                      </button>
+                      </div>
                       {open && (
                         <ul className="bg-sand/40">
                           {rows.map((d) => (
@@ -3664,6 +3860,18 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
                               onRecheck={(id) => void connectDatasets([id])}
                               rechecking={rechecking === d.publicationId}
                               busy={connecting || rechecking !== null}
+                              enabled={enabledOf(d.publicationId)}
+                              override={overrides[String(d.publicationId)]}
+                              toggling={pendingToggleIds.includes(d.publicationId)}
+                              onToggle={(id, on) =>
+                                void togglePortals(
+                                  [id],
+                                  on,
+                                  on
+                                    ? `PORTAL ON — ${d.publisher.toUpperCase()} IS BACK IN THE PASS`
+                                    : `PORTAL OFF — ${d.publisher.toUpperCase()} IS OUT OF THE PASS`,
+                                )
+                              }
                             />
                           ))}
                         </ul>
@@ -3693,7 +3901,7 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
                   : "EVERY FIELD IS THE REGISTRY'S OWN — COUNTRIES, PUBLISHERS, COVERAGE, RETRIEVALS, FORMATS, LICENCES AND COUNTS."}
                 <br />
                 {registry
-                  ? `CONNECTIONS · EVERY DATASET OPENED AND ITS FIRST OCDS RELEASE READ · ${linkedCount}/${registry.datasets.length} LINKED · ${portalUpCount}/${registry.datasets.length} PUBLISHER PORTALS ANSWERED · LAST CHECK ${
+                  ? `CONNECTIONS · EVERY DATASET OPENED AND ITS FIRST OCDS RELEASE READ · ${linkedCount}/${registry.datasets.length} LINKED · ${portalUpCount}/${registry.datasets.length} PUBLISHER PORTALS ANSWERED${disabledCount > 0 ? ` · ${disabledCount} SWITCHED OFF AND SKIPPED BY THE PASS` : ""} · LAST CHECK ${
                       registry.links.updatedAt ? codeStamp(registry.links.updatedAt) : "NOT YET"
                     }`
                   : "CONNECTIONS · THE SIDECAR OPENS EVERY PUBLISHED FILE AND CHECKS EACH PUBLISHER PORTAL."}

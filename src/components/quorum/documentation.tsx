@@ -493,6 +493,10 @@ const DOC_CHAPTERS: DocChapter[] = [
         text: "The register is read as published: coverage dates, retrieval dates, formats, file sizes, licences and counts are the registry's own figures, and the screen names the retrieval date of the snapshot it draws. Where a publisher states no licence, the registry shows an em dash — and so does the screen. Beside it sits the connection record: the first OCDS release the agent read from the published file, and the last answer from the publisher's own portal — both dated, both checkable again.",
       },
       {
+        kind: "p",
+        text: "Every portal can be switched off, one dataset or a whole country at a time. A portal that is off is not silently dropped: its row dims, names who set it and when, the connection pass skips it, the header counts what is switched off, and the transition is written to the audit trail. Turning it back on puts it straight back into the pass.",
+      },
+      {
         kind: "callout",
         tone: "tip",
         title: "Reading a record",

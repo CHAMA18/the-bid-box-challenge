@@ -44,6 +44,7 @@ import { ZPPA_ROLL, ZPPA_SOURCE } from "./zppa";
 import { OCP_AFRICA, OCP_AFRICA_SOURCE } from "./ocp-africa";
 import { rollupAfrica } from "./ocp-africa-roll";
 import { connectMany, loadPortalLinks } from "./portal-links";
+import { disabledPortalIds, loadPortalState, setPortalsEnabled } from "./portal-state";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { TENDERS_DIR } from "./engine";
 import {
@@ -528,7 +529,42 @@ Bun.serve({
         countries: rollupAfrica(OCP_AFRICA),
         datasets: OCP_AFRICA,
         links: loadPortalLinks(),
+        state: loadPortalState(),
       });
+    }
+
+    /* ── Portal enable/disable — the committee's switch, persisted and logged */
+    if (path === "/api/portal-state" && req.method === "POST") {
+      const body = await readBody(req);
+      const rawIds = body.publicationIds;
+      if (!Array.isArray(rawIds) || rawIds.length === 0) {
+        return json({ error: "publicationIds must be a non-empty array of the registry's publication ids" }, 422);
+      }
+      const ids = [...new Set(rawIds.map((x: unknown) => Number(x)).filter((n: number) => Number.isInteger(n)))];
+      const known = new Set(OCP_AFRICA.map((d) => d.publicationId));
+      if (ids.length === 0 || ids.some((n: number) => !known.has(n))) {
+        return json({ error: "publicationIds must name portals from the registry" }, 422);
+      }
+      if (typeof body.enabled !== "boolean") {
+        return json({ error: "enabled must be a boolean" }, 422);
+      }
+      const actor = (strOpt(body.actor) ?? strOpt(req.headers.get("x-quorum-actor")) ?? "unknown").slice(0, 80);
+      const file = setPortalsEnabled(ids, body.enabled, actor);
+      appendLog({
+        actor,
+        server: "quorum-mcp",
+        tool: "toggle_portals",
+        kind: "WRITES",
+        inputs: { publicationIds: ids, enabled: body.enabled },
+        outputs: {
+          toggled: ids.length,
+          state: body.enabled ? "ENABLED" : "DISABLED",
+          disabledTotal: disabledPortalIds(file).size,
+        },
+        status: "OK",
+        durationMs: 0,
+      });
+      return json({ state: file });
     }
 
     /* ── Portal connections — a real handshake per dataset, dated ───────── */
@@ -549,9 +585,25 @@ Bun.serve({
         }
       }
       const actor = (strOpt(body.actor) ?? strOpt(req.headers.get("x-quorum-actor")) ?? "unknown").slice(0, 80);
+      /* A portal the committee switched off is never probed — a bulk pass
+         covers the portals still in use, and an explicit id list loses the
+         disabled ones. Every skip is reported, never silent. */
+      const disabled = disabledPortalIds();
+      let skippedDisabled: number[] = [];
+      if (ids === null) {
+        skippedDisabled = [...disabled];
+        ids = disabled.size > 0 ? OCP_AFRICA.filter((d) => !disabled.has(d.publicationId)).map((d) => d.publicationId) : null;
+      } else if (disabled.size > 0) {
+        skippedDisabled = ids.filter((n) => disabled.has(n));
+        ids = ids.filter((n) => !disabled.has(n));
+      }
       const started = Date.now();
-      const file = await connectMany(ids, fetch);
-      const touched = Object.values(file.links).filter((l) => ids === null || ids.includes(l.publicationId));
+      /* connectMany treats a null id list as "everything" — an empty enabled
+         list must skip the pass entirely, not probe the world. */
+      const file = ids !== null && ids.length === 0 ? loadPortalLinks() : await connectMany(ids, fetch);
+      const touched = Object.values(file.links).filter(
+        (l) => (ids === null || ids.includes(l.publicationId)) && !disabled.has(l.publicationId),
+      );
       const linked = touched.filter((l) => l.registry.ok).length;
       const portalsUp = touched.filter((l) => l.portal.ok).length;
       appendLog({
@@ -559,12 +611,13 @@ Bun.serve({
         server: "quorum-mcp",
         tool: "connect_portals",
         kind: "READ",
-        inputs: { publicationIds: ids ?? "every African dataset" },
+        inputs: { publicationIds: ids === null ? "every portal in use" : ids },
         outputs: {
           checked: touched.length,
           linked,
           portalsUp,
           failed: touched.filter((l) => !l.registry.ok).map((l) => l.publicationId),
+          skippedDisabled,
         },
         status: "OK",
         durationMs: Date.now() - started,
