@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { Eyebrow, Reveal } from "@/components/quorum/reveal";
+import { WordReveal } from "@/components/quorum/motion-kit";
 
 interface LiveRun {
   tenderId: string;
@@ -108,6 +109,10 @@ export function ProofBand() {
         className="pointer-events-none absolute -left-32 -bottom-32 h-96 w-96 rounded-full bg-brand-600/20 blur-[120px]"
         aria-hidden="true"
       />
+      {/* Scanning light along the top edge — the band's live-data heartbeat */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px overflow-hidden" aria-hidden="true">
+        <div className="animate-scan h-px w-1/3 bg-gradient-to-r from-transparent via-brand-400/80 to-transparent" />
+      </div>
       <div className="relative mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
@@ -116,7 +121,7 @@ export function ProofBand() {
             </Reveal>
             <Reveal delay={0.06}>
               <h2 className="mt-4 max-w-2xl font-display text-[34px] font-black leading-[1.06] tracking-[-0.025em] text-white sm:text-[44px]">
-                What the agent has actually done.
+                <WordReveal text="What the agent has actually done." stagger={0.06} />
               </h2>
             </Reveal>
           </div>
@@ -127,18 +132,18 @@ export function ProofBand() {
           </Reveal>
         </div>
 
-        <Reveal delay={0.1}>
-          <dl className="mt-12 grid grid-cols-2 gap-y-10 sm:gap-x-6 lg:grid-cols-4">
-            {STATS.map((s) => (
-              <div key={s.label} className="border-l-2 border-brand-600/60 pl-5">
+        <dl className="mt-12 grid grid-cols-2 gap-y-10 sm:gap-x-6 lg:grid-cols-4">
+          {STATS.map((s, i) => (
+            <Reveal key={s.label} delay={0.07 * i}>
+              <div className="border-l-2 border-brand-600/60 pl-5">
                 <dd className="font-display text-[38px] font-black leading-none tracking-tight text-white tabular sm:text-[46px]">
                   <CountUp value={s.value} />
                 </dd>
                 <dt className="mt-2.5 text-[13px] font-medium leading-snug text-ink-400">{s.label}</dt>
               </div>
-            ))}
-          </dl>
-        </Reveal>
+            </Reveal>
+          ))}
+        </dl>
       </div>
     </section>
   );

@@ -16,7 +16,7 @@ import { Pricing } from "@/components/quorum/pricing";
 import { GetStarted } from "@/components/quorum/get-started";
 import { SiteFooter } from "@/components/quorum/site-footer";
 import { AuthScreen } from "@/components/quorum/auth-screen";
-import { ScrollProgress } from "@/components/quorum/motion-kit";
+import { NoiseOverlay, ScrollProgress } from "@/components/quorum/motion-kit";
 import { Dashboard } from "@/components/quorum/dashboard";
 import type { AuthMode, AuthUser } from "@/lib/auth-types";
 
@@ -191,6 +191,7 @@ export default function Home() {
             transition={{ duration: 0.4 }}
           >
             <div className="flex min-h-screen flex-col bg-paper font-body text-ink-900 antialiased">
+              <NoiseOverlay />
               <TopTicker />
               <SiteHeader
                 user={user}

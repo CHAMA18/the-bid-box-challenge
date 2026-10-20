@@ -3,7 +3,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { CirclePause, ScrollText } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/quorum/reveal";
-import { Aurora } from "@/components/quorum/motion-kit";
+import { Aurora, Parallax, WordReveal } from "@/components/quorum/motion-kit";
 
 const TASKS = [
   "Sorting bids",
@@ -23,8 +23,12 @@ export function Overview() {
   const reduce = useReducedMotion();
   return (
     <section id="overview" className="relative scroll-mt-20 overflow-hidden border-y border-ink-100 bg-sand/60">
-      <Aurora tone="soft" className="-right-40 top-0 h-[480px] w-[480px] opacity-80" />
-      <Aurora tone="soft" slow className="-left-40 bottom-0 h-[420px] w-[420px] opacity-70" />
+      <Parallax distance={48} className="pointer-events-none absolute inset-0">
+        <Aurora tone="soft" className="-right-40 top-0 h-[480px] w-[480px] opacity-80" />
+      </Parallax>
+      <Parallax distance={64} className="pointer-events-none absolute inset-0">
+        <Aurora tone="soft" slow className="-left-40 bottom-0 h-[420px] w-[420px] opacity-70" />
+      </Parallax>
       <div className="relative mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="grid gap-12 lg:grid-cols-12 lg:gap-14">
           {/* Copy */}
@@ -34,7 +38,7 @@ export function Overview() {
             </Reveal>
             <Reveal delay={0.06}>
               <h2 className="mt-4 font-display text-[34px] font-black leading-[1.06] tracking-[-0.025em] text-ink-950 sm:text-[44px]">
-                The same job. Two very different clocks.
+                <WordReveal text="The same job. Two very different clocks." stagger={0.055} />
               </h2>
             </Reveal>
             <Reveal delay={0.12}>

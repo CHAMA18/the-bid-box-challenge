@@ -2,7 +2,7 @@
 
 import { Activity, Banknote, Globe2, Scale, Stethoscope, Users } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/quorum/reveal";
-import { Aurora, Spotlight } from "@/components/quorum/motion-kit";
+import { Aurora, Spotlight, TiltCard } from "@/components/quorum/motion-kit";
 
 /**
  * The chosen theme — health & life sciences. One vertical, mastered:
@@ -64,6 +64,7 @@ export function UseCases() {
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {CHECKS.map((check, i) => (
             <Reveal key={check.no} delay={0.08 * i} className="h-full">
+              <TiltCard max={5} className="group h-full rounded-3xl">
               <Spotlight className="h-full rounded-3xl">
               <article className="group flex h-full flex-col rounded-3xl border border-ink-100 bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-brand-300 hover:shadow-[0_20px_44px_rgba(11,12,15,0.10)]">
                 <div className="flex items-center justify-between">
@@ -83,6 +84,7 @@ export function UseCases() {
                 <p className="mt-3 text-[14px] leading-relaxed text-ink-600">{check.body}</p>
               </article>
               </Spotlight>
+              </TiltCard>
             </Reveal>
           ))}
         </div>

@@ -3,7 +3,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { FileSearch, Scale, ShieldAlert } from "lucide-react";
 import { Eyebrow, Reveal } from "@/components/quorum/reveal";
-import { Aurora, Spotlight } from "@/components/quorum/motion-kit";
+import { Aurora, Parallax, Spotlight } from "@/components/quorum/motion-kit";
 
 const GUARANTEES = [
   { icon: FileSearch, text: "Every finding cites the document it came from" },
@@ -21,8 +21,24 @@ export function RuleBand() {
   return (
     <section className="relative overflow-hidden bg-ink-950 text-white">
       <div className="bg-grid-dark absolute inset-0" aria-hidden="true" />
-      <Aurora className="-right-32 -top-32 h-[520px] w-[520px] opacity-80" />
-      <Aurora slow className="-bottom-40 left-10 h-[420px] w-[420px] opacity-60" />
+      <Parallax distance={60} className="pointer-events-none absolute inset-0">
+        <Aurora className="-right-32 -top-32 h-[520px] w-[520px] opacity-80" />
+      </Parallax>
+      <Parallax distance={44} className="pointer-events-none absolute inset-0">
+        <Aurora slow className="-bottom-40 left-10 h-[420px] w-[420px] opacity-60" />
+      </Parallax>
+      {/* Slow conic light rotating behind the statement — cinematic, not busy.
+          The wrapper owns the centering translate; the inner layer owns the spin. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-40 top-1/2 hidden -translate-y-1/2 lg:block"
+      >
+        <div className="conic-halo animate-spin-slower h-[720px] w-[720px] opacity-40 blur-[110px]" />
+      </div>
+      {/* One thin light scanning the band edge to edge, once every few seconds */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px overflow-hidden" aria-hidden="true">
+        <div className="animate-scan h-px w-1/3 bg-gradient-to-r from-transparent via-brand-400/80 to-transparent" />
+      </div>
       <div className="relative mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="grid gap-10 lg:grid-cols-12">
           <Reveal className="lg:col-span-4">

@@ -9,6 +9,7 @@ import {
   useReducedMotion,
   useScroll,
   useSpring,
+  useTransform,
 } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -149,5 +150,162 @@ export function Magnetic({
     >
       {children}
     </motion.div>
+  );
+}
+
+/**
+ * Headline-grade text reveal: each word rises out of an overflow-clipped line
+ * with a blur that resolves as it lands. `text-sheen` on a word keeps the
+ * sweeping highlight intact — the reveal animates the wrapper, not the fill.
+ */
+export function WordReveal({
+  text,
+  className,
+  wordClassName,
+  delay = 0,
+  stagger = 0.05,
+}: {
+  text: string;
+  className?: string;
+  wordClassName?: string;
+  delay?: number;
+  stagger?: number;
+}) {
+  const reduce = useReducedMotion();
+  const words = text.split(" ");
+  return (
+    <span className={cn("inline", className)} aria-label={text} role="text">
+      {words.map((word, i) => (
+        <span
+          key={`${word}-${i}`}
+          aria-hidden="true"
+          className="inline-block overflow-hidden pb-[0.08em] align-bottom"
+        >
+          <motion.span
+            className={cn("inline-block will-change-transform", wordClassName)}
+            initial={reduce ? false : { y: "108%", opacity: 0, filter: "blur(6px)" }}
+            whileInView={{ y: "0%", opacity: 1, filter: "blur(0px)" }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{
+              duration: 0.7,
+              delay: delay + i * stagger,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+          >
+            {word}
+            {i < words.length - 1 ? " " : ""}
+          </motion.span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Scroll-linked drift: the child moves `distance` px (negative → upward) as
+ * the section travels through the viewport. Springed so it never feels tied
+ * to a scrollbar. Disabled entirely for reduced-motion users.
+ */
+export function Parallax({
+  children,
+  distance = 56,
+  className,
+}: {
+  children: ReactNode;
+  distance?: number;
+  className?: string;
+}) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
+  const y = useTransform(scrollYProgress, [0, 1], [distance, -distance]);
+  const smooth = useSpring(y, { stiffness: 60, damping: 20, mass: 0.5 });
+
+  return (
+    <div ref={ref} className={className}>
+      <motion.div style={reduce ? undefined : { y: smooth }} className="will-change-transform">
+        {children}
+      </motion.div>
+    </div>
+  );
+}
+
+/**
+ * Card-grade 3D tilt: the surface leans toward the cursor and a glare bar
+ * sweeps across it. Pure transforms — compositing only, never layout.
+ */
+export function TiltCard({
+  children,
+  className,
+  max = 6,
+  glare = true,
+}: {
+  children: ReactNode;
+  className?: string;
+  max?: number;
+  glare?: boolean;
+}) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLDivElement | null>(null);
+  const rx = useMotionValue(0);
+  const ry = useMotionValue(0);
+  const gx = useMotionValue(50);
+  const srx = useSpring(rx, { stiffness: 180, damping: 18, mass: 0.4 });
+  const sry = useSpring(ry, { stiffness: 180, damping: 18, mass: 0.4 });
+  const glareBg = useTransform(
+    gx,
+    (v) =>
+      `linear-gradient(105deg, transparent ${v - 22}%, rgba(255,255,255,0.14) ${
+        v - 8
+      }%, rgba(255,255,255,0.03) ${v + 8}%, transparent ${v + 24}%)`
+  );
+
+  const onMove = (e: MouseEvent<HTMLDivElement>) => {
+    if (reduce) return;
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width;
+    const ny = (e.clientY - rect.top) / rect.height;
+    ry.set((nx - 0.5) * max * 2);
+    rx.set((0.5 - ny) * max * 2);
+    gx.set(nx * 100);
+  };
+  const reset = () => {
+    rx.set(0);
+    ry.set(0);
+    gx.set(50);
+  };
+
+  return (
+    <motion.div
+      ref={ref}
+      onMouseMove={onMove}
+      onMouseLeave={reset}
+      style={reduce ? undefined : { rotateX: srx, rotateY: sry, transformPerspective: 900 }}
+      className={cn("relative will-change-transform [transform-style:preserve-3d]", className)}
+    >
+      {children}
+      {glare && !reduce && (
+        <motion.span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+          style={{ background: glareBg }}
+        />
+      )}
+    </motion.div>
+  );
+}
+
+/** Fixed filmic grain over the whole page — one element, zero re-renders. */
+export function NoiseOverlay() {
+  return (
+    <span
+      aria-hidden="true"
+      className="noise-overlay pointer-events-none fixed inset-0 z-[70] opacity-[0.035] mix-blend-overlay"
+    />
   );
 }

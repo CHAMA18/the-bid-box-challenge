@@ -1,6 +1,6 @@
 "use client";
 
-import type { MouseEvent } from "react";
+import type { CSSProperties, MouseEvent } from "react";
 import {
   motion,
   useMotionValue,
@@ -11,12 +11,27 @@ import {
 import { ArrowRight, CirclePause, FileCheck2, Landmark } from "lucide-react";
 import { AgentRun } from "@/components/quorum/agent-run";
 import { Eyebrow } from "@/components/quorum/reveal";
-import { Aurora, CountUp, Magnetic } from "@/components/quorum/motion-kit";
+import { Aurora, CountUp, Magnetic, Parallax } from "@/components/quorum/motion-kit";
 
 const STATS: { to?: number; text?: string; label: string }[] = [
   { to: 3, label: "checks on every bid — specs, bidders, prices" },
   { text: "Every", label: "finding cited to a source document" },
   { to: 1, label: "human gate before anything irreversible" },
+];
+
+/* The portals the agent actually reads — the same 9 countries, 22 datasets
+   the workspace's Connected portals card tracks. Product truth, not decoration. */
+const PORTAL_SOURCES = [
+  "KENYA · PPRA",
+  "KENYA · MAKUENI COUNTY",
+  "GHANA · GH PORTAL",
+  "NIGERIA · 13 STATE PORTALS",
+  "RWANDA · RW",
+  "UGANDA · UG",
+  "TANZANIA · TZ",
+  "ZAMBIA · ZM",
+  "LIBERIA · LR",
+  "SOUTH AFRICA · ZA",
 ];
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -53,8 +68,13 @@ export function Hero({ onGetStarted }: { onGetStarted: () => void }) {
         className="bg-grid-light pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_70%_60%_at_50%_0%,black,transparent)]"
         aria-hidden="true"
       />
-      <Aurora className="-left-40 -top-40 h-[560px] w-[560px] opacity-70" />
-      <Aurora tone="soft" slow className="-right-48 top-24 h-[520px] w-[520px] opacity-90" />
+      <Parallax distance={44} className="pointer-events-none absolute inset-0">
+        <Aurora className="-left-40 -top-40 h-[560px] w-[560px] opacity-70" />
+      </Parallax>
+      <Parallax distance={70} className="pointer-events-none absolute inset-0">
+        <Aurora tone="soft" slow className="-right-48 top-24 h-[520px] w-[520px] opacity-90" />
+      </Parallax>
+      <Aurora tone="soft" className="left-1/3 top-1/2 h-[380px] w-[380px] opacity-50" />
 
       <div className="relative mx-auto w-full max-w-7xl px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:px-8 lg:pb-24 lg:pt-24">
         <div className="grid items-center gap-12 lg:grid-cols-12 lg:gap-10">
@@ -75,8 +95,8 @@ export function Hero({ onGetStarted }: { onGetStarted: () => void }) {
               className="mt-6 font-display text-[42px] font-black leading-[1.02] tracking-[-0.03em] text-ink-950 text-balance sm:text-[58px] lg:text-[64px]"
             >
               Do in{" "}
-              <span className="relative inline-block text-brand-600">
-                one review run
+              <span className="relative inline-block">
+                <span className="text-sheen">one review run</span>
                 <svg
                   viewBox="0 0 220 12"
                   className="absolute -bottom-1 left-0 w-full overflow-visible"
@@ -172,13 +192,28 @@ export function Hero({ onGetStarted }: { onGetStarted: () => void }) {
             </motion.dl>
           </div>
 
-          {/* Agent run — tilts toward the cursor */}
+          {/* Agent run — tilts toward the cursor, haloed by a slow conic light
+              and two orbiting satellites that mark the agent's constant read */}
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 24 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.85, delay: 0.2, ease: EASE }}
             className="relative lg:col-span-6"
           >
+            {/* Rotating conic halo — the light source behind the terminal */}
+            <div
+              aria-hidden="true"
+              className="conic-halo animate-spin-slower pointer-events-none absolute -inset-10 hidden opacity-90 blur-[70px] sm:block lg:-inset-16"
+            />
+            {/* Orbiting satellites on two radii, opposite directions */}
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden sm:block">
+              <div className="animate-orbit absolute left-1/2 top-1/2" style={{ "--orbit-r": "min(30vw, 340px)" } as CSSProperties}>
+                <span className="block h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-500 shadow-[0_0_16px_rgba(232,56,42,0.9)]" />
+              </div>
+              <div className="animate-orbit-rev absolute left-1/2 top-1/2" style={{ "--orbit-r": "min(24vw, 270px)" } as CSSProperties}>
+                <span className="block h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brand-400 bg-paper" />
+              </div>
+            </div>
             <motion.div
               style={{ rotateX, rotateY, transformPerspective: 1200 }}
               className="relative will-change-transform"
@@ -217,6 +252,27 @@ export function Hero({ onGetStarted }: { onGetStarted: () => void }) {
             </motion.div>
           </motion.div>
         </div>
+      </div>
+
+      {/* Portal sources strip — the registry the agent reads, end to end */}
+      <div
+        className="relative overflow-hidden border-t border-ink-100 bg-paper/70 backdrop-blur-sm"
+        aria-label="Portal sources the agent reads"
+      >
+        <div className="flex w-max animate-marquee items-center gap-12 py-3.5 pr-12">
+          {[...PORTAL_SOURCES, ...PORTAL_SOURCES].map((p, i) => (
+            <span
+              key={i}
+              className="flex items-center gap-3 whitespace-nowrap font-code text-[10px] font-medium tracking-[0.22em] text-ink-400"
+            >
+              <span className="h-1 w-1 rounded-full bg-brand-500/70" aria-hidden="true" />
+              {p}
+            </span>
+          ))}
+        </div>
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-paper to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-paper to-transparent" />
+        <p className="sr-only">Sourced live from 22 datasets across 9 national and county portals.</p>
       </div>
     </section>
   );
