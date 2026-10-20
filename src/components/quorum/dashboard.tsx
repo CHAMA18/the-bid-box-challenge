@@ -3545,8 +3545,8 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
         ))}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-span-2">
+      <div className="mt-4 grid content-start gap-4 sm:mt-6 sm:gap-6">
+        <div className="min-w-0">
           <RequestsPanel requests={requests} />
           <div data-tour="sources-portals" className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
             <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
@@ -3701,7 +3701,7 @@ function SourcesView({ onToast, firstName }: { onToast: (m: string) => void; fir
             </footer>
           </div>
         </div>
-        <div className="grid content-start gap-4 sm:gap-6">
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
           <div className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)]">
             <h3 className="font-display text-[15px] font-black tracking-[-0.01em] text-ink-950">Why sources matter</h3>
             <p className="mt-3 text-[12.5px] leading-relaxed text-ink-600">
