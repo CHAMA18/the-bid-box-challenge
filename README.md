@@ -249,6 +249,8 @@ bun run mcp
 > and self-heals via `GET /api/mcp-ensure` — terminal 2 is only needed for
 > development on the MCP service itself.
 
+**No Bun?** The web app is standard Next.js and runs under Node 20+: `npm install && npm run dev` (or `npm run build && npm start` for production). The sidecar is the one Bun-only piece — it uses Bun's file APIs — so install Bun once for terminal 2 (`curl -fsSL https://bun.sh/install | bash`); there is no Node fallback for it by design, because rewriting the agent runtime's persistence on Node would be a second runtime to keep honest.
+
 Open `http://localhost:3000`. Sign up or sign in — there is no demo workspace; every view reads the live MCP sidecar.
 
 ### Configuration
@@ -318,6 +320,7 @@ curl -s localhost:3031/mcp -X POST -H 'content-type: application/json' \
 
 - With no `LLM_BASE_URL` configured, redline drafting runs on the deterministic template fallback rather than a live model — capabilities are unaffected; prose quality is. Wire an in-region endpoint to upgrade that layer.
 - Run-to-run variance and cost are measured for **both** paths (`SUBMISSION/10-cost-and-audit.md`): the deterministic rule path (identical findings across repeats; 0 tokens → 0 USD) and, since 2026-10-17, the live-model path on an in-region open-weights endpoint (Ollama, `llama3.2:3b`) — 4 runs audited: findings stable, draft texts distinct run-to-run, 668–988 tokens/run, 7.7 s median per model call, 0 USD marginal cost. `bun live-audit.ts` regenerates the artifact at any time from the append-only log; a hosted endpoint's cost is the published formula (tokens × price), never a guessed number.
+- **The gold labels are single-labeller** — one human, one pass, written before the engine ran; not independently double-labelled (stated verbatim in `data/eval/report.json`). The mitigations are structural, not cosmetic: labels were pre-registered, every post-hoc addition is flagged `postHoc` and reported separately, and mutation testing checks sensitivity independently of the labels. A second labeller on a 20% overlap sample with disagreement review is the first hire of the evaluation layer (`Future improvements`).
 - With a small planner, the model-led plan could disable deep-value parsing on packs whose bid values demand it — one such run was logged as evidence, and the engine now applies a planner **safety floor** (parsing may be added, never removed while bid values are present), pinned by a dedicated test. That trade-off is documented rather than hidden.
 - The e-GP portal receipt is labeled `egp-portal (simulated)` — sealing and receipts are real (sha-256, persisted), the transmission is a demo stub until wired to a live portal integration.
 - Beneficial-ownership / registry matching is exposed via the source-request queue as a pending source, not yet a live connector.
@@ -335,6 +338,7 @@ curl -s localhost:3031/mcp -X POST -H 'content-type: application/json' \
 - **HTTPS + domain bring-up** the moment the Route 53 record is creatable (certbot staged; server already nginx-configured).
 - **PDF/A export** of sourced reports for court-ready archival (currently Markdown).
 - **Committee quorum analytics** in the ledger (median time-to-decision, repeat-approver patterns) — the data is already in the audit log.
+- **A second eval labeller** on a 20% overlap sample with disagreement review, so the gold labels carry an inter-annotator check instead of a single reviewer's pass (disclosed under Limitations).
 
 ---
 

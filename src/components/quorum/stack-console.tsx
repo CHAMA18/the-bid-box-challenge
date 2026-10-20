@@ -13,9 +13,10 @@
  *   · gate decisions that demand a named human before anything irreversible
  */
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  Check,
   CheckCircle2,
   ChevronDown,
   CircleAlert,
@@ -27,6 +28,7 @@ import {
   Server,
   ShieldCheck,
   Stamp,
+  UserRound,
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -89,6 +91,11 @@ interface Run {
   findings: Finding[];
   drafts: Draft[];
   gateId?: string;
+}
+
+interface CommitteeLite {
+  members: { name: string; role: string; isChair: boolean; status: "PRESENT" | "EXCUSED" }[];
+  you: { name: string } | null;
 }
 
 interface Gate {
@@ -154,6 +161,270 @@ function Clock(iso: string) {
   return iso.slice(11, 19);
 }
 
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "Q";
+}
+
+/* ── the approving officer, chosen from the committee register ────────────
+
+   The gate signs with a NAME, and the sidecar enforces whose names count:
+   an APPROVE is refused unless the name is the signed-in officer (the gavel)
+   or a PRESENT member of the committee roster it reads from /api/committee.
+   The dropdown therefore offers exactly those people — nothing free-text that
+   the record would refuse. Excused seats stay visible but cannot sign. */
+
+interface OfficerOption {
+  name: string;
+  role: string;
+  kind: "gavel" | "member" | "excused";
+  chair: boolean;
+}
+
+function OfficerSelect({
+  options,
+  value,
+  onSelect,
+  onExcused,
+  labelId,
+  unavailable,
+  className,
+}: {
+  options: OfficerOption[];
+  value: string;
+  onSelect: (name: string) => void;
+  onExcused?: (name: string) => void;
+  labelId: string;
+  unavailable: boolean;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const eligible = useMemo(() => options.filter((o) => o.kind !== "excused"), [options]);
+  const selected = eligible.find((o) => o.name === value) ?? null;
+
+  /* Open and put focus on the selected seat (or the first eligible one). */
+  const openAt = (idx: number) => {
+    setOpen(true);
+    requestAnimationFrame(() => optionRefs.current[idx]?.focus());
+  };
+
+  const openOnTrigger = (towardsEnd: boolean) => {
+    const cur = eligible.findIndex((o) => o.name === value);
+    openAt(towardsEnd ? (cur === -1 ? eligible.length - 1 : cur) : cur === -1 ? 0 : cur);
+  };
+
+  /* Outside click, Escape, and Tab-out close the register. */
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const onListKey = (e: React.KeyboardEvent) => {
+    const opts = optionRefs.current.slice(0, options.length).filter(Boolean) as HTMLButtonElement[];
+    const i = opts.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      opts[Math.min(i + 1, opts.length - 1)]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      opts[Math.max(i - 1, 0)]?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      opts[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      opts[opts.length - 1]?.focus();
+    }
+  };
+
+  const kindChip = (o: OfficerOption) => {
+    if (o.kind === "gavel")
+      return (
+        <span className="shrink-0 rounded-full border border-brand-200 bg-brand-50 px-1.5 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-brand-700">
+          THE GAVEL
+        </span>
+      );
+    if (o.chair)
+      return (
+        <span className="shrink-0 rounded-full border border-ink-200 px-1.5 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-500">
+          CHAIR
+        </span>
+      );
+    if (o.kind === "excused")
+      return (
+        <span className="shrink-0 rounded-full border border-dashed border-ink-200 px-1.5 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-ink-400">
+          EXCUSED
+        </span>
+      );
+    return null;
+  };
+
+  return (
+    <div ref={wrapRef} className={cn("relative", className)} onKeyDown={onListKey}>
+      <button
+        type="button"
+        ref={triggerRef}
+        id={labelId}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={`${labelId}-list`}
+        onClick={() => (open ? setOpen(false) : openOnTrigger(false))}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            if (!open) openOnTrigger(false);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            if (!open) openOnTrigger(true);
+          }
+        }}
+        className={cn(
+          "flex h-10 w-full items-center gap-2.5 rounded-xl border bg-white px-2.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/15",
+          open ? "border-brand-500" : "border-ink-200 hover:border-ink-300"
+        )}
+      >
+        {selected ? (
+          <span
+            className={cn(
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-code text-[9px] font-bold",
+              selected.kind === "gavel" ? "bg-night text-ink-200" : "border border-ink-100 bg-paper text-ink-600"
+            )}
+            aria-hidden="true"
+          >
+            {initialsOf(selected.name)}
+          </span>
+        ) : (
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-dashed border-ink-200 text-ink-300" aria-hidden="true">
+            <UserRound className="h-3 w-3" />
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className={cn("block truncate text-[13px] font-semibold", selected ? "text-ink-950" : "text-ink-300 font-normal")}>
+            {selected ? selected.name : "Select the approving officer"}
+          </span>
+        </span>
+        {selected && (
+          <span className="hidden shrink-0 font-code text-[8px] tracking-[0.16em] text-ink-400 sm:block">
+            {selected.kind === "gavel" ? "THE GAVEL" : selected.chair ? "CHAIR" : "PRESENT"}
+          </span>
+        )}
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform duration-200", open && "rotate-180")}
+          aria-hidden="true"
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="officer-register"
+            id={`${labelId}-list`}
+            role="listbox"
+            aria-labelledby={labelId}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.26, ease: EASE }}
+            className="overflow-hidden"
+          >
+            <div className="mt-1.5 rounded-xl border border-ink-200 bg-white p-1.5 shadow-[0_18px_40px_rgba(11,12,15,0.10)]">
+              {unavailable ? (
+                <p className="px-2.5 py-3 text-[12px] leading-relaxed text-ink-500">
+                  The committee register could not be read — it re-reads itself every few seconds, and nothing is
+                  guessed in the meantime.
+                </p>
+              ) : options.length === 0 ? (
+                <p className="px-2.5 py-3 text-[12px] leading-relaxed text-ink-500">
+                  The register is empty — register members in the Committee view. The gate signs with a named human,
+                  never with a blank.
+                </p>
+              ) : (
+                <div className="max-h-60 space-y-0.5 overflow-y-auto [scrollbar-width:thin]">
+                  {options.map((o, i) => {
+                    const isExcused = o.kind === "excused";
+                    const isSelected = o.name === value;
+                    return (
+                      <button
+                        key={`${o.kind}-${o.name}`}
+                        ref={(el) => {
+                          optionRefs.current[i] = el;
+                        }}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        aria-disabled={isExcused || undefined}
+                        onClick={() => {
+                          if (isExcused) {
+                            onExcused?.(o.name);
+                            return;
+                          }
+                          onSelect(o.name);
+                          setOpen(false);
+                          requestAnimationFrame(() => triggerRef.current?.focus());
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
+                          isExcused
+                            ? "opacity-55"
+                            : "hover:bg-brand-50 focus-visible:bg-brand-50 focus-visible:outline-none"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-code text-[9px] font-bold",
+                            o.kind === "gavel" ? "bg-night text-ink-200" : "border border-ink-100 bg-paper text-ink-600"
+                          )}
+                          aria-hidden="true"
+                        >
+                          {isExcused ? <CircleAlert className="h-3 w-3" /> : initialsOf(o.name)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[12.5px] font-semibold text-ink-950">
+                            {o.name}
+                            {o.kind === "gavel" && <span className="font-normal text-ink-400"> — you</span>}
+                          </span>
+                          <span className="block truncate font-code text-[9px] tracking-[0.12em] text-ink-400">{o.role}</span>
+                        </span>
+                        {kindChip(o)}
+                        {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-brand-600" aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {!unavailable && options.length > 0 && (
+                <p className="flex items-start gap-1.5 border-t border-ink-100 px-2.5 pb-0.5 pt-2 text-[10.5px] leading-relaxed text-ink-500">
+                  <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0 text-ink-300" aria-hidden="true" />
+                  Only PRESENT members — or the officer holding the gavel — can sign. Excused seats stay on the roll
+                  but cannot approve.
+                </p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 /* ── main view ───────────────────────────────────────────────────────────── */
 
 export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
@@ -166,24 +437,34 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [approverDraft, setApproverDraft] = useState<Record<string, { name: string; note: string }>>({});
+  const [committee, setCommittee] = useState<CommitteeLite | null>(null);
   const logAnchor = useRef<HTMLDivElement | null>(null);
 
   const pull = useCallback(async () => {
     try {
       /* Self-heal: if the sidecar died, the long-lived server respawns it. */
       void fetch("/api/mcp-ensure").catch(() => null);
-      const [h, t, a, r, g] = await Promise.all([
+      const [h, t, a, r, g, c] = await Promise.all([
         fetch(`${SVC}/health?XTransformPort=3031`).then((x) => x.json()),
         fetch(`${SVC}/tools?XTransformPort=3031`).then((x) => x.json()),
         fetch(`${SVC}/architecture?XTransformPort=3031`).then((x) => x.json()),
         fetch(`${SVC}/runs?XTransformPort=3031`).then((x) => x.json()),
         fetch(`${SVC}/gates?XTransformPort=3031`).then((x) => x.json()),
+        /* The committee register is a Next.js route, not the sidecar — the
+           same record the gate check reads before any APPROVE. A failure
+           keeps the last good roster rather than blanking the dropdown. */
+        fetch(`${SVC}/committee`)
+          .then((x) => (x.ok ? x.json() : null))
+          .catch(() => null),
       ]);
       setHealth(h);
       setTools(t.tools ?? []);
       setStack(a.stack ?? []);
       setRuns(r.runs ?? []);
       setGates(g.gates ?? []);
+      if (c && Array.isArray(c.members)) {
+        setCommittee({ members: c.members, you: c.you ?? null });
+      }
       const l = await fetch(`${SVC}/log?limit=60&XTransformPort=3031`).then((x) => x.json());
       setLog(l.entries ?? []);
     } catch {
@@ -220,10 +501,43 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
     }
   };
 
+  /* The dropdown's seats: the gavel first, then the register — chair before
+     the rest — and excused seats last, visible but unable to sign. Names are
+     deduplicated, because a member row can repeat the gavel's name. */
+  const officerOptions = useMemo<OfficerOption[]>(() => {
+    if (!committee) return [];
+    const out: OfficerOption[] = [];
+    const seen = new Set<string>();
+    const gavel = committee.you?.name?.trim() ?? "";
+    if (gavel) {
+      out.push({ name: gavel, role: "PROCUREMENT OFFICER · HOLDS THE GAVEL", kind: "gavel", chair: false });
+      seen.add(gavel.toLowerCase());
+    }
+    const present = committee.members.filter((m) => m.status === "PRESENT");
+    const chair = present.find((m) => m.isChair);
+    const ordered = [...(chair ? [chair] : []), ...present.filter((m) => m !== chair)];
+    for (const m of ordered) {
+      const name = m.name.trim();
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      out.push({ name, role: m.role?.trim() || "COMMITTEE MEMBER", kind: "member", chair: m.isChair === true });
+    }
+    for (const m of committee.members) {
+      if (m.status !== "EXCUSED") continue;
+      const name = m.name.trim();
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      out.push({ name, role: m.role?.trim() || "COMMITTEE MEMBER", kind: "excused", chair: m.isChair === true });
+    }
+    return out;
+  }, [committee]);
+
   const decide = async (gate: Gate, decision: "APPROVE" | "REJECT") => {
     const draft = approverDraft[gate.id] ?? { name: "", note: "" };
-    if (draft.name.trim().length < 3) {
-      onToast("A NAMED HUMAN IS REQUIRED — TYPE THE APPROVING OFFICER'S FULL NAME");
+    const gavel = officerOptions.find((o) => o.kind === "gavel")?.name ?? "";
+    const who = (draft.name || gavel).trim();
+    if (who.length < 3) {
+      onToast("A NAMED HUMAN IS REQUIRED — SELECT THE APPROVING OFFICER FROM THE REGISTER");
       return;
     }
     setBusy(true);
@@ -231,13 +545,13 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
       const res = await fetch(`${SVC}/gates/${gate.id}/decision?XTransformPort=3031`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ decision, approver: draft.name.trim(), note: draft.note.trim() }),
+        body: JSON.stringify({ decision, approver: who, note: draft.note.trim() }),
       });
       const data = (await res.json()) as { error?: string; gate?: Gate };
       if (!res.ok || data.error) {
         onToast(data.error?.toUpperCase() ?? "GATE DECISION FAILED");
       } else if (decision === "APPROVE") {
-        onToast(`GATE SIGNED BY ${draft.name.trim().toUpperCase()} — BUNDLE FILED · ${data.gate?.receipt?.submissionId ?? ""}`);
+        onToast(`GATE SIGNED BY ${who.toUpperCase()} — BUNDLE FILED · ${data.gate?.receipt?.submissionId ?? ""}`);
       } else {
         onToast("SUBMISSION RETURNED — DECISION LOGGED AGAINST THE GATE");
       }
@@ -413,6 +727,8 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
           <AnimatePresence initial={false}>
             {pending.map((g) => {
               const draft = approverDraft[g.id] ?? { name: "", note: "" };
+              const gavel = officerOptions.find((o) => o.kind === "gavel")?.name ?? "";
+              const selectedOfficer = draft.name || gavel;
               return (
                 <motion.div
                   key={g.id}
@@ -440,16 +756,19 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
                     <div className="min-w-0">
                       <MonoLabel>DECISION — LOGGED WITH YOUR NAME ON IT</MonoLabel>
                       <label htmlFor={`appr-${g.id}`} className="mt-2 block text-[12px] font-medium text-ink-700">
-                        Approving officer — full name
+                        Approving officer — from the committee register
                       </label>
-                      <input
-                        id={`appr-${g.id}`}
-                        type="text"
-                        value={draft.name}
-                        onChange={(e) => setApproverDraft((p) => ({ ...p, [g.id]: { ...draft, name: e.target.value } }))}
-                        placeholder="e.g. Dr. Chanda Mwale"
-                        autoComplete="name"
-                        className="mt-1.5 h-10 w-full rounded-xl border border-ink-200 bg-white px-3 text-[13px] text-ink-950 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-600/15"
+                      <OfficerSelect
+                        labelId={`appr-${g.id}`}
+                        className="mt-1.5"
+                        options={officerOptions}
+                        value={selectedOfficer}
+                        unavailable={!committee}
+                        onSelect={(name) => setApproverDraft((p) => ({ ...p, [g.id]: { ...draft, name } }))}
+                        onExcused={
+                          /* An excused seat cannot sign — the roll says so before the record refuses. */
+                          (name) => onToast(`${name.toUpperCase()} IS EXCUSED — ONLY PRESENT MEMBERS OR THE GAVEL MAY SIGN`)
+                        }
                       />
                       <label htmlFor={`note-${g.id}`} className="mt-3 block text-[12px] font-medium text-ink-700">
                         Decision note (logged, optional)

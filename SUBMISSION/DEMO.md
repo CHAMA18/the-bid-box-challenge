@@ -59,21 +59,26 @@ The gate signs with **your session identity** — the named human on the record.
 **Show:** sha-256 seal → `transmit_submission` → receipt written → run flips to
 **FILED**, receipt ID (`SUB-…`) on the ledger.
 
-## The refusal, as a recorded artifact
+## The refusal, as a shipped artifact
 
-The main recording may predate the refusals. If so, splice **`.freebuff/Demo
-Part 2 - The Refusal.mp4`** (~61 s) over section 1:20–2:20 — it shows the same
-three beats, played from genuinely captured HTTP bodies (422 no-name, 503
-fail-closed roster read, gate still PENDING, nothing filed). Every body on the
-slides is verbatim from the live run of 2026-10-17; replay them yourself:
+The refusals are kept as captured evidence, not as a video that may go stale:
+**[`refusal-transcript.md`](./refusal-transcript.md)** holds the verbatim HTTP
+bodies of all three beats (422 no-name, 403 name-not-on-the-roster, 503
+fail-closed roster read) with the gate PENDING before, during and after —
+nothing filed. Replay them live from any clone:
 
 ```bash
-GATE=$(curl -s localhost:3031/api/runs | python3 -c "import json,sys;print(json.load(sys.stdin)['runs'][0]['gateId'])")
+GATE=$(curl -s localhost:3031/api/gates | python3 -c "import json,sys;print([g['id'] for g in json.load(sys.stdin)['gates'] if g['status']=='PENDING'][0])")
 curl -s -X POST localhost:3031/api/gates/$GATE/decision -H 'content-type: application/json' -d '{"decision":"APPROVE"}'
 # → {"error":"A named human is required — provide the approving officer's full name.","code":422}
 curl -s -X POST localhost:3031/api/gates/$GATE/decision -H 'content-type: application/json' -d '{"decision":"APPROVE","approver":"Mallory Intruder"}'
-# → {"error":"The committee roster could not be read — approval refused.","code":503}   (fail-closed when the web app is down)
+# → {"error":"Mallory Intruder is not a PRESENT member of the committee roster and is not the signed-in officer.","code":403}
 ```
+
+The 503 (fail-closed when the roster cannot be read) needs a throwaway
+sidecar with an unreachable roster URL — the exact recipe is in the
+transcript. During the recording, play these beats live at 1:20–2:20; if a
+take goes wrong, re-run them — they are deterministic and mutate nothing.
 
 ## 2:20–3:00 — The record
 
