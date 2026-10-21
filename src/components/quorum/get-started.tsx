@@ -191,7 +191,7 @@ export function GetStarted({
                       <label
                         htmlFor={`chk-${item.id}`}
                         className={cn(
-                          "flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition-all",
+                          "flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition-all focus-within:ring-2 focus-within:ring-brand-600/40 focus-within:ring-offset-2",
                           on
                             ? "border-brand-300 bg-brand-50/70"
                             : "border-ink-100 bg-paper hover:border-ink-200"
@@ -290,7 +290,7 @@ export function GetStarted({
                       onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                       placeholder="Amina Mwangi"
                       autoComplete="name"
-                      className="h-12 w-full rounded-xl border border-ink-200 bg-paper px-4 text-[14px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-600/15"
+                      className="h-12 w-full rounded-lg border border-ink-200 bg-paper px-4 text-[14px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-600/15"
                     />
                   </div>
                   <div>
@@ -304,7 +304,7 @@ export function GetStarted({
                       onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                       placeholder="a.mwangi@county.go.ke"
                       autoComplete="email"
-                      className="h-12 w-full rounded-xl border border-ink-200 bg-paper px-4 text-[14px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-600/15"
+                      className="h-12 w-full rounded-lg border border-ink-200 bg-paper px-4 text-[14px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-600/15"
                     />
                   </div>
                   <div>
@@ -318,7 +318,7 @@ export function GetStarted({
                       onChange={(e) => setForm((f) => ({ ...f, institution: e.target.value }))}
                       placeholder="County health agency"
                       autoComplete="organization"
-                      className="h-12 w-full rounded-xl border border-ink-200 bg-paper px-4 text-[14px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-600/15"
+                      className="h-12 w-full rounded-lg border border-ink-200 bg-paper px-4 text-[14px] text-ink-900 outline-none transition-all placeholder:text-ink-300 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-600/15"
                     />
                   </div>
                   <div className="flex items-end">

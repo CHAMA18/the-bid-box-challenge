@@ -44,7 +44,7 @@ type SearchSelectProps = {
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 const triggerCls =
-  "flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-ink-200 bg-white px-3.5 text-left text-[14px] outline-none transition-all hover:border-ink-300 focus-visible:border-brand-600 focus-visible:ring-4 focus-visible:ring-brand-600/10 dark:border-ink-800 dark:bg-night-2 dark:hover:border-ink-700";
+  "flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-ink-200 bg-white px-3.5 text-left text-[14px] outline-none transition-all hover:border-ink-300 focus-visible:border-brand-600 focus-visible:ring-4 focus-visible:ring-brand-600/10 dark:border-white/10 dark:bg-night-2 dark:hover:border-white/15";
 
 export function SearchSelect({
   value,
@@ -196,11 +196,11 @@ export function SearchSelect({
             exit={{ opacity: 0, y: openUp ? 4 : -4, scale: 0.985 }}
             transition={{ duration: 0.16, ease: EASE }}
             className={cn(
-              "absolute z-40 w-full overflow-hidden rounded-xl border border-ink-200 bg-white shadow-[0_24px_60px_rgba(11,12,15,0.16)] dark:border-ink-800 dark:bg-night-2 dark:shadow-[0_24px_60px_rgba(0,0,0,0.6)]",
+              "absolute z-40 w-full overflow-hidden rounded-lg border border-ink-200 bg-white shadow-[0_24px_60px_rgba(11,12,15,0.16)] dark:border-white/10 dark:bg-night-2 dark:shadow-[0_24px_60px_rgba(0,0,0,0.6)]",
               openUp ? "bottom-full mb-1.5" : "top-full mt-1.5",
             )}
           >
-            <div className="flex items-center gap-2 border-b border-ink-100 px-3 dark:border-ink-800">
+            <div className="flex items-center gap-2 border-b border-ink-100 px-3 dark:border-white/10">
               <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
               <input
                 autoFocus

@@ -268,6 +268,23 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const inputCls =
   "h-9 w-full rounded-lg border border-ink-200 bg-white px-2.5 text-[12.5px] text-ink-900 outline-none transition-shadow placeholder:text-ink-300 focus:border-ink-950 focus-visible:ring-2 focus-visible:ring-brand-500/30 dark:focus-visible:ring-brand-400/40";
 
+/* Plan-a-tender surfaces — a roomier, higher-contrast field set than the
+   shared inputCls, tuned for both themes (placeholders and hints must read). */
+const planInput =
+  "h-10 w-full rounded-xl border border-ink-300 bg-white px-3 text-[13px] text-ink-900 outline-none transition-[border-color,box-shadow] placeholder:text-ink-400 hover:border-ink-400 focus:border-ink-950 focus:ring-2 focus:ring-brand-500/20";
+
+function PlanField({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 flex items-baseline justify-between gap-2">
+        <span className="font-code text-[9px] font-bold tracking-[0.18em] text-ink-500">{label}</span>
+        {hint ? <span className="font-code text-[9px] tracking-[0.1em] text-ink-400">{hint}</span> : null}
+      </span>
+      {children}
+    </label>
+  );
+}
+
 function Btn({
   onClick,
   children,
@@ -708,71 +725,121 @@ export function CycleView({ onToast }: { user?: unknown; onToast: (m: string) =>
   const PipelineTab = (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card title="Plan a tender" sub="THE PIPELINE PRE-STAGES THE DESK — PACKS BEFORE ADVERTISEMENT">
-        <div className="grid gap-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="REFERENCE" hint="E.G. ZM-2027-014">
-              <input className={cn(inputCls, "font-code")} value={d.pipeRef ?? ""} onChange={(e) => set("pipeRef", e.target.value)} placeholder="ZM-2027-014" />
-            </Field>
-            <Field label="EXPECTED PUBLICATION">
-              <input className={inputCls} type="date" value={d.pipePub ?? ""} onChange={(e) => set("pipePub", e.target.value)} />
-            </Field>
+        <div className="grid gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <PlanField label="REFERENCE" hint="E.G. ZM-2027-014">
+              <input
+                className={cn(planInput, "font-code")}
+                value={d.pipeRef ?? ""}
+                onChange={(e) => set("pipeRef", e.target.value)}
+                placeholder="ZM-2027-014"
+                autoComplete="off"
+              />
+            </PlanField>
+            <PlanField label="EXPECTED PUBLICATION">
+              <input className={planInput} type="date" value={d.pipePub ?? ""} onChange={(e) => set("pipePub", e.target.value)} />
+            </PlanField>
           </div>
-          <Field label="TITLE">
-            <input className={inputCls} value={d.pipeTitle ?? ""} onChange={(e) => set("pipeTitle", e.target.value)} placeholder="Supply of iodised salt — provincial depots" />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="RESPONSIBLE OFFICE">
-              <select className={inputCls} value={d.pipeOffice ?? ""} onChange={(e) => set("pipeOffice", e.target.value)}>
-                <option value="">—</option>
-                {OFFICES.map((o) => (
-                  <option key={o} value={o}>
-                    {OFFICE_LABELS[o]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="BUDGET ESTIMATE">
-              <div className="flex gap-1.5">
-                <input className={inputCls} type="number" min={0} value={d.pipeEst ?? ""} onChange={(e) => set("pipeEst", e.target.value)} placeholder="25 000 000" />
+
+          <PlanField label="TITLE">
+            <input
+              className={planInput}
+              value={d.pipeTitle ?? ""}
+              onChange={(e) => set("pipeTitle", e.target.value)}
+              placeholder="Supply of iodised salt — provincial depots"
+              autoComplete="off"
+            />
+          </PlanField>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <PlanField label="RESPONSIBLE OFFICE">
+              <div className="relative">
+                <select
+                  className={cn(planInput, "cursor-pointer appearance-none pr-9")}
+                  value={d.pipeOffice ?? ""}
+                  onChange={(e) => set("pipeOffice", e.target.value)}
+                >
+                  <option value="">Select an office</option>
+                  {OFFICES.map((o) => (
+                    <option key={o} value={o}>
+                      {OFFICE_LABELS[o]}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" aria-hidden="true" />
               </div>
-            </Field>
+            </PlanField>
+            <PlanField label="BUDGET ESTIMATE">
+              <div className="relative">
+                <input
+                  className={cn(planInput, "tabular pr-14")}
+                  type="number"
+                  min={0}
+                  inputMode="decimal"
+                  value={d.pipeEst ?? ""}
+                  onChange={(e) => set("pipeEst", e.target.value)}
+                  placeholder="25 000 000"
+                />
+                {d.pipeCur ? (
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-code text-[10px] font-bold tracking-[0.12em] text-ink-500">
+                    {d.pipeCur}
+                  </span>
+                ) : null}
+              </div>
+            </PlanField>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-code text-[8px] font-bold tracking-[0.18em] text-ink-400">CURRENCY</span>
-            {CURRENCIES.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => set("pipeCur", d.pipeCur === c ? "" : c)}
-                aria-pressed={d.pipeCur === c}
-                className={cn(
-                  "rounded-full px-2 py-1 font-code text-[9px] font-bold tracking-[0.1em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40",
-                  d.pipeCur === c
-                    ? "bg-ink-950 text-white"
-                    : "border border-ink-200 text-ink-500 hover:border-ink-400 hover:text-ink-900",
-                )}
-              >
-                {c}
-              </button>
-            ))}
+
+          <div>
+            <span id="plan-currency-label" className="mb-1.5 block font-code text-[9px] font-bold tracking-[0.18em] text-ink-500">
+              CURRENCY
+            </span>
+            <div role="group" aria-labelledby="plan-currency-label" className="grid grid-cols-4 gap-1.5">
+              {CURRENCIES.map((c) => {
+                const on = d.pipeCur === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => set("pipeCur", on ? "" : c)}
+                    aria-pressed={on}
+                    className={cn(
+                      "h-9 rounded-lg border font-code text-[11px] font-bold tracking-[0.12em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40",
+                      on
+                        ? "border-ink-950 bg-ink-950 text-white dark:border-white dark:bg-white dark:text-[#0b0c0f]"
+                        : "border-ink-300 text-ink-600 hover:border-ink-400 hover:text-ink-950",
+                    )}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <Btn
-            className="mt-1 w-full"
+
+          <button
+            type="button"
             disabled={busy || !d.pipeRef || !d.pipeTitle}
             onClick={() =>
-              act("/api/pipeline", {
-                ref: d.pipeRef,
-                title: d.pipeTitle,
-                office: d.pipeOffice || undefined,
-                budgetEstimate: Number(d.pipeEst) || undefined,
-                currency: d.pipeCur || undefined,
-                expectedPublication: d.pipePub || undefined,
-              }, "PIPELINE ENTRY ADDED").then((ok) => ok && setD((p) => ({ ...p, pipeRef: "", pipeTitle: "", pipeEst: "", pipePub: "" })))
+              act(
+                "/api/pipeline",
+                {
+                  ref: d.pipeRef,
+                  title: d.pipeTitle,
+                  office: d.pipeOffice || undefined,
+                  budgetEstimate: Number(d.pipeEst) || undefined,
+                  currency: d.pipeCur || undefined,
+                  expectedPublication: d.pipePub || undefined,
+                },
+                "PIPELINE ENTRY ADDED",
+              ).then((ok) => ok && setD((p) => ({ ...p, pipeRef: "", pipeTitle: "", pipeEst: "", pipePub: "" })))
             }
+            className="mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-[13.5px] font-bold text-white shadow-[0_8px_20px_rgba(217,38,22,0.25)] transition-all hover:bg-brand-700 hover:shadow-[0_10px_26px_rgba(217,38,22,0.35)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:bg-ink-100 disabled:text-ink-400 disabled:shadow-none dark:bg-brand-500 dark:hover:bg-brand-400"
           >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add to pipeline
-          </Btn>
-          <p className="text-[10.5px] leading-relaxed text-ink-400">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add to pipeline
+          </button>
+
+          <p className="text-[11px] leading-relaxed text-ink-400">
             Planning here is free — the entry links to a live tender when its pack lands, and the cycle rail takes over from the pipeline.
           </p>
         </div>

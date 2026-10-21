@@ -8,40 +8,7 @@ import { cn } from "@/lib/utils";
 
 const TIERS = [
   {
-    name: "PILOT",
-    price: "$0",
-    per: "for your first three tenders",
-    blurb: "See a sourced report on your own portal before anything is signed.",
-    features: [
-      "3 tenders per month",
-      "2 portal connections",
-      "Sourced report + flag register",
-      "Community MCP tools",
-      "1 gate seat",
-    ],
-    cta: "Start a pilot",
-    href: "#get-started",
-    featured: false,
-  },
-  {
-    name: "COMMITTEE",
-    price: "$490",
-    per: "per month, billed to the institution",
-    blurb: "For the team that rules on tenders every week and answers for it in audit.",
-    features: [
-      "40 tenders per month",
-      "Every OCDS portal we speak",
-      "Custom document checklists",
-      "audit.json exports for oversight",
-      "Eval harness + pilot telemetry",
-      "5 gate seats",
-    ],
-    cta: "Request a walkthrough",
-    href: "#get-started",
-    featured: true,
-  },
-  {
-    name: "STATE",
+    name: "ENTERPRISE",
     price: "Custom",
     per: "on-prem, open weights, your jurisdiction",
     blurb: "For ministries and regulators with data-residency and integration mandates.",
@@ -88,7 +55,7 @@ export function Pricing() {
           </Reveal>
         </div>
 
-        <div className="mt-14 grid items-stretch gap-6 lg:grid-cols-3">
+        <div className="mt-14 grid items-stretch gap-6">
           {TIERS.map((tier, i) => (
             <Reveal key={tier.name} delay={0.08 * i} className="h-full">
               <Spotlight className="h-full rounded-3xl">

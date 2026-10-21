@@ -37,16 +37,16 @@ const EASE = [0.22, 1, 0.36, 1] as const;
  */
 const GOOGLE_DENIALS: Record<GoogleSignInDenial, string> = {
   "unauthorized-domain":
-    "Google sign-in can't run from this address yet — this deployment's domain isn't on the Firebase project's authorised list. It's a one-step console fix (Authentication → Settings → Authorised domains — see README); locally and after that, it works. Until then, sign in with your email and passphrase.",
+    "Google sign-in can't run from this address yet — this deployment's domain isn't on the Firebase project's authorised list. It's a one-step console fix (Authentication → Settings → Authorised domains — see README); locally and after that, it works. Until then, sign in with your email and password.",
   "provider-disabled":
-    "Google sign-in is switched off in the Firebase console (Authentication → Sign-in method). Use your email and passphrase.",
+    "Google sign-in is switched off in the Firebase console (Authentication → Sign-in method). Use your email and password.",
   "popup-blocked":
-    "Your browser blocked the sign-in window. Allow popups for this site and try again, or use your email and passphrase.",
+    "Your browser blocked the sign-in window. Allow popups for this site and try again, or use your email and password.",
   "popup-closed": "Google sign-in was cancelled before it finished. Try again when ready.",
-  timeout: "Google sign-in didn't finish in time. Try again, or use your email and passphrase.",
+  timeout: "Google sign-in didn't finish in time. Try again, or use your email and password.",
   network:
-    "Google sign-in couldn't reach the network. Check your connection, or use your email and passphrase.",
-  unknown: "Google sign-in is unavailable right now. Use your email and passphrase.",
+    "Google sign-in couldn't reach the network. Check your connection, or use your email and password.",
+  unknown: "Google sign-in is unavailable right now. Use your email and password.",
 };
 
 function deriveName(email: string): string {
@@ -540,7 +540,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
     const e: Record<string, string> = {};
     if (mode === "login") {
       if (!EMAIL_RE.test(values.email.trim())) e.email = "Enter your work email.";
-      if (values.password.length === 0) e.password = "Enter your passphrase.";
+      if (values.password.length === 0) e.password = "Enter your password.";
     }
     if (mode === "register") {
       if (values.name.trim().length < 2) e.name = "Enter your full name.";
@@ -876,6 +876,10 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                     exit={{ opacity: 0, y: -8, transition: { duration: 0.18 } }}
                     transition={{ duration: 0.22, ease: EASE }}
                   >
+                    <div className="mb-6">
+                      <ThemedLogo />
+                    </div>
+
                     {/* Door toggle — the organization door's segmented control */}
                     <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-ink-50 p-1 dark:bg-ink-900">
                       {(["register", "login"] as const).map((m) => (
@@ -1052,14 +1056,14 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                             )}
                           </AnimatePresence>
 
-                          <Field label="Passphrase" error={errors.password}>
+                          <Field label="Password" error={errors.password}>
                             <div className="relative">
                               <input
                                 id="auth-password"
                                 type={showPw ? "text" : "password"}
                                 value={values.password}
                                 onChange={(e) => set("password", e.target.value)}
-                                placeholder={mode === "register" ? "Create a passphrase" : "Your passphrase"}
+                                placeholder={mode === "register" ? "Create a password" : "Your password"}
                                 autoComplete={mode === "register" ? "new-password" : "current-password"}
                                 aria-invalid={!!errors.password}
                                 aria-describedby={errors.password ? "auth-password-error" : undefined}
@@ -1068,7 +1072,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                               <button
                                 type="button"
                                 onClick={() => setShowPw((v) => !v)}
-                                aria-label={showPw ? "Hide passphrase" : "Show passphrase"}
+                                aria-label={showPw ? "Hide password" : "Show password"}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 transition-colors hover:text-ink-700 dark:hover:text-white"
                               >
                                 {showPw ? (
@@ -1249,7 +1253,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                                               {resetEmail.trim()}
                                             </span>
                                             , a reset link is on its way. Open it, choose a new
-                                            passphrase, then come back and sign in — the link expires
+                                            password, then come back and sign in — the link expires
                                             in one hour.
                                           </p>
                                           <button

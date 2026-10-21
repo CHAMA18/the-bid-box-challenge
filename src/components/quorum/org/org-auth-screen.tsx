@@ -149,7 +149,7 @@ const PW_META = [
 ];
 
 const inputCls =
-  "h-11 w-full rounded-xl border border-ink-200 bg-white px-3.5 text-[14px] text-ink-950 outline-none transition-all placeholder:text-ink-300 focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 dark:border-ink-800 dark:bg-night-2 dark:text-white dark:placeholder:text-ink-500";
+  "h-11 w-full rounded-lg border border-ink-200 bg-white px-3.5 text-[14px] text-ink-950 outline-none transition-all placeholder:text-ink-300 focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 dark:border-white/10 dark:bg-night-2 dark:text-white dark:placeholder:text-ink-500";
 
 function Field({
   label,
@@ -171,7 +171,7 @@ function Field({
         {aside}
       </span>
       {children}
-      {error ? <span className="block text-[12px] font-medium text-brand-700 dark:text-brand-300">{error}</span> : null}
+      {error ? <span role="alert" className="block text-[12px] font-medium text-brand-700 dark:text-brand-300">{error}</span> : null}
     </label>
   );
 }
@@ -189,7 +189,7 @@ function PassphraseMeter({ password }: { password: string }) {
             key={i}
             className={cn(
               "h-1 flex-1 rounded-full transition-colors duration-300",
-              i < passed ? meta.seg : "bg-ink-100 dark:bg-ink-800",
+              i < passed ? meta.seg : "bg-ink-100 dark:bg-white/10",
             )}
           />
         ))}
@@ -380,7 +380,7 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
     if (n === 4) {
       if (!EMAIL_RE.test(form.email.trim())) e.email = "Enter a valid organization email.";
       if (form.password.length < 8) e.password = "Use at least 8 characters.";
-      if (form.confirm !== form.password) e.confirm = "The two passphrases do not match.";
+      if (form.confirm !== form.password) e.confirm = "The two passwords do not match.";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -463,9 +463,9 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
                 className={cn(
                   "w-full rounded-lg px-2 py-1.5 text-left transition-colors",
                   s.n === step
-                    ? "bg-ink-50 dark:bg-ink-900"
+                    ? "bg-ink-50 ring-1 ring-inset ring-ink-200 dark:bg-white/[0.07] dark:ring-white/10"
                     : s.n < step
-                      ? "hover:bg-ink-50 dark:hover:bg-ink-900"
+                      ? "hover:bg-ink-50 dark:hover:bg-white/[0.05]"
                       : "cursor-default",
                 )}
               >
@@ -477,7 +477,7 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
                         ? "bg-ink-950 text-white dark:bg-white dark:text-ink-950"
                         : s.n === step
                           ? "bg-brand-600 text-white"
-                          : "bg-ink-100 text-ink-400 dark:bg-ink-800",
+                          : "bg-ink-100 text-ink-400 dark:bg-white/10 dark:text-ink-300",
                     )}
                   >
                     {s.n < step ? <Check className="h-2.5 w-2.5" aria-hidden="true" /> : s.n}
@@ -491,7 +491,7 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
                     {s.label}
                   </span>
                 </span>
-                <span className="mt-0.5 block h-0.5 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
+                <span className="mt-0.5 block h-0.5 w-full overflow-hidden rounded-full bg-ink-100 dark:bg-white/10">
                   <span
                     className={cn("block h-full rounded-full transition-all duration-500", s.n <= step ? "bg-brand-600" : "bg-transparent")}
                     style={{ width: s.n <= step ? "100%" : "0%" }}
@@ -582,7 +582,7 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
                   <input className={inputCls} placeholder="Category registration number" value={form.regulatorNo} onChange={(e) => set("regulatorNo", e.target.value)} />
                 </Field>
               </div>
-              <p className="rounded-xl border border-ink-100 bg-sand px-3.5 py-2.5 text-[12px] leading-relaxed text-ink-600 dark:border-ink-800 dark:bg-night-2 dark:text-ink-400">
+              <p className="rounded-xl border border-ink-100 bg-sand px-3.5 py-2.5 text-[12px] leading-relaxed text-ink-600 dark:border-white/10 dark:bg-night-2 dark:text-ink-400">
                 These are the statutory fields public procurement asks bidders to hold. They are optional here — but a
                 complete profile is what the desk sees when your first application lands on the supplier register.
               </p>
@@ -635,7 +635,7 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
                         addCategory(categoryDraft);
                         setCategoryDraft("");
                       }}
-                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-ink-200 text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-ink-800"
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-ink-200 text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-white/10"
                       aria-label="Add category"
                     >
                       <Check className="h-4 w-4" aria-hidden="true" />
@@ -659,7 +659,7 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
                         key={s}
                         type="button"
                         onClick={() => addCategory(s)}
-                        className="rounded-full border border-dashed border-ink-300 px-2.5 py-1 text-[11.5px] text-ink-500 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-ink-700 dark:text-ink-400"
+                        className="rounded-full border border-dashed border-ink-300 px-2.5 py-1 text-[11.5px] text-ink-500 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-white/15 dark:text-ink-400"
                       >
                         + {s}
                       </button>
@@ -675,7 +675,7 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
               <Field label="Organization email (this is the login)" error={errors.email}>
                 <input autoFocus className={inputCls} type="email" autoComplete="email" placeholder="bids@organization.example" value={form.email} onChange={(e) => set("email", e.target.value)} />
               </Field>
-              <Field label="Passphrase" error={errors.password}>
+              <Field label="Password" error={errors.password}>
                 <div className="relative">
                   <input
                     className={cn(inputCls, "pr-11")}
@@ -685,18 +685,18 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
                     value={form.password}
                     onChange={(e) => set("password", e.target.value)}
                   />
-                  <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label={showPass ? "Hide passphrase" : "Show passphrase"}>
+                  <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label={showPass ? "Hide password" : "Show password"}>
                     {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </Field>
               <PassphraseMeter password={form.password} />
-              <Field label="Confirm passphrase" error={errors.confirm}>
-                <input className={inputCls} type="password" autoComplete="new-password" placeholder="Repeat the passphrase" value={form.confirm} onChange={(e) => set("confirm", e.target.value)} />
+              <Field label="Confirm password" error={errors.confirm}>
+                <input className={inputCls} type="password" autoComplete="new-password" placeholder="Repeat the password" value={form.confirm} onChange={(e) => set("confirm", e.target.value)} />
               </Field>
 
-              <div className="overflow-hidden rounded-xl border border-ink-100 dark:border-ink-800">
-                <p className="border-b border-ink-100 bg-sand px-3.5 py-2 font-code text-[9px] font-semibold tracking-[0.16em] text-ink-500 dark:border-ink-800 dark:bg-night-2 dark:text-ink-400">
+              <div className="overflow-hidden rounded-xl border border-ink-100 dark:border-white/10">
+                <p className="border-b border-ink-100 bg-sand px-3.5 py-2 font-code text-[9px] font-semibold tracking-[0.16em] text-ink-500 dark:border-white/10 dark:bg-night-2 dark:text-ink-400">
                   REVIEW — WHAT THE DESK WILL SEE
                 </p>
                 <dl className="divide-y divide-ink-50 dark:divide-ink-900">
@@ -725,7 +725,7 @@ function RegisterWizard({ onRegistered }: { onRegistered: (name: string) => void
           type="button"
           onClick={back}
           disabled={step === 1 || busy}
-          className="inline-flex h-11 items-center gap-1.5 rounded-xl px-4 text-[13.5px] font-semibold text-ink-600 transition-colors hover:bg-ink-50 disabled:opacity-40 dark:text-ink-300 dark:hover:bg-ink-900"
+          className="inline-flex h-11 items-center gap-1.5 rounded-xl px-4 text-[13.5px] font-semibold text-ink-600 transition-colors hover:bg-ink-50 disabled:cursor-not-allowed disabled:text-ink-300 dark:text-ink-300 dark:hover:bg-white/5 dark:disabled:text-ink-600"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back
         </button>
@@ -794,7 +794,7 @@ function OnTheRegister({ orgName, onEnter }: { orgName: string; onEnter: () => v
             <span>OPENING THE CONSOLE</span>
             <span>SESSION · HTTPONLY</span>
           </div>
-          <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
+          <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-ink-100 dark:bg-white/10">
             <motion.div
               initial={{ width: "4%" }}
               animate={{ width: "100%" }}
@@ -821,7 +821,7 @@ function OnTheRegister({ orgName, onEnter }: { orgName: string; onEnter: () => v
 
 function ErrorNote({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5 text-[13px] text-brand-800 dark:border-brand-900 dark:bg-brand-950/40 dark:text-brand-200">
+    <div role="alert" className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5 text-[13px] text-brand-800 dark:border-brand-900 dark:bg-brand-950/40 dark:text-brand-200">
       <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <div className="min-w-0">{children}</div>
     </div>
@@ -836,6 +836,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wrongPass, setWrongPass] = useState(false); // 401 — offer the reset door
+  const [capsOn, setCapsOn] = useState(false); // Caps Lock warning on the passphrase
   const [busy, setBusy] = useState(false);
 
   /* ── the reset flow's own state ── */
@@ -969,7 +970,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
     const fieldErrors: Record<string, string> = {};
     if (resetCode.replace(/[^A-Za-z0-9]/gi, "").length !== 8) fieldErrors.code = "Enter the 8-character reset code.";
     if (newPass.length < 8) fieldErrors.password = "Use at least 8 characters.";
-    if (confirmPass !== newPass) fieldErrors.confirm = "The two passphrases do not match.";
+    if (confirmPass !== newPass) fieldErrors.confirm = "The two passwords do not match.";
     setResetFieldErrors(fieldErrors);
     setResetError(null);
     if (Object.keys(fieldErrors).length > 0) return;
@@ -988,7 +989,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
       };
       if (!res.ok || !j.reset) {
         setResetFieldErrors(j.errors ?? {});
-        setResetError(j.error ?? "The passphrase could not be replaced — try again.");
+        setResetError(j.error ?? "The password could not be replaced — try again.");
         return;
       }
       setFlow("done");
@@ -1015,14 +1016,14 @@ function SignIn({ onDone }: { onDone: () => void }) {
             <input autoFocus className={inputCls} type="email" autoComplete="email" placeholder="bids@organization.example" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
           <Field
-            label="Passphrase"
+            label="Password"
             aside={
               <button
                 type="button"
                 onClick={openReset}
                 className="font-code text-[9.5px] font-semibold uppercase tracking-[0.16em] text-brand-700 transition-colors hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300"
               >
-                Forgot passphrase?
+                Forgot password?
               </button>
             }
           >
@@ -1031,14 +1032,22 @@ function SignIn({ onDone }: { onDone: () => void }) {
                 className={cn(inputCls, "pr-11")}
                 type={showPass ? "text" : "password"}
                 autoComplete="current-password"
-                placeholder="Your passphrase"
+                placeholder="Your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => setCapsOn(e.getModifierState("CapsLock"))}
+                onKeyUp={(e) => setCapsOn(e.getModifierState("CapsLock"))}
+                onBlur={() => setCapsOn(false)}
               />
-              <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label={showPass ? "Hide passphrase" : "Show passphrase"}>
+              <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label={showPass ? "Hide password" : "Show password"}>
                 {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+            {capsOn ? (
+              <span role="status" className="block text-[12px] font-medium text-brand-700 dark:text-brand-300">
+                Caps Lock is on — passwords are case-sensitive.
+              </span>
+            ) : null}
           </Field>
           {error ? (
             <ErrorNote>
@@ -1047,7 +1056,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
                 <>
                   {" "}
                   <button type="button" onClick={openReset} className="font-semibold underline underline-offset-2 hover:opacity-80">
-                    Forgot it? Reset the passphrase.
+                    Forgot it? Reset the password.
                   </button>
                 </>
               ) : null}
@@ -1137,7 +1146,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
                 <button
                   type="button"
                   onClick={() => void copyCode()}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 font-code text-[9px] font-semibold tracking-[0.16em] text-ink-600 transition-colors hover:bg-ink-50 dark:border-ink-700 dark:bg-night-2 dark:text-ink-300 dark:hover:bg-ink-900"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 font-code text-[9px] font-semibold tracking-[0.16em] text-ink-600 transition-colors hover:bg-ink-50 dark:border-white/15 dark:bg-night-2 dark:text-ink-300 dark:hover:bg-white/5"
                   aria-label="Copy the reset code"
                 >
                   {copied ? <Check className="h-3 w-3 text-ink-950 dark:text-white" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
@@ -1146,7 +1155,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
               </div>
               <p className="mt-2 text-[11.5px] leading-relaxed text-ink-500 dark:text-ink-400">
                 Shown once, here — this register keeps supplier credentials off third-party mail. Enter it below
-                together with the new passphrase.
+                together with the new password.
               </p>
             </div>
           ) : null}
@@ -1162,7 +1171,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
               onChange={(e) => setResetCode(e.target.value.toUpperCase())}
             />
           </Field>
-          <Field label="New passphrase" error={resetFieldErrors.password}>
+          <Field label="New password" error={resetFieldErrors.password}>
             <div className="relative">
               <input
                 className={cn(inputCls, "pr-11")}
@@ -1172,14 +1181,14 @@ function SignIn({ onDone }: { onDone: () => void }) {
                 value={newPass}
                 onChange={(e) => setNewPass(e.target.value)}
               />
-              <button type="button" onClick={() => setShowNewPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label={showNewPass ? "Hide new passphrase" : "Show new passphrase"}>
+              <button type="button" onClick={() => setShowNewPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label={showNewPass ? "Hide new password" : "Show new password"}>
                 {showNewPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
           </Field>
           <PassphraseMeter password={newPass} />
-          <Field label="Confirm passphrase" error={resetFieldErrors.confirm}>
-            <input className={inputCls} type="password" autoComplete="new-password" placeholder="Repeat the passphrase" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} />
+          <Field label="Confirm password" error={resetFieldErrors.confirm}>
+            <input className={inputCls} type="password" autoComplete="new-password" placeholder="Repeat the password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} />
           </Field>
 
           {resetError ? <ErrorNote>{resetError}</ErrorNote> : null}
@@ -1190,7 +1199,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
             className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-ink-950 text-[14px] font-semibold text-white shadow-[0_8px_20px_rgba(11,12,15,0.18)] transition-all hover:bg-brand-600 disabled:opacity-60"
           >
             {resetBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="h-4 w-4" aria-hidden="true" />}
-            Replace the passphrase
+            Replace the password
           </button>
           <button
             type="button"
@@ -1216,10 +1225,10 @@ function SignIn({ onDone }: { onDone: () => void }) {
             transition={{ type: "spring", stiffness: 240, damping: 16, delay: 0.12 }}
             className="mx-auto inline-block rounded-lg border-[3px] border-brand-600 px-5 py-2.5 shadow-[0_16px_40px_rgba(217,38,22,0.24)]"
           >
-            <p className="font-display text-[16px] font-black tracking-[0.1em] text-brand-600">PASSPHRASE REPLACED</p>
+            <p className="font-display text-[16px] font-black tracking-[0.1em] text-brand-600">PASSWORD REPLACED</p>
           </motion.div>
           <p className="text-[13.5px] leading-relaxed text-ink-600 dark:text-ink-300">
-            The new passphrase is live on the register and every open session for{" "}
+            The new password is live on the register and every open session for{" "}
             <span className="font-semibold text-ink-950 dark:text-white">{resetEmail}</span> was signed out —
             including any that was not yours.
           </p>
@@ -1229,7 +1238,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
             className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-ink-950 text-[14px] font-semibold text-white shadow-[0_8px_20px_rgba(11,12,15,0.18)] transition-all hover:bg-brand-600"
           >
             <UserRound className="h-4 w-4" aria-hidden="true" />
-            Sign in with the new passphrase
+            Sign in with the new password
           </button>
         </motion.div>
       )}
@@ -1381,11 +1390,11 @@ export function OrgAuthScreen() {
             </div>
 
             {registeredName ? (
-              <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_16px_48px_rgba(11,12,15,0.08)] sm:p-8 dark:border-ink-800 dark:bg-night-2">
+              <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_16px_48px_rgba(11,12,15,0.08)] sm:p-8 dark:border-white/10 dark:bg-night-2">
                 <OnTheRegister orgName={registeredName} onEnter={onDone} />
               </div>
             ) : existingOrg ? (
-              <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_16px_48px_rgba(11,12,15,0.08)] dark:border-ink-800 dark:bg-night-2">
+              <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_16px_48px_rgba(11,12,15,0.08)] dark:border-white/10 dark:bg-night-2">
                 <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-brand-700 dark:text-brand-400">SESSION ALREADY OPEN</p>
                 <p className="mt-2 text-[15px] font-semibold text-ink-950 dark:text-white">{existingOrg.name}</p>
                 <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
@@ -1395,18 +1404,22 @@ export function OrgAuthScreen() {
                   <button type="button" onClick={onDone} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-ink-950 text-[13.5px] font-semibold text-white transition-all hover:bg-brand-600">
                     Continue to console <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </button>
-                  <button type="button" onClick={() => setExistingOrg(null)} className="inline-flex h-10 items-center rounded-xl border border-ink-200 px-4 text-[13px] font-semibold text-ink-700 transition-colors hover:bg-ink-50 dark:border-ink-700 dark:text-ink-200 dark:hover:bg-ink-900">
+                  <button type="button" onClick={() => setExistingOrg(null)} className="inline-flex h-10 items-center rounded-xl border border-ink-200 px-4 text-[13px] font-semibold text-ink-700 transition-colors hover:bg-ink-50 dark:border-white/15 dark:text-ink-200 dark:hover:bg-white/5">
                     Use a different organization
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_16px_48px_rgba(11,12,15,0.08)] sm:p-8 dark:border-ink-800 dark:bg-night-2">
-                <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-ink-50 p-1 dark:bg-ink-900">
+              <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_16px_48px_rgba(11,12,15,0.08)] sm:p-8 dark:border-white/10 dark:bg-night-2">
+                <div className="mb-6">
+                  <ThemedLogo />
+                </div>
+                <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-ink-50 p-1 ring-1 ring-inset ring-ink-200 dark:bg-white/[0.04] dark:ring-white/10">
                   {(["register", "signin"] as const).map((m) => (
                     <button
                       key={m}
                       type="button"
+                      aria-pressed={mode === m}
                       onClick={() => setMode(m)}
                       className={cn(
                         "relative rounded-lg py-2.5 text-[13px] font-semibold transition-colors",

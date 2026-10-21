@@ -65,12 +65,12 @@ type Application = {
 type Tab = "overview" | "profile" | "opportunities" | "applications";
 
 const inputCls =
-  "h-11 w-full rounded-xl border border-ink-200 bg-white px-3.5 text-[14px] text-ink-950 outline-none transition-all placeholder:text-ink-300 focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 dark:border-ink-800 dark:bg-night-2 dark:text-white dark:placeholder:text-ink-500";
+  "h-11 w-full rounded-xl border border-ink-200 bg-white px-3.5 text-[14px] text-ink-950 outline-none transition-all placeholder:text-ink-300 focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 dark:border-white/10 dark:bg-night-2 dark:text-white dark:placeholder:text-ink-500";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="font-code text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-500 dark:text-ink-400">{label}</span>
+      <span className="font-code text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-500 dark:text-ink-500">{label}</span>
       {children}
       {hint ? <span className="block text-[11.5px] text-ink-400 dark:text-ink-500">{hint}</span> : null}
     </label>
@@ -168,7 +168,7 @@ function ApplyDialog({
         initial={{ opacity: 0, y: 18, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.26, ease: EASE }}
-        className="w-full max-w-[520px] overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_36px_90px_rgba(0,0,0,0.4)] dark:border-ink-800 dark:bg-night-2"
+        className="w-full max-w-[520px] overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_36px_90px_rgba(0,0,0,0.4)] dark:border-white/10 dark:bg-night-2"
       >
         {filed ? (
           <div className="space-y-4 p-7 text-center">
@@ -177,7 +177,7 @@ function ApplyDialog({
             </span>
             <div>
               <h3 className="text-[18px] font-bold text-ink-950 dark:text-white">Application on the record</h3>
-              <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-500 dark:text-ink-400">
+              <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-500 dark:text-ink-500">
                 Filed as <span className="font-code text-[12px] font-semibold text-brand-700 dark:text-brand-300">app · {filed.id}</span> and appended
                 to the procurement audit log for {tender.ref}. The desk sees it the moment it certifies the opening.
               </p>
@@ -188,7 +188,7 @@ function ApplyDialog({
           </div>
         ) : (
           <>
-            <div className="border-b border-ink-100 px-6 py-4 dark:border-ink-800">
+            <div className="border-b border-ink-100 px-6 py-4 dark:border-white/10">
               <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-brand-700 dark:text-brand-400">FILE AN APPLICATION</p>
               <h3 className="mt-1 text-[15.5px] font-bold leading-snug text-ink-950 dark:text-white">{tender.title}</h3>
               <p className="mt-1 font-code text-[10px] tracking-[0.12em] text-ink-400">
@@ -219,12 +219,12 @@ function ApplyDialog({
                   {error}
                 </div>
               ) : null}
-              <p className="rounded-xl border border-ink-100 bg-sand px-3.5 py-2.5 text-[12px] leading-relaxed text-ink-600 dark:border-ink-800 dark:bg-night dark:text-ink-400">
+              <p className="rounded-xl border border-ink-100 bg-sand px-3.5 py-2.5 text-[12px] leading-relaxed text-ink-600 dark:border-white/10 dark:bg-night dark:text-ink-500">
                 Filing is a real act: the application is refused after the closing date, refused if this organization
                 already has one on record for {tender.ref}, and your identity is attested by the portal — never typed in.
               </p>
               <div className="flex items-center justify-between gap-3 pt-1">
-                <button type="button" onClick={onClose} className="inline-flex h-11 items-center gap-1.5 rounded-xl px-4 text-[13.5px] font-semibold text-ink-600 transition-colors hover:bg-ink-50 dark:text-ink-300 dark:hover:bg-ink-900">
+                <button type="button" onClick={onClose} className="inline-flex h-11 items-center gap-1.5 rounded-xl px-4 text-[13.5px] font-semibold text-ink-600 transition-colors hover:bg-ink-50 dark:text-ink-600 dark:hover:bg-white/5">
                   Cancel
                 </button>
                 <button type="button" onClick={submit} disabled={busy} className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink-950 px-5 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(11,12,15,0.18)] transition-all hover:bg-brand-600 disabled:opacity-60">
@@ -360,17 +360,17 @@ function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOr
         </Field>
       </div>
 
-      <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-night-2">
-        <p className="mb-3.5 flex items-center gap-2 font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-400">
+      <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2">
+        <p className="mb-3.5 flex items-center gap-2 font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">
           <FileText className="h-3.5 w-3.5" aria-hidden="true" /> LEGAL IDENTITY — FIXED
         </p>
         <div className="space-y-3.5">
           <div>
-            <p className="text-[12px] text-ink-500 dark:text-ink-400">Registration number</p>
+            <p className="text-[12px] text-ink-500 dark:text-ink-500">Registration number</p>
             <p className="font-code text-[13px] font-semibold text-ink-950 dark:text-white">{org.registrationNo}</p>
           </div>
           <div>
-            <p className="text-[12px] text-ink-500 dark:text-ink-400">Login email</p>
+            <p className="text-[12px] text-ink-500 dark:text-ink-500">Login email</p>
             <p className="font-code text-[13px] font-semibold text-ink-950 dark:text-white">{org.email}</p>
           </div>
         </div>
@@ -380,7 +380,7 @@ function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOr
         </p>
       </div>
 
-      <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-400">
+      <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">
         STATUTORY RECORD — WHAT THE DESK VERIFIES
       </p>
       <div className="space-y-3.5">
@@ -422,7 +422,7 @@ function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOr
         </Field>
       </div>
 
-      <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-400">
+      <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">
         CONTACT &amp; PRESENCE — HOW THE DESK REACHES YOU
       </p>
       <div className="space-y-3.5">
@@ -471,7 +471,7 @@ function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOr
                 addCategory(categoryDraft);
                 setCategoryDraft("");
               }}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-ink-200 text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-ink-800"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-ink-200 text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-white/10"
               aria-label="Add category"
             >
               <Check className="h-4 w-4" aria-hidden="true" />
@@ -491,7 +491,7 @@ function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOr
           ) : null}
           <div className="flex flex-wrap gap-1.5">
             {CATEGORY_SUGGESTIONS.filter((s) => !form.categories.includes(s)).map((s) => (
-              <button key={s} type="button" onClick={() => addCategory(s)} className="rounded-full border border-dashed border-ink-300 px-2.5 py-1 text-[11.5px] text-ink-500 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-ink-700 dark:text-ink-400">
+              <button key={s} type="button" onClick={() => addCategory(s)} className="rounded-full border border-dashed border-ink-300 px-2.5 py-1 text-[11.5px] text-ink-500 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-white/15 dark:text-ink-500">
                 + {s}
               </button>
             ))}
@@ -531,6 +531,7 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [tenders, setTenders] = useState<Tender[] | null>(null);
   const [applications, setApplications] = useState<Application[] | null>(null);
+  const [applicationsError, setApplicationsError] = useState<string | null>(null);
   const [tenderError, setTenderError] = useState<string | null>(null);
   const [applying, setApplying] = useState<Tender | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -553,10 +554,16 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
   const loadApplications = useCallback(async () => {
     try {
       const res = await fetch("/api/org/applications", { cache: "no-store" });
-      const j = (await res.json().catch(() => ({}))) as { applications?: Application[] };
-      if (res.ok) setApplications(j.applications ?? []);
+      const j = (await res.json().catch(() => ({}))) as { applications?: Application[]; error?: string };
+      if (!res.ok) {
+        setApplicationsError(j.error ?? "Applications are not reachable right now.");
+        return;
+      }
+      setApplicationsError(null);
+      setApplications(j.applications ?? []);
     } catch {
-      /* keep the last snapshot */
+      /* keep the last snapshot; the next poll retries */
+      setApplicationsError("Applications are not reachable right now.");
     }
   }, []);
 
@@ -574,6 +581,16 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
       clearInterval(id);
     };
   }, [loadTenders, loadApplications]);
+
+  useEffect(() => {
+    /* Never leave the Applications tab on an endless skeleton: if the first
+       answer hasn't arrived after 12s, say so and keep retrying on the poll. */
+    if (applications !== null) return;
+    const t = setTimeout(() => {
+      setApplicationsError((prev) => prev ?? "Applications are taking too long to load.");
+    }, 12_000);
+    return () => clearTimeout(t);
+  }, [applications]);
 
   const signOut = async () => {
     await fetch("/api/org/auth/logout", { method: "POST" }).catch(() => undefined);
@@ -607,7 +624,7 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
   return (
     <div className="min-h-screen bg-paper dark:bg-night">
       {/* header */}
-      <header className="sticky top-0 z-40 border-b border-ink-100 bg-paper/85 backdrop-blur-xl dark:border-ink-800 dark:bg-night/85">
+      <header className="sticky top-0 z-40 border-b border-ink-100 bg-paper/85 backdrop-blur-xl dark:border-white/10 dark:bg-night/85">
         <div className="mx-auto flex h-[68px] w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-4">
             <span className="hidden dark:inline-flex">
@@ -616,7 +633,7 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
             <span className="dark:hidden">
               <QuorumLogo tagline={false} />
             </span>
-            <span className="hidden h-7 w-px bg-ink-200 sm:block dark:bg-ink-800" />
+            <span className="hidden h-7 w-px bg-ink-200 sm:block dark:bg-white/10" />
             <div className="hidden sm:block">
               <p className="font-code text-[9px] font-semibold tracking-[0.2em] text-brand-700 dark:text-brand-400">SUPPLIER PORTAL</p>
               <p className="max-w-[260px] truncate text-[14px] font-bold text-ink-950 dark:text-white">{org.name}</p>
@@ -626,18 +643,18 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
             <span
               className={cn(
                 "rounded-full px-2.5 py-1 font-code text-[9px] font-bold tracking-[0.16em]",
-                org.status === "ACTIVE" ? "bg-ink-100 text-ink-700 dark:bg-ink-800 dark:text-ink-200" : "bg-brand-600/10 text-brand-700 dark:text-brand-300",
+                org.status === "ACTIVE" ? "bg-ink-100 text-ink-700 dark:bg-white/10 dark:text-ink-700" : "bg-brand-600/10 text-brand-700 dark:text-brand-300",
               )}
             >
               {org.status}
             </span>
-            <Link href="/" className="hidden h-9 items-center rounded-full border border-ink-200 px-3.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700 sm:inline-flex dark:border-ink-700 dark:text-ink-300">
+            <Link href="/" className="hidden h-9 items-center rounded-full border border-ink-200 px-3.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700 sm:inline-flex dark:border-white/15 dark:text-ink-600">
               Officer desk <ArrowUpRight className="ml-1 h-3 w-3" aria-hidden="true" />
             </Link>
             <button
               type="button"
               onClick={signOut}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-ink-200 px-3.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-700 dark:border-ink-700 dark:text-ink-200"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-ink-200 px-3.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-700 dark:border-white/15 dark:text-ink-700"
             >
               <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
               Sign out
@@ -647,7 +664,7 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
       </header>
 
       {/* tab rail */}
-      <div className="sticky top-[68px] z-30 border-b border-ink-100 bg-paper/90 backdrop-blur-lg dark:border-ink-800 dark:bg-night/90">
+      <div className="sticky top-[68px] z-30 border-b border-ink-100 bg-paper/90 backdrop-blur-lg dark:border-white/10 dark:bg-night/90">
         <nav aria-label="Console sections" className="mx-auto flex w-full max-w-6xl gap-1 overflow-x-auto px-4 sm:px-6">
           {TABS.map((t) => (
             <button
@@ -662,7 +679,7 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
               <t.icon className="h-4 w-4" aria-hidden="true" />
               {t.label}
               {t.badge !== undefined ? (
-                <span className="rounded-full bg-ink-100 px-1.5 py-0.5 font-code text-[9px] font-bold text-ink-700 dark:bg-ink-800 dark:text-ink-200">{t.badge}</span>
+                <span className="rounded-full bg-ink-100 px-1.5 py-0.5 font-code text-[9px] font-bold text-ink-700 dark:bg-white/10 dark:text-ink-700">{t.badge}</span>
               ) : null}
               {tab === t.id ? <motion.span layoutId="org-tab-underline" className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-500" transition={{ duration: 0.24, ease: EASE }} /> : null}
             </button>
@@ -695,24 +712,24 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
             {tab === "overview" ? (
               <div className="grid gap-4 lg:grid-cols-3">
                 {/* profile completeness */}
-                <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-night-2 lg:col-span-2">
+                <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2 lg:col-span-2">
                   <div className="flex items-center justify-between gap-3">
                     <h2 className="text-[15.5px] font-bold text-ink-950 dark:text-white">Profile completeness</h2>
                     <span className="font-code text-[11px] font-bold text-ink-950 dark:text-white">
                       {profile.filled}/{profile.total}
                     </span>
                   </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink-100 dark:bg-ink-800">
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink-100 dark:bg-white/10">
                     <div className="h-full rounded-full bg-ink-950 transition-all duration-700" style={{ width: `${Math.round((profile.filled / profile.total) * 100)}%` }} />
                   </div>
                   {profile.missing.length > 0 ? (
                     <>
-                      <p className="mt-3 text-[13px] text-ink-500 dark:text-ink-400">
+                      <p className="mt-3 text-[13px] text-ink-500 dark:text-ink-500">
                         The desk reads a complete profile when your first application lands. Still missing:
                       </p>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {profile.missing.map((m) => (
-                          <button key={m} type="button" onClick={() => setTab("profile")} className="rounded-full border border-dashed border-ink-300 px-2.5 py-1 text-[11.5px] text-ink-500 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-ink-700 dark:text-ink-400">
+                          <button key={m} type="button" onClick={() => setTab("profile")} className="rounded-full border border-dashed border-ink-300 px-2.5 py-1 text-[11.5px] text-ink-500 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-white/15 dark:text-ink-500">
                             {m} — add
                           </button>
                         ))}
@@ -723,7 +740,7 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                       <CircleCheck className="h-4 w-4 text-brand-600" aria-hidden="true" /> Complete — the register sees everything it asks for.
                     </p>
                   )}
-                  <p className="mt-4 border-t border-ink-100 pt-3 text-[12px] leading-relaxed text-ink-400 dark:border-ink-800 dark:text-ink-500">
+                  <p className="mt-4 border-t border-ink-100 pt-3 text-[12px] leading-relaxed text-ink-400 dark:border-white/10 dark:text-ink-500">
                     Registered {fmtDate(org.createdAt)} · applications are attested as{" "}
                     <span className="font-code text-[11px] text-brand-700 dark:text-brand-300">org:{org.name}</span> and refused after each tender&apos;s closing date.
                   </p>
@@ -731,15 +748,15 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
 
                 {/* quick stats */}
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-night-2">
-                    <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-400">OPEN OPPORTUNITIES</p>
+                  <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2">
+                    <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">OPEN OPPORTUNITIES</p>
                     <p className="mt-1.5 text-[34px] font-black leading-none text-ink-950 dark:text-white">{tenders === null ? "…" : openTenders.length}</p>
                     <button type="button" onClick={() => setTab("opportunities")} className="mt-2 text-[12.5px] font-semibold text-brand-700 hover:underline dark:text-brand-300">
                       Browse the board →
                     </button>
                   </div>
-                  <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-night-2">
-                    <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-400">APPLICATIONS ON RECORD</p>
+                  <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2">
+                    <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">APPLICATIONS ON RECORD</p>
                     <p className="mt-1.5 text-[34px] font-black leading-none text-ink-950 dark:text-white">{applications === null ? "…" : applications.length}</p>
                     <button type="button" onClick={() => setTab("applications")} className="mt-2 text-[12.5px] font-semibold text-brand-700 hover:underline dark:text-brand-300">
                       Track them →
@@ -748,20 +765,20 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                 </div>
 
                 {/* recent applications */}
-                <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-night-2 lg:col-span-3">
+                <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2 lg:col-span-3">
                   <h2 className="text-[15.5px] font-bold text-ink-950 dark:text-white">Latest applications</h2>
                   {applications === null ? (
-                    <p className="mt-3 text-[13px] text-ink-400">Loading…</p>
+                    <p className="mt-3 text-[13px] text-ink-400">{applicationsError ?? "Loading…"}</p>
                   ) : applications.length === 0 ? (
-                    <div className="mt-3 rounded-xl border border-dashed border-ink-200 px-4 py-6 text-center dark:border-ink-700">
-                      <p className="text-[13.5px] font-semibold text-ink-700 dark:text-ink-200">Nothing filed yet</p>
+                    <div className="mt-3 rounded-xl border border-dashed border-ink-200 px-4 py-6 text-center dark:border-white/15">
+                      <p className="text-[13.5px] font-semibold text-ink-700 dark:text-ink-700">Nothing filed yet</p>
                       <p className="mt-1 text-[12.5px] text-ink-400">The first application lands on the register the moment you file it.</p>
                       <button type="button" onClick={() => setTab("opportunities")} className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-xl bg-ink-950 px-4 text-[12.5px] font-semibold text-white transition-all hover:bg-brand-600">
                         <ScrollText className="h-3.5 w-3.5" aria-hidden="true" /> Browse opportunities
                       </button>
                     </div>
                   ) : (
-                    <ul className="mt-3 divide-y divide-ink-50 dark:divide-ink-900">
+                    <ul className="mt-3 divide-y divide-ink-50 dark:divide-white/5">
                       {applications.slice(0, 3).map((a) => (
                         <li key={a.id} className="flex items-center justify-between gap-3 py-2.5">
                           <div className="min-w-0">
@@ -781,9 +798,9 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
 
             {tab === "profile" ? (
               <div className="mx-auto max-w-3xl space-y-4">
-                <div className="rounded-2xl border border-ink-100 bg-white p-6 dark:border-ink-800 dark:bg-night-2">
+                <div className="rounded-2xl border border-ink-100 bg-white p-6 dark:border-white/10 dark:bg-night-2">
                   <h2 className="text-[15.5px] font-bold text-ink-950 dark:text-white">Organization profile</h2>
-                  <p className="mt-1 text-[13px] leading-relaxed text-ink-500 dark:text-ink-400">
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-500 dark:text-ink-500">
                     This is the profile the desk and the supplier register see. Keep it true — the statutory fields are
                     what public procurement asks bidders to hold.
                   </p>
@@ -810,12 +827,12 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                 {tenders === null ? (
                   <div className="grid gap-4 sm:grid-cols-2">
                     {[0, 1, 2, 3].map((i) => (
-                      <div key={i} className="h-[172px] animate-pulse rounded-2xl border border-ink-100 bg-ink-50/60 dark:border-ink-800 dark:bg-ink-900/40" />
+                      <div key={i} className="h-[172px] animate-pulse rounded-2xl border border-ink-100 bg-ink-50/60 dark:border-white/10 dark:bg-white/[0.04]" />
                     ))}
                   </div>
                 ) : tenders.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-ink-200 px-6 py-14 text-center dark:border-ink-700">
-                    <p className="text-[14px] font-semibold text-ink-700 dark:text-ink-200">No tender packs are staged on the desk yet</p>
+                  <div className="rounded-2xl border border-dashed border-ink-200 px-6 py-14 text-center dark:border-white/15">
+                    <p className="text-[14px] font-semibold text-ink-700 dark:text-ink-700">No tender packs are staged on the desk yet</p>
                     <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-400">
                       Opportunities appear here the moment the procurement desk stages a tender pack. Nothing is invented
                       to fill this board — the empty state is the honest state.
@@ -827,17 +844,17 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                       const applied = appliedTenderIds.has(t.ref);
                       const closed = t.status === "CLOSED";
                       return (
-                        <div key={t.ref} className={cn("flex flex-col rounded-2xl border bg-white p-5 transition-shadow hover:shadow-[0_12px_36px_rgba(11,12,15,0.1)] dark:bg-night-2", closed ? "border-ink-100 opacity-75 dark:border-ink-800" : "border-ink-100 dark:border-ink-800")}>
+                        <div key={t.ref} className={cn("flex flex-col rounded-2xl border bg-white p-5 transition-shadow hover:shadow-[0_12px_36px_rgba(11,12,15,0.1)] dark:bg-night-2", closed ? "border-ink-100 opacity-75 dark:border-white/10" : "border-ink-100 dark:border-white/10")}>
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="font-code text-[9.5px] font-semibold tracking-[0.16em] text-brand-700 dark:text-brand-400">{t.ref}</p>
                               <h3 className="mt-1 text-[14.5px] font-bold leading-snug text-ink-950 dark:text-white">{t.title}</h3>
-                              <p className="mt-1 truncate text-[12.5px] text-ink-500 dark:text-ink-400">{t.buyer}</p>
+                              <p className="mt-1 truncate text-[12.5px] text-ink-500 dark:text-ink-500">{t.buyer}</p>
                             </div>
                             <span
                               className={cn(
                                 "shrink-0 rounded-full px-2.5 py-1 font-code text-[9px] font-bold tracking-[0.14em]",
-                                closed ? "bg-ink-100 text-ink-500 dark:bg-ink-800 dark:text-ink-400" : "bg-ink-950 text-white dark:bg-white dark:text-night",
+                                closed ? "bg-ink-100 text-ink-500 dark:bg-white/10 dark:text-ink-500" : "bg-ink-950 text-white dark:bg-white dark:text-night",
                               )}
                             >
                               {closed ? "CLOSED" : "OPEN"}
@@ -845,7 +862,7 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                           </div>
 
                           <div className="mt-3.5 space-y-1.5 text-[12.5px]">
-                            <p className="flex items-center gap-2 text-ink-600 dark:text-ink-300">
+                            <p className="flex items-center gap-2 text-ink-600 dark:text-ink-600">
                               <Clock className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
                               {t.closingKnown ? (
                                 <>
@@ -856,11 +873,11 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                                 <span className="italic text-ink-400">closing date not stated on the notice</span>
                               )}
                             </p>
-                            <p className="flex items-center gap-2 text-ink-600 dark:text-ink-300">
+                            <p className="flex items-center gap-2 text-ink-600 dark:text-ink-600">
                               <FileText className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
                               {t.budget} · {t.format}
                             </p>
-                            <p className="flex items-center gap-2 text-ink-600 dark:text-ink-300">
+                            <p className="flex items-center gap-2 text-ink-600 dark:text-ink-600">
                               <Building2 className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
                               {t.sector} · {t.applications} {t.applications === 1 ? "application" : "applications"} on record
                             </p>
@@ -868,11 +885,11 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
 
                           <div className="mt-auto pt-4">
                             {applied ? (
-                              <div className="flex h-10 items-center justify-center gap-2 rounded-xl bg-ink-100 text-[13px] font-bold text-ink-900 dark:bg-ink-800 dark:text-ink-100">
+                              <div className="flex h-10 items-center justify-center gap-2 rounded-xl bg-ink-100 text-[13px] font-bold text-ink-900 dark:bg-white/10 dark:text-ink-900">
                                 <CircleCheck className="h-4 w-4 text-brand-600" aria-hidden="true" /> Application on record
                               </div>
                             ) : closed ? (
-                              <div className="flex h-10 items-center justify-center rounded-xl border border-ink-100 text-[12.5px] font-semibold text-ink-400 dark:border-ink-800">
+                              <div className="flex h-10 items-center justify-center rounded-xl border border-ink-100 text-[12.5px] font-semibold text-ink-400 dark:border-white/10">
                                 Closed — late applications are refused
                               </div>
                             ) : (
@@ -891,11 +908,16 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
 
             {tab === "applications" ? (
               <div className="space-y-3.5">
+                {applicationsError ? (
+                  <div className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 dark:border-brand-900 dark:bg-brand-950/40 dark:text-brand-200">
+                    <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> {applicationsError} The list retries every few seconds.
+                  </div>
+                ) : null}
                 {applications === null ? (
-                  <div className="h-40 animate-pulse rounded-2xl border border-ink-100 bg-ink-50/60 dark:border-ink-800 dark:bg-ink-900/40" />
+                  applicationsError ? null : <div className="h-40 animate-pulse rounded-2xl border border-ink-100 bg-ink-50/60 dark:border-white/10 dark:bg-white/[0.04]" />
                 ) : applications.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-ink-200 px-6 py-14 text-center dark:border-ink-700">
-                    <p className="text-[14px] font-semibold text-ink-700 dark:text-ink-200">No applications on record yet</p>
+                  <div className="rounded-2xl border border-dashed border-ink-200 px-6 py-14 text-center dark:border-white/15">
+                    <p className="text-[14px] font-semibold text-ink-700 dark:text-ink-700">No applications on record yet</p>
                     <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-400">
                       File one from the opportunities board. Every application carries your organization&apos;s attested
                       identity and lands in the procurement audit log.
@@ -903,7 +925,7 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                   </div>
                 ) : (
                   applications.map((a) => (
-                    <div key={a.id} className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-night-2">
+                    <div key={a.id} className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-code text-[9.5px] font-semibold tracking-[0.16em] text-brand-700 dark:text-brand-400">{a.tenderId}</p>
@@ -911,12 +933,12 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                         </div>
                         <div className="text-right">
                           <p className="text-[15px] font-black text-ink-950 dark:text-white">{money(a.amount, a.currency)}</p>
-                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-ink-100 px-2.5 py-0.5 font-code text-[9px] font-bold tracking-[0.14em] text-ink-700 dark:bg-ink-800 dark:text-ink-200">
+                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-ink-100 px-2.5 py-0.5 font-code text-[9px] font-bold tracking-[0.14em] text-ink-700 dark:bg-white/10 dark:text-ink-700">
                             {a.status}
                           </span>
                         </div>
                       </div>
-                      {a.coverNote ? <p className="mt-3 border-t border-ink-50 pt-3 text-[13px] leading-relaxed text-ink-600 dark:border-ink-900 dark:text-ink-300">{a.coverNote}</p> : null}
+                      {a.coverNote ? <p className="mt-3 border-t border-ink-50 pt-3 text-[13px] leading-relaxed text-ink-600 dark:border-white/5 dark:text-ink-600">{a.coverNote}</p> : null}
                       <p className="mt-3 font-code text-[9.5px] tracking-[0.14em] text-ink-400">
                         {a.id} · filed {fmtDate(a.receivedAt)} · attested as org:{a.orgName}
                       </p>

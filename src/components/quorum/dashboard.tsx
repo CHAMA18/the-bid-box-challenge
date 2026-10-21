@@ -7912,12 +7912,12 @@ function RunsView({
       sub="Every file the agent has opened — live, queued, at a gate or decided. Expand an evaluation for its top findings and its audit trail."
     >
       <div className="grid grid-cols-1 gap-4 sm:gap-6">
-        <div className="min-w-0">
-          <RunRegister runs={runs} query={query} onQuery={onQuery} filter={filter} onFilter={onFilter} onToast={onToast} notes={notes} />
-        </div>
         <div className="grid content-start gap-4 sm:grid-cols-2 sm:gap-6">
           <NewRunCard onNewRun={onNewRun} />
           <StandingRuleCard />
+        </div>
+        <div className="min-w-0">
+          <RunRegister runs={runs} query={query} onQuery={onQuery} filter={filter} onFilter={onFilter} onToast={onToast} notes={notes} />
         </div>
       </div>
     </ViewShell>

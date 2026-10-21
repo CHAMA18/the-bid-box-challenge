@@ -45,11 +45,25 @@ export function SiteHeader({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Lock body scroll when the mobile menu is open
+  // Lock body scroll while the mobile menu is open. Close it on Escape and
+  // when the viewport grows to the desktop layout, so a resize never leaves
+  // the page stuck with scrolling disabled.
   useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
+    if (!open) return;
+    document.body.style.overflow = "hidden";
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onDesktop = () => {
+      if (desktop.matches) setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    desktop.addEventListener("change", onDesktop);
     return () => {
       document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+      desktop.removeEventListener("change", onDesktop);
     };
   }, [open]);
 
@@ -120,24 +134,17 @@ export function SiteHeader({
           ) : (
             <>
               <Link
-                href="/org"
-                className="inline-flex h-10 items-center rounded-full px-4 text-[13.5px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-600/10 hover:text-emerald-800 dark:text-emerald-400"
+                href="/org/dashboard"
+                className="inline-flex h-10 items-center rounded-full px-5 text-[13.5px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-600/10 hover:text-emerald-800 dark:text-emerald-400"
               >
-                For suppliers
+                Supplier
               </Link>
               <button
                 type="button"
-                onClick={onSignIn}
-                className="inline-flex h-10 items-center rounded-full px-4 text-[13.5px] font-semibold text-ink-700 transition-colors hover:bg-ink-50 hover:text-ink-950"
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                onClick={onGetStarted}
+                onClick={onDashboard}
                 className="group inline-flex h-10 items-center gap-1.5 rounded-full bg-brand-600 px-5 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700 hover:shadow-[0_10px_26px_rgba(217,38,22,0.36)]"
               >
-                Get started
+                Quorum
                 <ArrowUpRight
                   className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
                   aria-hidden="true"
@@ -152,6 +159,7 @@ export function SiteHeader({
           className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink-200 bg-white text-ink-900 lg:hidden"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
+          aria-controls="mobile-menu"
           aria-label={open ? "Close menu" : "Open menu"}
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -161,6 +169,7 @@ export function SiteHeader({
       <AnimatePresence>
         {open && (
           <motion.div
+            id="mobile-menu"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
