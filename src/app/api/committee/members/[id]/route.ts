@@ -18,11 +18,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params;
     const token = req.cookies.get(SESSION_COOKIE)?.value;
     const user = await getUserFromToken(token).catch(() => null);
+    if (!user) {
+      /* Committee records carry the officer's name — an anonymous write has
+         no name to carry, so it is refused rather than filed as "unknown". */
+      return NextResponse.json({ error: "Sign in to make changes — committee records carry the officer's name." }, { status: 401 });
+    }
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
     const out = await updateCommitteeMemberById(
       id,
-      { status: body.status, isChair: body.isChair, role: body.role },
+      { status: body.status, isChair: body.isChair, role: body.role, office: body.office },
       user,
     );
     if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.code });
@@ -38,6 +43,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const token = req.cookies.get(SESSION_COOKIE)?.value;
     const user = await getUserFromToken(token).catch(() => null);
+    if (!user) {
+      /* Committee records carry the officer's name — an anonymous write has
+         no name to carry, so it is refused rather than filed as "unknown". */
+      return NextResponse.json({ error: "Sign in to make changes — committee records carry the officer's name." }, { status: 401 });
+    }
 
     const out = await removeCommitteeMemberById(id, user);
     if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.code });

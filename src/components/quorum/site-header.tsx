@@ -119,6 +119,12 @@ export function SiteHeader({
             </>
           ) : (
             <>
+              <Link
+                href="/org"
+                className="inline-flex h-10 items-center rounded-full px-4 text-[13.5px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-600/10 hover:text-emerald-800 dark:text-emerald-400"
+              >
+                For suppliers
+              </Link>
               <button
                 type="button"
                 onClick={onSignIn}
@@ -215,13 +221,21 @@ export function SiteHeader({
                 </div>
               ) : (
                 <>
+                  <Link
+                    href="/org"
+                    onClick={() => setOpen(false)}
+                    className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-emerald-600/40 bg-emerald-600/10 text-[15px] font-semibold text-emerald-800 dark:text-emerald-300"
+                  >
+                    Supplier portal — for organizations
+                    <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
                   <button
                     type="button"
                     onClick={() => {
                       setOpen(false);
                       onGetStarted();
                     }}
-                    className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white"
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white"
                   >
                     Get started
                     <ArrowUpRight className="h-4 w-4" aria-hidden="true" />

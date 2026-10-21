@@ -9,6 +9,7 @@ import {
   BookOpen,
   Building2,
   Cable,
+  CalendarClock,
   Check,
   ChevronDown,
   CircleAlert,
@@ -18,6 +19,7 @@ import {
   Database,
   Download,
   Eye,
+  FileSignature,
   FileText,
   FileUp,
   Files,
@@ -46,9 +48,11 @@ import {
   Users,
   UserPlus,
   Video,
+  Workflow,
   X,
   type LucideIcon,
 } from "lucide-react";
+import { CycleView } from "@/components/quorum/cycle-view";
 import { QuorumLogo } from "@/components/quorum/logo";
 import { StackConsole } from "@/components/quorum/stack-console";
 import { TenderPackPreview, type TenderPackRow } from "@/components/quorum/tender-pack-preview";
@@ -85,6 +89,10 @@ type McRun = {
   unsourced: number;
   status: RunStatus;
   startedAt: string;
+  /* The REAL seal from the sidecar — the executed gate's receipt hash, a
+     sha-256 of the sealed bundle. Null until the gate signs. */
+  seal?: string | null;
+  sealedBy?: string | null;
   /* Documents ingested at launch — set when the run was briefed
      through the guided wizard (seeded runs have no pack attached). */
   docs?: number;
@@ -98,6 +106,8 @@ type GateItem = {
   value: string;
   flags: number;
   ago: string;
+  tool: string;
+  requiredOffice?: string;
 };
 
 type LedgerRow = { tender: string; action: "AWARDED" | "RETURNED"; by: string; at: string };
@@ -112,16 +122,52 @@ type BackendRun = {
   startedAt: string;
   findings: { id: string; rule: string; item: string; citation: string }[];
   gateId?: string;
+  seal?: string | null;
+  sealedBy?: string | null;
 };
 
 type BackendGate = {
   id: string;
   tenderId: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "EXECUTED";
+  tool?: string;
+  requiredOffice?: string;
   inputs: { bidder?: string; value?: string; findings?: string[] };
   createdAt: string;
   decidedAt?: string;
   approver?: string;
+};
+
+/* What each gate kind is called at the desk — the queue renders it on the card. */
+const GATE_TOOL_LABEL: Record<string, string> = {
+  file_gate_submission: "Filing",
+  record_bid_opening: "Bid opening register",
+  certify_evaluation: "Evaluation matrix",
+  resolve_alb: "ALB resolution",
+  sign_award_report: "Award report",
+  publish_award_notice: "Notice of award",
+  issue_debrief: "Debrief letter",
+  sign_contract_pack: "Contract pack",
+  approve_variation: "Contract variation",
+  certify_payment: "Payment certification",
+  record_contract_completion: "Contract completion",
+  respond_complaint: "Complaint response",
+  publish_notice: "Tender notice",
+};
+
+const OFFICE_SHORT: Record<string, string> = {
+  PROCUREMENT_UNIT: "PROCUREMENT UNIT",
+  EVALUATION_COMMITTEE: "EVALUATION COMMITTEE",
+  ACCOUNTING_OFFICER: "ACCOUNTING OFFICER",
+  OVERSIGHT: "OVERSIGHT",
+};
+
+const MEMBER_OFFICES = ["PROCUREMENT_UNIT", "EVALUATION_COMMITTEE", "ACCOUNTING_OFFICER", "OVERSIGHT"] as const;
+const MEMBER_OFFICE_LABELS: Record<string, string> = {
+  PROCUREMENT_UNIT: "Procurement unit",
+  EVALUATION_COMMITTEE: "Evaluation committee",
+  ACCOUNTING_OFFICER: "Accounting officer",
+  OVERSIGHT: "Oversight / audit",
 };
 
 const RUN_STATUS: Record<BackendRun["status"], RunStatus> = {
@@ -226,6 +272,8 @@ function useMissionData() {
           unsourced: r.findings.length - citations,
           status: RUN_STATUS[r.status],
           startedAt: clockOf(r.startedAt),
+          seal: r.seal ?? null,
+          sealedBy: r.sealedBy ?? null,
         };
       }),
     [rawRuns, registry]
@@ -243,6 +291,8 @@ function useMissionData() {
           value: g.inputs.value ?? "—",
           flags: g.inputs.findings?.length ?? 0,
           ago: clockOf(g.createdAt),
+          tool: g.tool ?? "file_gate_submission",
+          ...(g.requiredOffice ? { requiredOffice: g.requiredOffice } : {}),
         })),
     [rawGates, registry]
   );
@@ -283,9 +333,6 @@ function useMissionData() {
   return { runs, queue, ledger, verdicts, findings, notes, reachable, refresh };
 }
 
-const SPARK_A = [40, 62, 34, 78, 52, 70, 44, 88, 58, 74, 48, 84];
-const SPARK_B = [55, 40, 70, 46, 82, 60, 38, 74, 50, 66, 42, 90];
-
 /* Grouped navigation — the options that fit an agentic procurement
    workspace: command the mission, inspect the evidence, sit as the
    committee, govern the system. */
@@ -293,6 +340,7 @@ type SectionId =
   | "mc-overview"
   | "mc-runs"
   | "mc-gates"
+  | "mc-cycle"
   | "mc-activity"
   | "mc-findings"
   | "mc-reports"
@@ -318,6 +366,7 @@ const NAV_GROUPS: {
       { id: "mc-overview", label: "Overview", icon: Gauge },
       { id: "mc-runs", label: "Evaluations", icon: Terminal, badge: "runs" },
       { id: "mc-gates", label: "Approvals", icon: Stamp, badge: "gates" },
+      { id: "mc-cycle", label: "Tender cycle", icon: Workflow },
       { id: "mc-activity", label: "Live activity", icon: Radio },
     ],
   },
@@ -502,7 +551,7 @@ function AgentStatusBadge({ mode, className }: { mode: AgentMode; className?: st
 
 /* ── Agent feed terminal ─────────────────────────────────────────────────── */
 
-type FeedKind = "cmd" | "step" | "ok" | "gate";
+type FeedKind = "step" | "ok" | "gate";
 type FeedLine = { text: string; kind: FeedKind };
 type LiveLogEntry = { tool?: string; status?: string; kind?: string; runId?: string };
 
@@ -564,13 +613,11 @@ function AgentFeed() {
           <p
             key={`${i}-${line.text}`}
             className={cn(
-              line.kind === "cmd" && "text-ink-200",
               line.kind === "step" && "text-ink-400",
               line.kind === "ok" && "font-semibold text-white",
               line.kind === "gate" && "text-brand-300"
             )}
           >
-            {line.kind === "cmd" && <span className="mr-2 text-brand-400">$</span>}
             {line.text}
           </p>
         ))}
@@ -645,7 +692,9 @@ function StatCard({
   value: number;
   suffix?: string;
   sub: string;
-  spark: number[];
+  /* Optional: only rendered when real trend data exists — never a constant
+     standing in for data the system does not have. */
+  spark?: number[];
   featured?: boolean;
   pulse?: boolean;
   delay: number;
@@ -684,7 +733,7 @@ function StatCard({
           <p className={cn("font-code text-[8.5px] leading-[1.7] tracking-[0.14em]", featured ? "text-ink-400" : "text-ink-400")}>
             {sub}
           </p>
-          <Spark data={spark} tone={featured ? "brand" : "ink"} />
+          {spark && <Spark data={spark} tone={featured ? "brand" : "ink"} />}
         </div>
       </div>
     </motion.div>
@@ -2030,7 +2079,7 @@ function RunRegister({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const log = `quorum audit — ${run.id} — ${run.findings} findings · ${run.citations} citations · sha256 ${shaTag(run.id)}`;
+                                  const log = `quorum audit — ${run.id} — ${run.findings} findings · ${run.citations} citations · ${sealText(run)}`;
                                   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(log).catch(() => undefined);
                                   onToast("AUDIT TRAIL COPIED TO CLIPBOARD");
                                 }}
@@ -2146,6 +2195,11 @@ function GateQueue({
                   <div className="min-w-0">
                     <p className="font-code text-[9.5px] font-bold tracking-[0.1em] text-ink-950">{g.tender}</p>
                     <p className="mt-0.5 truncate text-[13.5px] font-semibold text-ink-800">{g.title}</p>
+                    <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-ink-950 px-2 py-0.5 font-code text-[7.5px] font-bold tracking-[0.14em] text-white">
+                      <Stamp className="h-2.5 w-2.5" aria-hidden="true" />
+                      {GATE_TOOL_LABEL[g.tool] ?? g.tool}
+                      {g.requiredOffice ? ` · ${OFFICE_SHORT[g.requiredOffice] ?? g.requiredOffice}` : ""}
+                    </p>
                   </div>
                   {g.flags > 0 && (
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-50 px-2 py-1 font-code text-[8.5px] font-bold tracking-[0.1em] text-brand-700">
@@ -2857,7 +2911,7 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
               <div>
                 <h2 className="font-display text-[17px] font-black tracking-[-0.01em] text-ink-950">All findings</h2>
                 <p className="mt-0.5 font-code text-[8.5px] tracking-[0.2em] text-ink-400">
-                  {rows.length} FLAGS · {open} OPEN · 0 UNSOURCED
+                  {rows.length} FLAGS · {open} OPEN · {rows.filter((x) => !x.src).length} UNSOURCED
                 </p>
               </div>
               <div data-tour="findings-filters" className="flex items-center gap-1.5" role="group" aria-label="Filter findings by status">
@@ -2981,25 +3035,24 @@ function FindingsView({ rows, onOpenRun }: { rows: FindingRow[]; onOpenRun: () =
 
 /* ── Report packs ────────────────────────────────────────────────────────── */
 
-function shaTag(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  const a = h.toString(16).padStart(8, "0").slice(0, 4);
-  const b = (h >>> 7).toString(16).padStart(4, "0").slice(-4);
-  return `${a}…${b}`;
+/* The REAL seal comes from the sidecar — the executed gate's receipt hash, a
+   sha-256 of the sealed bundle computed by the filing graph. Nothing in the
+   UI synthesizes a hash; until the gate signs, the pack says so. */
+function sealText(run: Pick<McRun, "seal">): string {
+  return run.seal ? `seal ${run.seal}` : "unsealed — seals at the gate";
 }
 
-/* The sealed pack leaves the desk as a real file — the evidence, portable. */
+/* The sealed pack leaves the desk as a real file — the evidence, portable.
+   Every number on it is real: the size is this file's own byte length, the
+   seal is the sidecar's receipt hash. Nothing is estimated. */
 function packMarkdown(run: McRun, findings: SeedFinding[], verdict: "AWARDED" | "RETURNED" | null): string {
-  const pages = 58 + run.citations * 9;
-  const size = (2.4 + run.findings * 1.6).toFixed(1);
   const lines = [
     `# Quorum — committee pack · ${run.id}`,
     "",
     `- Run record: ${run.uid ?? run.id}`,
     `- Status: SEALED${verdict ? ` · ${verdict}` : " AT THE GATE"}`,
     `- Findings: ${run.findings} · Citations: ${run.citations} · Unsourced: ${run.unsourced}`,
-    `- Extent: ~${pages} pages · ${size} MB · sha256 ${shaTag(run.id)}`,
+    `- ${run.seal ? `Seal: ${run.seal}` : "Seal: pending gate signature"}${run.sealedBy ? ` · signed by ${run.sealedBy}` : ""}`,
     "",
     "## Sourced findings",
     ...(findings.length
@@ -3010,6 +3063,9 @@ function packMarkdown(run: McRun, findings: SeedFinding[], verdict: "AWARDED" | 
     "- Every finding above cites the page, clause or registry ID it was read from.",
     `- Decision: ${verdict ? `${verdict} — signed at the gate.` : "seals at the gate."}`,
   ];
+  const base = lines.join("\n");
+  const kb = (new TextEncoder().encode(base).length / 1024).toFixed(1);
+  lines.push("", `- Pack size: ${kb} KB as downloaded · verify the seal against the audit log (Tools & models).`);
   return lines.join("\n");
 }
 
@@ -3067,8 +3123,6 @@ function PackPreviewModal({
 
   const rows = useMemo(() => (run ? findings.filter((f) => f.run === run.id) : []), [run, findings]);
   const shown = rows.slice(0, 5);
-  const pages = run ? 58 + run.citations * 9 : 0;
-  const size = run ? (2.4 + run.findings * 1.6).toFixed(1) : "0";
 
   return (
     <AnimatePresence>
@@ -3151,8 +3205,8 @@ function PackPreviewModal({
                   {[
                     { k: "FINDINGS", v: String(run.findings), tone: "text-ink-950" },
                     { k: "CITED", v: String(run.citations), tone: "text-ink-950" },
-                    { k: "UNSOURCED", v: "0", tone: "text-brand-700" },
-                    { k: "EXTENT", v: `~${pages} pp`, tone: "text-ink-950" },
+                    { k: "UNSOURCED", v: String(run.unsourced), tone: "text-brand-700" },
+                    { k: "SEAL", v: run.seal ? `${run.seal.slice(0, 10)}…` : "PENDING", tone: "text-ink-950" },
                   ].map((cell) => (
                     <div key={cell.k}>
                       <dt className="font-code text-[7.5px] tracking-[0.18em] text-ink-400">{cell.k}</dt>
@@ -3161,7 +3215,8 @@ function PackPreviewModal({
                   ))}
                 </dl>
                 <p className="mt-3 font-code text-[8px] tracking-[0.14em] text-ink-400">
-                  SIZE ~{size} MB · sha256 {shaTag(run.id)}
+                  {sealText(run).toUpperCase()}
+                  {run.sealedBy ? ` · BY ${run.sealedBy.toUpperCase()}` : ""}
                 </p>
 
                 <p className="mt-5 font-code text-[8.5px] font-bold tracking-[0.22em] text-ink-950">THE PACK BINDS</p>
@@ -3179,8 +3234,8 @@ function PackPreviewModal({
                     },
                     {
                       n: "03",
-                      t: `Audit hash · sha256 ${shaTag(run.id)}`,
-                      d: "covers every page of the sealed file.",
+                      t: run.seal ? `Audit seal · ${run.seal}` : "Audit seal · applied at the gate",
+                      d: "a sha-256 of the sealed bundle — verify it against the audit log.",
                     },
                     {
                       n: "04",
@@ -3303,6 +3358,43 @@ function ReportPacksView({
   /* Stable close — the dialog's Escape listener must not churn as polls land. */
   const closePreview = useCallback(() => setPreview(null), []);
 
+  /* Real, auditable pack binding: the request lands in the sidecar's
+     append-only log with the attested actor, and the latest event is
+     restored from the log on mount — the log IS the record. */
+  const [binding, setBinding] = useState<{ queuedAt: string; by?: string } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/log?limit=200&XTransformPort=3031")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { entries?: { tool?: string; outputs?: { queuedAt?: string }; actor?: string }[] } | null) => {
+        if (!alive) return;
+        const hit = (j?.entries ?? []).find((e) => e.tool === "pack_binding" && e.outputs?.queuedAt);
+        if (hit?.outputs?.queuedAt) setBinding({ queuedAt: hit.outputs.queuedAt, by: hit.actor });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const queueBinding = () => {
+    fetch("/api/pack-binding?XTransformPort=3031", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    })
+      .then(async (r) => {
+        if (r.status === 401) {
+          onToast("SIGN IN FIRST — BINDING IS RECORDED IN THE AUDIT LOG");
+          return;
+        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = (await r.json()) as { queuedAt: string; by?: string };
+        setBinding(j);
+        onToast(`PACK BINDING QUEUED — ${new Date(j.queuedAt).toLocaleTimeString()} · IN THE AUDIT LOG`);
+      })
+      .catch(() => onToast("BINDING FAILED — AGENT SERVICE UNREACHABLE"));
+  };
+
   return (
     <>
     <ViewShell
@@ -3322,13 +3414,19 @@ function ReportPacksView({
           </div>
           <button
             type="button"
-            onClick={() => onToast("COMMITTEE PACK BINDING QUEUED — READY BEFORE THE SITTING")}
+            onClick={queueBinding}
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-4 font-code text-[9px] font-bold tracking-[0.18em] text-white transition-colors hover:bg-brand-700"
           >
             <Files className="h-3.5 w-3.5" aria-hidden="true" />
             QUEUE BINDING
           </button>
         </div>
+        {binding && (
+          <p className="relative mt-3 border-t border-white/10 pt-2.5 font-code text-[8px] tracking-[0.16em] text-ink-400">
+            BINDING QUEUED {new Date(binding.queuedAt).toLocaleString().toUpperCase()}
+            {binding.by ? ` · BY ${binding.by.toUpperCase()}` : ""} · RECORDED IN THE AUDIT LOG
+          </p>
+        )}
       </div>
 
       <div data-tour="reports-list" className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:grid-cols-2">
@@ -3341,8 +3439,6 @@ function ReportPacksView({
               : v === "RETURNED"
                 ? "RETURNED — RE-FILED AFTER CLARIFICATION"
                 : null;
-          const pages = 58 + run.citations * 9;
-          const size = (2.4 + run.findings * 1.6).toFixed(1);
           const packFindings = findings.filter((f) => f.run === run.id);
           return (
             <motion.article
@@ -3381,11 +3477,11 @@ function ReportPacksView({
                 </div>
                 <div>
                   <dt className="text-ink-300">UNSOURCED</dt>
-                  <dd className="mt-1 text-[13px] font-bold text-brand-700 tabular">0</dd>
+                  <dd className="mt-1 text-[13px] font-bold text-brand-700 tabular">{run.unsourced}</dd>
                 </div>
               </dl>
               <p className="mt-3 font-code text-[7.5px] leading-[1.9] tracking-[0.14em] text-ink-400">
-                PAGES ~{pages} · SIZE {size} MB · sha256 {shaTag(run.id)}
+                {sealText(run).toUpperCase()}
                 {decision && (
                   <>
                     <br />
@@ -3424,7 +3520,7 @@ function ReportPacksView({
                   type="button"
                   onClick={() => {
                     if (navigator.clipboard?.writeText)
-                      navigator.clipboard.writeText(`quorum audit — ${run.id} — sha256 ${shaTag(run.id)}`).catch(() => undefined);
+                      navigator.clipboard.writeText(`quorum audit — ${run.id} — ${sealText(run)}`).catch(() => undefined);
                     onToast("AUDIT TRAIL COPIED TO CLIPBOARD");
                   }}
                   aria-label={`Copy audit trail for ${run.id}`}
@@ -4212,7 +4308,14 @@ type CommitteeData = {
   required: number;
   present: number;
   open: number;
-  members: { id: string; name: string; role: string; isChair: boolean; status: "PRESENT" | "EXCUSED" }[];
+  members: {
+    id: string;
+    name: string;
+    role: string;
+    isChair: boolean;
+    status: "PRESENT" | "EXCUSED";
+    office?: string;
+  }[];
   you: { name: string } | null;
   lastSummonsAt: string | null;
   sitting: SittingView | null;
@@ -4525,7 +4628,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
     }
   };
 
-  const setMemberFlag = async (id: string, patch: { status?: "PRESENT" | "EXCUSED"; isChair?: boolean }) => {
+  const setMemberFlag = async (id: string, patch: { status?: "PRESENT" | "EXCUSED"; isChair?: boolean; office?: string }) => {
     try {
       const res = await fetch(`/api/committee/members/${id}`, {
         method: "PATCH",
@@ -4536,11 +4639,13 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
       if (!res.ok || "error" in d) throw new Error("failed");
       setData(d);
       onToast(
-        patch.status === "EXCUSED"
-          ? "MARKED EXCUSED — THE QUORUM ACCOUNTING FOLLOWS"
-          : patch.status === "PRESENT"
-            ? "BACK ON THE ROLL — MARKED PRESENT"
-            : "THE CHAIR SEAT MOVES"
+        patch.office
+          ? "OFFICE SET — THE STATUTORY GATES READ IT AT SIGNATURE TIME"
+          : patch.status === "EXCUSED"
+            ? "MARKED EXCUSED — THE QUORUM ACCOUNTING FOLLOWS"
+            : patch.status === "PRESENT"
+              ? "BACK ON THE ROLL — MARKED PRESENT"
+              : "THE CHAIR SEAT MOVES"
       );
     } catch {
       onToast("THE ROSTER UPDATE FAILED — RETRY");
@@ -4568,13 +4673,13 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
   /* Roll-call order: the chair opens, the gavel sits second, then the rest.
      Excused members close the roll. Everything here comes from /api/committee —
      stored members plus the signed-in officer; nothing is hardcoded. */
-  const roll: { initials: string; name: string; role: string; you?: boolean; excused?: boolean; id?: string }[] = [];
+  const roll: { initials: string; name: string; role: string; you?: boolean; excused?: boolean; id?: string; office?: string }[] = [];
   if (data) {
     const presentMembers = data.members.filter((m) => m.status === "PRESENT");
     const excusedMembers = data.members.filter((m) => m.status === "EXCUSED");
     const chair = presentMembers.find((m) => m.isChair);
     const rest = presentMembers.filter((m) => !m.isChair);
-    if (chair) roll.push({ initials: initialsOf(chair.name), name: chair.name, role: chair.role, id: chair.id });
+    if (chair) roll.push({ initials: initialsOf(chair.name), name: chair.name, role: chair.role, id: chair.id, ...(chair.office ? { office: chair.office } : {}) });
     if (data.you)
       roll.push({
         initials: initialsOf(data.you.name),
@@ -4582,9 +4687,9 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
         role: "PROCUREMENT OFFICER · HOLDS THE GAVEL",
         you: true,
       });
-    rest.forEach((m) => roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role, id: m.id }));
+    rest.forEach((m) => roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role, id: m.id, ...(m.office ? { office: m.office } : {}) }));
     excusedMembers.forEach((m) =>
-      roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role, excused: true, id: m.id })
+      roll.push({ initials: initialsOf(m.name), name: m.name, role: m.role, excused: true, id: m.id, ...(m.office ? { office: m.office } : {}) })
     );
   }
   const youSeatIndex = roll.findIndex((m) => m.you); /* the gavel's square on the quorum grid */
@@ -4690,6 +4795,19 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
                   </span>
                   {!m.you && m.id && (
                     <div className="mt-3 flex items-center gap-2.5 border-t border-ink-100 pt-2.5">
+                      <select
+                        value={m.office ?? ""}
+                        onChange={(e) => void setMemberFlag(m.id!, { office: e.target.value || undefined })}
+                        aria-label={`Office of ${m.name}`}
+                        className="h-7 rounded-lg border border-ink-200 bg-white px-1.5 font-code text-[7.5px] font-bold tracking-[0.12em] text-ink-600"
+                      >
+                        <option value="">OFFICE…</option>
+                        {MEMBER_OFFICES.map((o) => (
+                          <option key={o} value={o}>
+                            {MEMBER_OFFICE_LABELS[o]}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         type="button"
                         onClick={() => void setMemberFlag(m.id!, { status: m.excused ? "PRESENT" : "EXCUSED" })}
@@ -7904,7 +8022,7 @@ export function Dashboard({
   onExit: () => void;
 }) {
   const mission = useMissionData();
-  const { runs, queue, ledger, verdicts, findings, notes: notesMap, refresh } = mission;
+  const { runs, queue, ledger, verdicts, findings, notes: notesMap, refresh, reachable } = mission;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<RunFilter>("all");
   const [active, setActive] = useState<SectionId>("mc-overview");
@@ -7968,6 +8086,8 @@ export function Dashboard({
     .filter((r) => r.status === "gate" || r.status === "complete")
     .reduce((sum, r) => sum + r.citations, 0);
   const citationPct = findingsTotal > 0 ? Math.round((citedTotal / findingsTotal) * 100) : 100;
+  /* Real, not asserted: claims with no source behind them. */
+  const unsourcedTotal = runs.reduce((sum, r) => sum + (r.unsourced ?? 0), 0);
 
   const findingRows = useMemo(() => buildFindingRows(findings, runs, verdicts), [findings, runs, verdicts]);
   const openFindings = findingRows.filter((r) => r.status === "OPEN").length;
@@ -8122,6 +8242,8 @@ export function Dashboard({
         );
       case "mc-activity":
         return <FeedView onToast={onToast} />;
+      case "mc-cycle":
+        return <CycleView user={user} onToast={onToast} />;
       case "mc-findings":
         return <FindingsView rows={findingRows} onOpenRun={() => switchTo("mc-runs")} />;
       case "mc-reports":
@@ -8346,6 +8468,22 @@ export function Dashboard({
           <AnimatePresence mode="wait" initial={false}>
             {active === "mc-overview" ? (
               <motion.div key="mc-board" exit={{ opacity: 0, transition: { duration: 0.15 } }}>
+          {/* Sidecar-down banner — the one place the overview must speak up */}
+          {reachable === false && (
+            <div
+              data-tour="ov-sidecar-down"
+              role="status"
+              className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3"
+            >
+              <span className="inline-flex h-2 w-2 shrink-0 animate-pulse rounded-full bg-brand-600" aria-hidden="true" />
+              <p className="text-[12.5px] font-medium text-brand-900">
+                The agent service (quorum-mcp sidecar) is not answering — the numbers below may be stale.
+              </p>
+              <p className="font-code text-[8.5px] tracking-[0.14em] text-brand-700">
+                CHECK TOOLS &amp; MODELS FOR THE LIVE STATUS
+              </p>
+            </div>
+          )}
           {/* Greeting */}
           <section id="mc-overview" aria-labelledby="mc-greeting" className="scroll-mt-20">
             <div className="flex flex-wrap items-end justify-between gap-5">
@@ -8388,29 +8526,25 @@ export function Dashboard({
                 label="EVALUATIONS IN PROGRESS"
                 value={activeRuns}
                 sub={activeRuns > 0 ? "AGENT IS READING A TENDER" : "AGENT IS IDLE — START AN EVALUATION"}
-                spark={SPARK_A}
                 delay={0.05}
               />
               <StatCard
                 label="ISSUES FOUND"
                 value={findingsTotal}
-                sub="EACH ONE LINKED TO A SOURCE"
-                spark={SPARK_B}
+                sub={unsourcedTotal > 0 ? `${unsourcedTotal} STILL AWAIT A SOURCE` : "EACH ONE LINKED TO A SOURCE"}
                 delay={0.12}
               />
               <StatCard
                 label="SOURCES CONFIRMED"
                 value={citationPct}
                 suffix="%"
-                sub="0 CLAIMS WITHOUT A SOURCE PAGE"
-                spark={SPARK_A}
+                sub={`${unsourcedTotal} CLAIM${unsourcedTotal === 1 ? "" : "S"} WITHOUT A SOURCE`}
                 delay={0.19}
               />
               <StatCard
                 label="APPROVALS WAITING"
                 value={queue.length}
                 sub={queue.length > 0 ? "THE COMMITTEE NEEDS TO DECIDE" : "NO DECISIONS NEEDED"}
-                spark={SPARK_B}
                 featured
                 pulse={queue.length > 0}
                 delay={0.26}

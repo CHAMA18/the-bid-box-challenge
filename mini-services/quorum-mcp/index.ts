@@ -19,14 +19,19 @@
  *                                   written as 9x-*.md so buildPack treats
  *                                   typed entries exactly like uploaded text
  *  GET  /api/gates                → gate queue + decisions
- *  POST /api/gates/:id/decision   → { decision: "APPROVE"|"REJECT", approver, note, signedInAs }
- *                                   APPROVE is refused (403) unless approver is a PRESENT committee member
- *                                   or the signed-in officer; if the roster can't be read, it is refused (503).
+ *  POST /api/gates/:id/decision   → { decision: "APPROVE"|"REJECT", approver, note }
+ *                                   The signed-in identity is ATTESTED — the gateway's HMAC seal or a
+ *                                   session cookie re-verified against the web app — never taken from
+ *                                   the body. APPROVE is refused (403) unless the approver is a PRESENT
+ *                                   committee member holding the gate's office, or the attested officer
+ *                                   (the gavel); unreadable roster → 503; unattested mutation → 401.
  */
 
 import { randomUUID } from "node:crypto";
 import {
   appendLog,
+  attestVerify,
+  auditHealth,
   loadState,
   saveState,
   shaOf,
@@ -36,6 +41,7 @@ import {
   type Guards,
   type Run,
   type Supplier,
+  type SupplierApplication,
 } from "./store";
 import { handleReportRequest } from "./report";
 import { listSampleTenders, readSampleDocument } from "./samples";
@@ -45,8 +51,15 @@ import { OCP_AFRICA, OCP_AFRICA_SOURCE } from "./ocp-africa";
 import { rollupAfrica } from "./ocp-africa-roll";
 import { connectMany, loadPortalLinks } from "./portal-links";
 import { disabledPortalIds, loadPortalState, setPortalsEnabled } from "./portal-state";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { TENDERS_DIR } from "./engine";
+import { parseClosingDate } from "./cycle";
+import {
+  marketplaceEntries,
+  supplierFromOrgProfile,
+  validateApplicationAdmission,
+  validateApplicationRequest,
+} from "./marketplace";
 import {
   approverAllowed,
   bindEngine,
@@ -59,8 +72,9 @@ import {
   mcpExtractRequirements,
   mcpFlagFinding,
   TOOLS,
+  verifySessionActor,
 } from "./engine";
-
+import { cycleToolCall, executeCycleGateAction, handleCycleRoutes, preApprovalCheck } from "./cycle-routes";
 const PORT = 3031;
 
 /* An optional string field — trims, caps, and collapses empty to undefined. */
@@ -141,6 +155,21 @@ async function callOwnTool(name: string, args: Record<string, unknown>, runId?: 
         args as { tenderId: string; bundle: Record<string, unknown> },
         runId
       );
+    /* ── The tender cycle (waves 1-3) — same cores the REST surface calls ── */
+    case "record_bid_opening":
+    case "build_evaluation_matrix":
+    case "open_alb_dossier":
+    case "draft_award_report":
+    case "publish_award_notice":
+    case "prepare_contract_pack":
+    case "request_variation":
+    case "log_complaint":
+    case "log_clarification":
+    case "issue_addendum":
+    case "draft_specification":
+    case "draft_notice":
+    case "add_pipeline_entry":
+      return cycleToolCall(name, args);
     default:
       throw new Error(`unknown tool: ${name}`);
   }
@@ -202,6 +231,12 @@ async function decideGate(id: string, decision: string, approver: string, note?:
       appendLog({ actor: "quorum-mcp", server: "quorum-mcp", tool: "gate_decision", kind: "GATE_DECISION", runId: gate.runId, inputs: { gateId: id, decision, approver: name }, outputs: { refused: verdict.reason }, status: "ERROR", durationMs: 0 });
       return { error: verdict.reason, code: 403 };
     }
+    /* Office-aware gates and cycle preconditions — checked before anything changes. */
+    const pre = preApprovalCheck(gate, name, roster, signedInAs);
+    if (pre) {
+      appendLog({ actor: "quorum-mcp", server: "quorum-mcp", tool: "gate_decision", kind: "GATE_DECISION", runId: gate.runId, inputs: { gateId: id, decision, approver: name }, outputs: { refused: pre }, status: "ERROR", durationMs: 0 });
+      return { error: pre, code: 403 };
+    }
   }
 
   gate.approver = name;
@@ -233,15 +268,18 @@ async function decideGate(id: string, decision: string, approver: string, note?:
 
   /* APPROVE → and only now does the irreversible thing happen */
   gate.status = "APPROVED";
-  const receipt = await executeFiling(id);
+  const out =
+    gate.tool === "file_gate_submission"
+      ? { receipt: await executeFiling(id) }
+      : { receipt: await executeCycleGateAction(gate) };
   gate.status = "EXECUTED";
   gate.executedAt = new Date().toISOString();
-  gate.receipt = receipt ?? undefined;
+  gate.receipt = out.receipt ?? undefined;
   const run = state.runs.find((r) => r.id === gate.runId);
   if (run) {
     run.status = "FILED";
     run.updatedAt = gate.executedAt;
-    run.progress.push(`✓ ${name} signed the gate — bundle filed · ${receipt?.submissionId ?? "receipt pending"}`);
+    run.progress.push(`✓ ${name} signed the gate — bundle filed · ${gate.receipt?.submissionId ?? "receipt pending"}`);
   }
   saveState();
   return { gate };
@@ -254,9 +292,6 @@ const json = (data: unknown, code = 200) =>
     status: code,
     headers: {
       "content-type": "application/json",
-      "access-control-allow-origin": "*",
-      "access-control-allow-headers": "content-type",
-      "access-control-allow-methods": "GET,POST,OPTIONS",
     },
   });
 
@@ -270,12 +305,42 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
 
 Bun.serve({
   port: PORT,
+  /* Loopback only — the sidecar has no auth of its own; the Next gateway
+     (session check + HMAC attestation) is the only public door. */
+  hostname: "127.0.0.1",
   idleTimeout: 120,
   async fetch(req) {
     const url = new URL(req.url);
     const path = url.pathname;
 
-    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET,POST,OPTIONS" } });
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET,POST,OPTIONS" } });
+
+    /* ── Mutation identity — two doors, both verified server-side ─────
+       1. The gateway seal: HMAC over (method|path|actor|ts) from the Next
+          layer, which verified the session before signing.
+       2. The web session itself: Caddy forwards the browser's cookie here,
+          so the sidecar asks the web app who the session belongs to.
+       A body-declared identity is never trusted for either. The MCP surface
+       (POST /mcp) stays the documented agent door: its irreversible steps
+       halt behind named-human gates regardless of who connects. */
+    let attestedActor = "";
+    if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS" && path !== "/mcp") {
+      const seal = attestVerify(req.method, path, req.headers);
+      if (seal.ok) {
+        attestedActor = seal.actor;
+      } else {
+        const sessionActor = await verifySessionActor(req.headers.get("cookie"));
+        if (!sessionActor) {
+          return json(
+            {
+              error: `Unattested mutation refused — ${seal.reason} Sign in (a verified session is accepted) and retry.`,
+            },
+            401,
+          );
+        }
+        attestedActor = sessionActor;
+      }
+    }
 
     /* MCP surface */
     if (path === "/mcp" && req.method === "POST") {
@@ -298,6 +363,13 @@ Bun.serve({
         fsMcp: { status: fsMcp.status, tools: fsMcp.tools },
         graphs: ["review_graph (8 nodes)", "filing_graph (2 nodes)"],
         counts: { toolCalls: toolLog.length, runs: state.runs.length, gates: state.gates.length, pendingGates: state.gates.filter((g) => g.status === "PENDING").length },
+        auditSpine: {
+          logWriteFailing: auditHealth.logWriteFailing,
+          stateSaveFailing: auditHealth.stateSaveFailing,
+          stateCorrupt: auditHealth.stateCorrupt,
+          stateCorruptFile: auditHealth.stateCorruptFile,
+          logChainEntries: toolLog.length,
+        },
       });
     }
 
@@ -346,7 +418,38 @@ Bun.serve({
     }
 
     if (path === "/api/runs" && req.method === "GET") {
-      return json({ runs: [...state.runs].reverse() });
+      /* Each run carries its REAL seal — the executed gate's receipt hash (a
+         sha-256 of the sealed bundle), computed by the filing graph. The UI
+         displays this; it never synthesizes one. */
+      const runs = [...state.runs].reverse().map((r) => {
+        const gate = r.gateId ? state.gates.find((g) => g.id === r.gateId) : undefined;
+        return {
+          ...r,
+          seal: gate?.receipt?.hash ?? null,
+          sealedBy: gate?.approver ?? null,
+          decidedAt: gate?.decidedAt ?? null,
+        };
+      });
+      return json({ runs });
+    }
+
+    /* The officer asks the desk to bind the committee pack before the sitting.
+       A real, auditable event: attested actor, timestamped, in the log — the
+       log IS the record. No state changes beyond it. */
+    if (path === "/api/pack-binding" && req.method === "POST") {
+      const queuedAt = new Date().toISOString();
+      const by = attestedActor || "committee desk";
+      appendLog({
+        actor: by,
+        server: "quorum-mcp",
+        tool: "pack_binding",
+        kind: "WRITES",
+        inputs: {},
+        outputs: { queuedAt, by },
+        status: "OK",
+        durationMs: 0,
+      });
+      return json({ queuedAt, by }, 201);
     }
 
     /* Sourced report — downloadable Markdown, one file per run */
@@ -548,7 +651,7 @@ Bun.serve({
       if (typeof body.enabled !== "boolean") {
         return json({ error: "enabled must be a boolean" }, 422);
       }
-      const actor = (strOpt(body.actor) ?? strOpt(req.headers.get("x-quorum-actor")) ?? "unknown").slice(0, 80);
+      const actor = (attestedActor || strOpt(body.actor) || "unknown").slice(0, 80);
       const file = setPortalsEnabled(ids, body.enabled, actor);
       appendLog({
         actor,
@@ -584,7 +687,7 @@ Bun.serve({
           return json({ error: "publicationIds must be a non-empty array of the registry's publication ids" }, 422);
         }
       }
-      const actor = (strOpt(body.actor) ?? strOpt(req.headers.get("x-quorum-actor")) ?? "unknown").slice(0, 80);
+      const actor = (attestedActor || strOpt(body.actor) || "unknown").slice(0, 80);
       /* A portal the committee switched off is never probed — a bulk pass
          covers the portals still in use, and an explicit id list loses the
          disabled ones. Every skip is reported, never silent. */
@@ -635,7 +738,7 @@ Bun.serve({
       if (body.priceVariancePct === undefined && body.checklist === undefined && body.registryCrossCheck === undefined) {
         return json({ error: "no guard fields supplied" }, 422);
       }
-      const actor = (strOpt(body.actor) ?? strOpt(req.headers.get("x-quorum-actor")) ?? "unknown").slice(0, 80);
+      const actor = (attestedActor || strOpt(body.actor) || "unknown").slice(0, 80);
       const before = {
         priceVariancePct: state.guards.priceVariancePct,
         checklist: state.guards.checklist,
@@ -717,7 +820,7 @@ Bun.serve({
             )
           : {},
         status: "ACTIVE",
-        addedBy: String(body.addedBy ?? "").trim().slice(0, 80) || "unknown",
+        addedBy: (attestedActor || String(body.addedBy ?? "").trim()).slice(0, 80) || "unknown",
         createdAt: new Date().toISOString(),
       };
       state.suppliers.push(supplier);
@@ -758,7 +861,7 @@ Bun.serve({
       supplier.updatedAt = new Date().toISOString();
       saveState();
       appendLog({
-        actor: String(body.actor ?? supplier.addedBy ?? "").trim().slice(0, 80) || "unknown",
+        actor: (attestedActor || String(body.actor ?? supplier.addedBy ?? "")).trim().slice(0, 80) || "unknown",
         server: "quorum-mcp",
         tool: "supplier_update",
         kind: "WRITES",
@@ -779,7 +882,7 @@ Bun.serve({
       state.suppliers.splice(idx, 1);
       saveState();
       appendLog({
-        actor: String(req.headers.get("x-quorum-actor") ?? req.headers.get("x-quorum-actor") ?? "unknown"),
+        actor: attestedActor || String(req.headers.get("x-quorum-actor") ?? "unknown"),
         server: "quorum-mcp",
         tool: "supplier_remove",
         kind: "WRITES",
@@ -798,7 +901,10 @@ Bun.serve({
     if (path === "/api/source-requests" && req.method === "POST") {
       const body = await readBody(req);
       const name = String(body.name ?? "").trim();
-      const requestedBy = String(body.requestedBy ?? "").trim();
+      /* The requester identity is the gateway's attested session when present;
+         a body-declared requestedBy is accepted only for unattested local
+         callers and is never allowed to override the seal. */
+      const requestedBy = (attestedActor || String(body.requestedBy ?? "")).trim();
       if (!name) return json({ error: "name required" }, 422);
       if (!requestedBy) return json({ error: "requestedBy required" }, 422);
       const request = {
@@ -825,15 +931,193 @@ Bun.serve({
       return json({ request }, 201);
     }
 
+    /* ── The supplier-side marketplace — what organizations see and file ─── */
+
+    /* The opportunities board: every tender pack staged on this desk, with
+       the closing date resolved from the cycle record first and the notice
+       text second. A tender whose closing date is not stated anywhere is
+       shown as OPEN with closingKnown:false — the honest reading, and the
+       same defect the review engine flags on the notice. */
+    if (path === "/api/marketplace" && req.method === "GET") {
+      const samples = await listSampleTenders();
+      const closingFromNotices: Record<string, string | undefined> = {};
+      for (const s of samples) {
+        for (const name of ["01-tender-notice.md", "01-manual-notice.md"]) {
+          try {
+            const text = await Bun.file(TENDERS_DIR + s.ref + "/" + name).text();
+            const closing = parseClosingDate(text);
+            if (closing) {
+              closingFromNotices[s.ref] = closing;
+              break;
+            }
+          } catch {
+            /* no notice file with that name — try the next */
+          }
+        }
+      }
+      const counts: Record<string, number> = {};
+      for (const a of state.applications) counts[a.tenderId] = (counts[a.tenderId] ?? 0) + 1;
+      return json({
+        tenders: marketplaceEntries(samples, state.cycle, closingFromNotices, counts, new Date()),
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
+    /* Applications on the record. Reads are open (the desk sees who bid);
+       filters are exact-match so the org console reads only its own. */
+    if (path === "/api/applications" && req.method === "GET") {
+      const tenderId = url.searchParams.get("tenderId");
+      const orgId = url.searchParams.get("orgId");
+      let rows = [...state.applications].reverse();
+      if (tenderId) rows = rows.filter((a) => a.tenderId === tenderId);
+      if (orgId) rows = rows.filter((a) => a.orgId === orgId);
+      return json({ applications: rows, total: rows.length });
+    }
+
+    /* Filing an application. The identity is the gateway's attested
+       org:<name> — officers and anonymous callers are refused. Late
+       applications are refused exactly as late paper bids are; duplicates
+       are refused; suspended/blacklisted suppliers are refused. First
+       application from an organization syncs it onto the supplier register
+       (addedBy = the attested actor, never a body claim). */
+    if (path === "/api/applications" && req.method === "POST") {
+      const body = await readBody(req);
+      const shape = validateApplicationRequest({
+        actor: attestedActor,
+        tenderRef: body.tenderRef,
+        amount: body.amount,
+        currency: body.currency,
+        coverNote: body.coverNote,
+      });
+      if (!shape.ok) {
+        appendLog({
+          actor: attestedActor || "anonymous",
+          server: "quorum-mcp",
+          tool: "supplier_application",
+          kind: "WRITES",
+          inputs: { tenderRef: body.tenderRef },
+          outputs: { refused: shape.error },
+          status: "ERROR",
+          durationMs: 0,
+        });
+        return json({ error: shape.error }, shape.code);
+      }
+      const tenderRef = String(body.tenderRef).trim();
+      const staged = existsSync(TENDERS_DIR + tenderRef);
+      if (!staged) {
+        return json({ error: `No tender pack is staged for ${tenderRef} — applications attach to real tenders only.` }, 404);
+      }
+      const cycle = state.cycle.find((c) => c.tenderId === tenderRef);
+      let closingDate = cycle?.closingDate;
+      if (!closingDate) {
+        for (const name of ["01-tender-notice.md", "01-manual-notice.md"]) {
+          try {
+            const text = await Bun.file(TENDERS_DIR + tenderRef + "/" + name).text();
+            closingDate = parseClosingDate(text) ?? undefined;
+            if (closingDate) break;
+          } catch {
+            /* no notice with that name — the next one, then none */
+          }
+        }
+      }
+      const orgBlock =
+        body.org && typeof body.org === "object" && !Array.isArray(body.org)
+          ? (body.org as Record<string, unknown>)
+          : {};
+      const registrationNo = String(orgBlock.registrationNo ?? "").trim().slice(0, 80);
+      const supplier = registrationNo
+        ? state.suppliers.find((s) => s.registrationNo.toLowerCase() === registrationNo.toLowerCase())
+        : undefined;
+      const admission = validateApplicationAdmission({
+        actor: attestedActor,
+        tenderRef,
+        amount: Number(body.amount),
+        closingDate,
+        existing: state.applications,
+        registrationNo,
+        supplierStatus: supplier?.status,
+        now: new Date(),
+      });
+      if (!admission.ok) {
+        appendLog({
+          actor: attestedActor,
+          server: "quorum-mcp",
+          tool: "supplier_application",
+          kind: "WRITES",
+          inputs: { tenderRef, amount: body.amount },
+          outputs: { refused: admission.error },
+          status: "ERROR",
+          durationMs: 0,
+        });
+        return json({ error: admission.error }, admission.code);
+      }
+
+      /* Supplier-register sync — first application enrolls the organization. */
+      let supplierId = supplier?.id;
+      if (!supplier && registrationNo) {
+        const created = supplierFromOrgProfile(orgBlock, `sup_${randomUUID().slice(0, 8)}`, attestedActor, new Date().toISOString());
+        state.suppliers.push(created);
+        supplierId = created.id;
+        appendLog({
+          actor: attestedActor,
+          server: "quorum-mcp",
+          tool: "supplier_add",
+          kind: "WRITES",
+          inputs: { name: created.name, registrationNo: created.registrationNo },
+          outputs: { id: created.id, status: created.status, auto: "supplier-portal" },
+          status: "OK",
+          durationMs: 0,
+        });
+      }
+
+      /* The name on the record comes from the attested actor, never the body. */
+      const actorName = attestedActor.slice(4).trim();
+      const application: SupplierApplication = {
+        id: `app_${randomUUID().slice(0, 8)}`,
+        tenderId: tenderRef,
+        orgId: String(orgBlock.id ?? "").trim().slice(0, 64),
+        orgName: (actorName || String(orgBlock.name ?? "unknown")).slice(0, 160),
+        actor: attestedActor,
+        supplierId,
+        registrationNo,
+        amount: Number(body.amount),
+        currency: strOpt(body.currency),
+        coverNote: typeof body.coverNote === "string" && body.coverNote.trim() ? body.coverNote.trim().slice(0, 1200) : undefined,
+        receivedAt: new Date().toISOString(),
+        status: "RECEIVED",
+      };
+      state.applications.push(application);
+      saveState();
+      appendLog({
+        actor: attestedActor,
+        server: "quorum-mcp",
+        tool: "supplier_application",
+        kind: "WRITES",
+        inputs: { tenderId: application.tenderId, amount: application.amount, currency: application.currency },
+        outputs: { id: application.id, orgName: application.orgName, supplierId: supplierId ?? null, closingDate: closingDate ?? null, status: "RECEIVED" },
+        status: "OK",
+        durationMs: 0,
+      });
+      return json({ application }, 201);
+    }
+
     if (path.startsWith("/api/gates/") && req.method === "POST") {
       const id = path.match(/^\/api\/gates\/([^/]+)/)?.[1] ?? "";
       const body = await readBody(req);
+      /* The signed-in identity is ATTESTED by the gateway, never typed by the
+         caller. A body that still declares signedInAs must agree with the
+         seal — otherwise it is refused loudly, not silently remapped. */
+      const claimed = typeof body.signedInAs === "string" ? body.signedInAs.trim() : "";
+      if (claimed && attestedActor && claimed.toLowerCase() !== attestedActor.toLowerCase()) {
+        appendLog({ actor: attestedActor, server: "quorum-mcp", tool: "gate_decision", kind: "GATE_DECISION", inputs: { gateId: id, claimedSignedInAs: claimed }, outputs: { refused: "signedInAs does not match the gateway's attested session" }, status: "ERROR", durationMs: 0 });
+        return json({ error: "The gateway's attested session is not who this request claims to be — signedInAs is server-attested and cannot be declared in the body." }, 403);
+      }
       const out = await decideGate(
         id,
         String(body.decision ?? ""),
         String(body.approver ?? ""),
         body.note ? String(body.note) : undefined,
-        body.signedInAs ? String(body.signedInAs) : undefined,
+        attestedActor || undefined,
       );
       if (out.error) return json(out, out.code ?? 400);
       return json(out);
@@ -841,6 +1125,12 @@ Bun.serve({
 
     if (path === "/api/gates") {
       return json({ gates: state.gates });
+    }
+
+    /* ── The tender cycle — solicitation to closure (waves 1-3) ───────── */
+    if (path.startsWith("/api/cycle") || path.startsWith("/api/procurement-file") || path.startsWith("/api/pipeline") || /^\/api\/tenders\/[A-Za-z0-9._-]+\/(closing|opening|coi|matrix|alb|award-report|award-notice|standstill|debrief|contract|complaints|clarifications|addenda|notices|specs)/.test(path)) {
+      const cycleBody = req.method === "POST" ? await readBody(req) : {};
+      return (await handleCycleRoutes(path, req.method, cycleBody)) ?? json({ error: "not found" }, 404);
     }
 
     return json({ error: "not found" }, 404);

@@ -94,7 +94,7 @@ interface Run {
 }
 
 interface CommitteeLite {
-  members: { name: string; role: string; isChair: boolean; status: "PRESENT" | "EXCUSED" }[];
+  members: { name: string; role: string; isChair: boolean; status: "PRESENT" | "EXCUSED"; office?: string }[];
   you: { name: string } | null;
 }
 
@@ -103,6 +103,7 @@ interface Gate {
   runId: string;
   tenderId: string;
   tool: string;
+  requiredOffice?: string;
   inputs: Record<string, unknown>;
   status: string;
   createdAt: string;
@@ -174,11 +175,19 @@ function initialsOf(name: string): string {
    The dropdown therefore offers exactly those people — nothing free-text that
    the record would refuse. Excused seats stay visible but cannot sign. */
 
+const OFFICE_SHORT: Record<string, string> = {
+  PROCUREMENT_UNIT: "PROCUREMENT UNIT",
+  EVALUATION_COMMITTEE: "EVALUATION COMMITTEE",
+  ACCOUNTING_OFFICER: "ACCOUNTING OFFICER",
+  OVERSIGHT: "OVERSIGHT",
+};
+
 interface OfficerOption {
   name: string;
   role: string;
   kind: "gavel" | "member" | "excused";
   chair: boolean;
+  office?: string;
 }
 
 function OfficerSelect({
@@ -324,7 +333,7 @@ function OfficerSelect({
         </span>
         {selected && (
           <span className="hidden shrink-0 font-code text-[8px] tracking-[0.16em] text-ink-400 sm:block">
-            {selected.kind === "gavel" ? "THE GAVEL" : selected.chair ? "CHAIR" : "PRESENT"}
+            {selected.kind === "gavel" ? "THE GAVEL" : [selected.chair ? "CHAIR" : "PRESENT", selected.office ? OFFICE_SHORT[selected.office] : ""].filter(Boolean).join(" · ")}
           </span>
         )}
         <ChevronDown
@@ -520,14 +529,14 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
       const name = m.name.trim();
       if (!name || seen.has(name.toLowerCase())) continue;
       seen.add(name.toLowerCase());
-      out.push({ name, role: m.role?.trim() || "COMMITTEE MEMBER", kind: "member", chair: m.isChair === true });
+      out.push({ name, role: m.role?.trim() || "COMMITTEE MEMBER", kind: "member", chair: m.isChair === true, ...(m.office ? { office: m.office } : {}) });
     }
     for (const m of committee.members) {
       if (m.status !== "EXCUSED") continue;
       const name = m.name.trim();
       if (!name || seen.has(name.toLowerCase())) continue;
       seen.add(name.toLowerCase());
-      out.push({ name, role: m.role?.trim() || "COMMITTEE MEMBER", kind: "excused", chair: m.isChair === true });
+      out.push({ name, role: m.role?.trim() || "COMMITTEE MEMBER", kind: "excused", chair: m.isChair === true, ...(m.office ? { office: m.office } : {}) });
     }
     return out;
   }, [committee]);
@@ -741,6 +750,11 @@ export function StackConsole({ onToast }: { onToast: (msg: string) => void }) {
                     <KindChip kind="IRREVERSIBLE" />
                     <p className="font-code text-[11px] font-bold tracking-tight text-ink-950">
                       {g.tool} <span className="text-ink-400">· {g.id}</span>
+                      {g.requiredOffice ? (
+                        <span className="ml-2 rounded-full bg-ink-950 px-2 py-0.5 font-code text-[8px] font-bold tracking-[0.14em] text-white">
+                          {OFFICE_SHORT[g.requiredOffice] ?? g.requiredOffice} SIGNS
+                        </span>
+                      ) : null}
                     </p>
                     <span className="ml-auto font-code text-[9.5px] tracking-[0.14em] text-ink-500">
                       RAISED {Clock(g.createdAt)} UTC

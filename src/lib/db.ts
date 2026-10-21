@@ -49,6 +49,12 @@ export interface CommitteeMemberRow {
   role: string;
   isChair: boolean;
   status: string; // PRESENT | EXCUSED
+  /* The named office this member holds on the desk — the statutory gates of
+     the tender cycle (opening, matrix certification, award, contract) sign by
+     office, not just by name. Defaults are applied on read for rows written
+     before offices existed: the chair sits as accounting officer, everyone
+     else on the evaluation committee. */
+  office?: "PROCUREMENT_UNIT" | "EVALUATION_COMMITTEE" | "ACCOUNTING_OFFICER" | "OVERSIGHT";
   seatOrder: number;
   createdAt: Date;
   updatedAt: Date;
@@ -97,6 +103,54 @@ export interface InviteRow {
   claimedAt: Date | null;
 }
 
+/* ── Organizations — the supplier side of the desk ────────────────────────
+   A completely separate account space from the officers': own table, own
+   sessions, own cookie. The profile mirrors what the sidecar's supplier
+   register asks bidders to hold (registration number, tax clearance,
+   sector regulator), so an application can sync the organization onto
+   that register losslessly. */
+export interface OrganizationRow {
+  id: string;
+  name: string; // legal name
+  email: string; // login identity, unique
+  password: string; // scrypt:salt:hash
+  registrationNo: string; // legal registration number, unique
+  country: string;
+  legalForm?: string;
+  taxPin?: string;
+  taxClearanceNo?: string;
+  taxClearanceExpiry?: string;
+  regulator?: string;
+  regulatorNo?: string;
+  contactName?: string;
+  phone?: string;
+  address?: string;
+  website?: string;
+  description?: string;
+  categories: string[];
+  status: "ACTIVE" | "SUSPENDED";
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface OrgSessionRow {
+  token: string;
+  orgId: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+/* One-time passphrase reset codes for the supplier door. Only the SHA-256
+   of the code is stored — the code itself lives exactly one place, the
+   response that issued it. */
+export interface OrgPasswordResetRow {
+  tokenHash: string; // sha256 of the normalized (dash-less, uppercase) code
+  orgId: string;
+  expiresAt: Date;
+  createdAt: Date;
+  usedAt: Date | null;
+}
+
 interface StoreShape {
   users: UserRow[];
   sessions: SessionRow[];
@@ -105,6 +159,9 @@ interface StoreShape {
   sittings: SittingRow[];
   settings: Record<string, string>;
   invites: InviteRow[];
+  organizations: OrganizationRow[];
+  orgSessions: OrgSessionRow[];
+  orgPasswordResets: OrgPasswordResetRow[];
 }
 
 /**
@@ -142,7 +199,7 @@ function resolveStoreFile(): string {
 
 const FILE = resolveStoreFile();
 const LEGACY_FILE = path.join(process.cwd(), "db", "quorum-store.json");
-const DATE_FIELDS = ["createdAt", "updatedAt", "expiresAt", "claimedAt"] as const;
+const DATE_FIELDS = ["createdAt", "updatedAt", "expiresAt", "claimedAt", "usedAt"] as const;
 
 function revive<T>(rows: unknown): T[] {
   if (!Array.isArray(rows)) return [];
@@ -199,6 +256,9 @@ function load(): StoreShape {
     sittings: [],
     settings: {},
     invites: [],
+    organizations: [],
+    orgSessions: [],
+    orgPasswordResets: [],
   };
   if (!existsSync(FILE)) {
     /* One-time migration: a pre-fix build kept the store inside
@@ -224,6 +284,9 @@ function load(): StoreShape {
     sittings: reviveSittings(raw.sittings),
     settings: (raw.settings as Record<string, string>) ?? {},
     invites: revive<InviteRow>(raw.invites),
+    organizations: revive<OrganizationRow>(raw.organizations),
+    orgSessions: revive<OrgSessionRow>(raw.orgSessions),
+    orgPasswordResets: revive<OrgPasswordResetRow>(raw.orgPasswordResets),
   };
 }
 
@@ -235,6 +298,9 @@ globalForStore.__quorumStore = store;
 /* A hot reload keeps the old store object alive across a schema addition —
    backfill new collections so the store is never half-shaped. */
 if (!Array.isArray(store.sittings)) store.sittings = [];
+if (!Array.isArray(store.organizations)) store.organizations = [];
+if (!Array.isArray(store.orgSessions)) store.orgSessions = [];
+if (!Array.isArray(store.orgPasswordResets)) store.orgPasswordResets = [];
 
 function persist(): void {
   mkdirSync(path.dirname(FILE), { recursive: true });
@@ -344,15 +410,22 @@ export function createContactMessage(data: {
 /* ── Committee roster + settings ────────────────────────────────────────── */
 
 export function listCommitteeMembers(): CommitteeMemberRow[] {
-  return [...store.committeeMembers].sort(
-    (a, b) => a.seatOrder - b.seatOrder || a.createdAt.getTime() - b.createdAt.getTime()
-  );
+  return [...store.committeeMembers]
+    .sort((a, b) => a.seatOrder - b.seatOrder || a.createdAt.getTime() - b.createdAt.getTime())
+    .map((m) => ({
+      ...m,
+      /* Office migration on read: rows written before offices existed get the
+         sensible default — the chair holds the accounting officer's office,
+         every other member sits on the evaluation committee. */
+      office: m.office ?? (m.isChair ? "ACCOUNTING_OFFICER" : "EVALUATION_COMMITTEE"),
+    }));
 }
 
 export function createCommitteeMember(data: {
   name: string;
   role: string;
   isChair: boolean;
+  office?: CommitteeMemberRow["office"];
 }): CommitteeMemberRow {
   const at = now();
   const row: CommitteeMemberRow = {
@@ -361,6 +434,7 @@ export function createCommitteeMember(data: {
     role: data.role,
     isChair: data.isChair,
     status: "PRESENT",
+    office: data.office ?? (data.isChair ? "ACCOUNTING_OFFICER" : "EVALUATION_COMMITTEE"),
     seatOrder: store.committeeMembers.reduce((max, m) => Math.max(max, m.seatOrder), 0) + 1,
     createdAt: at,
     updatedAt: at,
@@ -372,7 +446,7 @@ export function createCommitteeMember(data: {
 
 export function updateCommitteeMember(
   id: string,
-  patch: Partial<Pick<CommitteeMemberRow, "name" | "role" | "isChair" | "status">>
+  patch: Partial<Pick<CommitteeMemberRow, "name" | "role" | "isChair" | "status" | "office">>
 ): CommitteeMemberRow | null {
   const row = store.committeeMembers.find((m) => m.id === id);
   if (!row) return null;
@@ -474,4 +548,165 @@ export function updateSitting(id: string, patch: Partial<Omit<SittingRow, "id">>
   Object.assign(row, patch);
   persist();
   return row;
+}
+
+/* ── Organizations — the supplier side of the desk ──────────────────────── */
+
+export function findOrganizationByEmail(email: string): OrganizationRow | null {
+  return store.organizations.find((o) => o.email === email) ?? null;
+}
+
+export function findOrganizationById(id: string): OrganizationRow | null {
+  return store.organizations.find((o) => o.id === id) ?? null;
+}
+
+export function findOrganizationByRegistrationNo(registrationNo: string): OrganizationRow | null {
+  const reg = registrationNo.trim().toLowerCase();
+  return store.organizations.find((o) => o.registrationNo.trim().toLowerCase() === reg) ?? null;
+}
+
+export function createOrganization(data: {
+  name: string;
+  email: string;
+  password: string;
+  registrationNo: string;
+  country: string;
+  legalForm?: string;
+  taxPin?: string;
+  taxClearanceNo?: string;
+  taxClearanceExpiry?: string;
+  regulator?: string;
+  regulatorNo?: string;
+  contactName?: string;
+  phone?: string;
+  address?: string;
+  website?: string;
+  description?: string;
+  categories?: string[];
+}): OrganizationRow {
+  if (findOrganizationByEmail(data.email)) throw new Error(`Organization already exists: ${data.email}`);
+  if (findOrganizationByRegistrationNo(data.registrationNo)) {
+    throw new Error(`An organization with registration number ${data.registrationNo} already exists`);
+  }
+  const at = now();
+  const org: OrganizationRow = {
+    id: `org_${randomUUID().slice(0, 8)}`,
+    name: data.name,
+    email: data.email,
+    password: data.password,
+    registrationNo: data.registrationNo,
+    country: data.country,
+    legalForm: data.legalForm,
+    taxPin: data.taxPin,
+    taxClearanceNo: data.taxClearanceNo,
+    taxClearanceExpiry: data.taxClearanceExpiry,
+    regulator: data.regulator,
+    regulatorNo: data.regulatorNo,
+    contactName: data.contactName,
+    phone: data.phone,
+    address: data.address,
+    website: data.website,
+    description: data.description,
+    categories: data.categories ?? [],
+    status: "ACTIVE",
+    createdAt: at,
+    updatedAt: at,
+  };
+  store.organizations.push(org);
+  persist();
+  return org;
+}
+
+const ORG_TEXT_FIELDS = [
+  "legalForm", "taxPin", "taxClearanceNo", "taxClearanceExpiry",
+  "regulator", "regulatorNo", "contactName", "phone", "address", "website", "description",
+] as const;
+
+export function updateOrganization(
+  id: string,
+  patch: Partial<Pick<OrganizationRow, "name" | "country" | "status">> &
+    Partial<Pick<OrganizationRow, (typeof ORG_TEXT_FIELDS)[number]>> &
+    Partial<Pick<OrganizationRow, "categories">>
+): OrganizationRow | null {
+  const org = findOrganizationById(id);
+  if (!org) return null;
+  if (typeof patch.name === "string" && patch.name.trim()) org.name = patch.name.trim().slice(0, 160);
+  if (typeof patch.country === "string" && patch.country.trim()) org.country = patch.country.trim().slice(0, 80);
+  if (patch.status === "ACTIVE" || patch.status === "SUSPENDED") org.status = patch.status;
+  for (const k of ORG_TEXT_FIELDS) {
+    if (typeof patch[k] === "string") org[k] = (patch[k] as string).trim().slice(0, 1200) || undefined;
+  }
+  if (Array.isArray(patch.categories)) {
+    org.categories = patch.categories.map((c) => String(c).trim().slice(0, 80)).filter(Boolean).slice(0, 12);
+  }
+  org.updatedAt = now();
+  persist();
+  return org;
+}
+
+/* ── Organization sessions — a separate token space from officer sessions ── */
+
+export function createOrgSession(orgId: string, expiresAt: Date, token: string): OrgSessionRow {
+  if (store.orgSessions.some((s) => s.token === token)) throw new Error("Org session token collision");
+  const session: OrgSessionRow = { token, orgId, expiresAt, createdAt: now() };
+  store.orgSessions.push(session);
+  persist();
+  return session;
+}
+
+export function findOrgSessionWithOrg(token: string): { session: OrgSessionRow; org: OrganizationRow } | null {
+  const session = store.orgSessions.find((s) => s.token === token);
+  if (!session) return null;
+  const org = findOrganizationById(session.orgId);
+  return org ? { session, org } : null;
+}
+
+export function deleteOrgSessionByToken(token: string): void {
+  const before = store.orgSessions.length;
+  store.orgSessions = store.orgSessions.filter((s) => s.token !== token);
+  if (store.orgSessions.length !== before) persist();
+}
+
+export function deleteOrgSessionsByOrg(orgId: string): number {
+  const before = store.orgSessions.length;
+  store.orgSessions = store.orgSessions.filter((s) => s.orgId !== orgId);
+  const removed = before - store.orgSessions.length;
+  if (removed > 0) persist();
+  return removed;
+}
+
+/* ── Organization passphrase resets — one-time codes, hashed at rest ───────
+   The supplier door has no outbound mail, so the reset code is issued
+   straight to the portal screen that requested it. One outstanding code
+   per organization: issuing a fresh one retires the previous. */
+
+export function createOrgPasswordReset(orgId: string, tokenHash: string, expiresAt: Date): OrgPasswordResetRow {
+  store.orgPasswordResets = store.orgPasswordResets.filter(
+    (r) => r.orgId !== orgId || r.usedAt !== null,
+  );
+  const row: OrgPasswordResetRow = { tokenHash, orgId, expiresAt, createdAt: now(), usedAt: null };
+  store.orgPasswordResets.push(row);
+  persist();
+  return row;
+}
+
+export function findOrgPasswordReset(tokenHash: string): OrgPasswordResetRow | null {
+  return store.orgPasswordResets.find((r) => r.tokenHash === tokenHash) ?? null;
+}
+
+export function consumeOrgPasswordReset(tokenHash: string): void {
+  const row = store.orgPasswordResets.find((r) => r.tokenHash === tokenHash);
+  if (row && row.usedAt === null) {
+    row.usedAt = now();
+    persist();
+  }
+}
+
+export function updateOrganizationPassword(orgId: string, passwordHash: string): OrganizationRow | null {
+  const org = findOrganizationById(orgId);
+  if (!org) return null;
+  org.password = passwordHash;
+  org.updatedAt = now();
+  persist();
+  return org;
 }

@@ -14,9 +14,18 @@ notification → contract**. The evaluation desk is the segment Quorum targets:
 the officer-stage where packs are read line by line, requirements are cross-checked
 against each bid, and the award recommendation is written and justified.
 
-Quorum does **not** advertise, receive bids, or sign contracts. It prepares the
-evaluation file — requirements pinned, findings cited, redlines drafted — and stops
-at a named human sign-off before anything irreversible happens.
+That was the founding scope; the tender-cycle build (waves 1-3, 2026-10-21) widens
+the desk around it without moving the line: the cycle now runs **pipeline →
+clarifications/addenda → opening (late-bid enforcement, statutory register) →
+COI + scored evaluation matrix + MED → award report → notice of award +
+standstill + debriefs → contract pack + register (milestones, variations,
+payments, completion) → complaints**, with a consolidated procurement file for
+auditors. Quorum still does **not** advertise (notice drafting + a simulated
+publish stub), does **not** receive bids (it records the *opening* of bids the
+buyer received), and does **not** sign contracts (it prepares the pack and
+administers the register). Every irreversible step in the added phases is
+behind a named-human gate that declares the office that must sign — the
+evaluation desk's guarantee now holds across the whole cycle.
 
 ## 2. Named target offices
 

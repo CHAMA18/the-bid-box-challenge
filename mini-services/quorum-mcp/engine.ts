@@ -8,6 +8,8 @@ import { readdir } from "node:fs/promises";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { appendLog, shaOf, type Draft, type Finding, type Gate, type Requirement, type ReviewPlan, type Run } from "./store";
 import { resolveDataDir } from "./paths";
+import { bidSecurityFindings, debarmentFindings, parseBidSecurity, parseClosingDate } from "./cycle";
+import { DEBARMENT_LIST } from "./debarment";
 export type { Finding } from "./store";
 
 export type { ReviewPlan };
@@ -175,6 +177,8 @@ export const RULE_FAMILIES = [
   "SPEC-DEVIATION",
   "SUPPLIER-ID",
   "BUYER-MISSING",
+  "BID-SECURITY",
+  "DEBARMENT",
 ] as const;
 export type RuleFamily = (typeof RULE_FAMILIES)[number];
 
@@ -226,6 +230,8 @@ export function planFromPack(
   const hasAwards = pack.records.some((r) => r.awards.length > 0 && r.tenderValue);
   const requiredDocs = pack.notices.some((n) => /^- \[REQUIRED\]/m.test(n.text));
   const hasPriceTable = pack.bids.some((b) => parseBid(b.text, b.bidder, b.source).length > 0);
+  const securityInPlay = pack.notices.some((n) => /bid security/i.test(n.text)) || pack.bids.some((b) => parseBidSecurity(b.text) !== undefined);
+  const debarmentHits = debarmentFindings(pack.bids, DEBARMENT_LIST).length;
   const focus: RuleFamily[] = [];
   if (markdownValueBids > 0 && hasCeiling) focus.push("OVER-BUDGET");
   if (pack.bids.length >= 2 && markdownValueBids + ocdsValueBids >= 2) focus.push("VALUE-OUTLIER");
@@ -234,6 +240,8 @@ export function planFromPack(
   if (requiredDocs) focus.push("DOC-MISSING");
   if (pack.bids.some((b) => bidStatesIdentifier(b.text))) focus.push("SUPPLIER-ID");
   if (pack.notices.some((n) => n.file.endsWith(".md") && noticeLacksBuyer(n.text))) focus.push("BUYER-MISSING");
+  if (securityInPlay) focus.push("BID-SECURITY");
+  if (debarmentHits > 0) focus.push("DEBARMENT");
   focus.push("SPEC-DEVIATION");
   return {
     pack: { files: files.length, bids: pack.bids.length, ocdsRecords: pack.records.length, markdownValueBids, ocdsValueBids },
@@ -261,7 +269,7 @@ export async function llmPlanFromPack(
       {
         role: "system",
         content:
-          'You are a public-procurement review planner. Given a tender pack inventory, output STRICT JSON only: {"parseMarkdownValues":boolean,"focusRules":string[],"maxDrafts":number,"note":"one sentence"}. focusRules entries must come from: PRICE-OUTLIER, VALUE-OUTLIER, OVER-BUDGET, AWARD-OVER-BUDGET, DOC-MISSING, SPEC-DEVIATION, SUPPLIER-ID, BUYER-MISSING. maxDrafts is 1-4.',
+          'You are a public-procurement review planner. Given a tender pack inventory, output STRICT JSON only: {"parseMarkdownValues":boolean,"focusRules":string[],"maxDrafts":number,"note":"one sentence"}. focusRules entries must come from: PRICE-OUTLIER, VALUE-OUTLIER, OVER-BUDGET, AWARD-OVER-BUDGET, DOC-MISSING, SPEC-DEVIATION, SUPPLIER-ID, BUYER-MISSING, BID-SECURITY, DEBARMENT. maxDrafts is 1-4.',
       },
       { role: "user", content: `PACK INVENTORY:\n${JSON.stringify(base.pack)}\n\nDraft the review plan now.` },
     ], fetchImpl);
@@ -407,6 +415,166 @@ export const TOOLS = [
         required: ["tenderId", "bundle"],
       },
       required: ["tenderId", "bundle"],
+    },
+  },
+  /* ── The tender cycle (waves 1-3) — the agent's hands across the full process ── */
+  {
+    name: "record_bid_opening",
+    kind: "IRREVERSIBLE" as const,
+    description:
+      "Records the public bid opening: each bid's receipt time against the tender's closing date (late bids are rejected unopened), composes the statutory opening register and raises a certification gate for the procurement unit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tenderId: { type: "string" },
+        bids: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { bidder: { type: "string" }, receivedAt: { type: "string" }, priceRead: { type: "string" } },
+            required: ["bidder", "receivedAt"],
+          },
+        },
+      },
+      required: ["tenderId", "bids"],
+    },
+  },
+  {
+    name: "build_evaluation_matrix",
+    kind: "WRITES" as const,
+    description:
+      "Builds the weighted evaluation matrix for a tender from the pack's bid values and the latest run's findings: criteria with weights (must sum to 100), the responsiveness ladder per bid, and the financial formula (lowest evaluated price scores 100).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tenderId: { type: "string" },
+        criteria: { type: "array", items: { type: "object", properties: { title: { type: "string" }, weight: { type: "number" } }, required: ["title", "weight"] } },
+        technicalWeightPct: { type: "number" },
+      },
+      required: ["tenderId", "criteria"],
+    },
+  },
+  {
+    name: "open_alb_dossier",
+    kind: "WRITES" as const,
+    description:
+      "Opens an abnormally-low-bid dossier for a bidder from a PRICE-OUTLIER/VALUE-OUTLIER finding: composes the clarification letter and sets the five-working-day response clock.",
+    inputSchema: {
+      type: "object",
+      properties: { tenderId: { type: "string" }, bidder: { type: "string" }, findingId: { type: "string" } },
+      required: ["tenderId", "bidder"],
+    },
+  },
+  {
+    name: "draft_award_report",
+    kind: "WRITES" as const,
+    description:
+      "Composes the statutory award-recommendation report from the run's findings and the certified matrix, and raises the accounting officer's signature gate.",
+    inputSchema: { type: "object", properties: { tenderId: { type: "string" } }, required: ["tenderId"] },
+  },
+  {
+    name: "publish_award_notice",
+    kind: "IRREVERSIBLE" as const,
+    description:
+      "Publishes the notice of award to the e-GP portal (simulated stub, labelled as such) and starts the standstill clock (10 working days). Held at a gate for the accounting officer.",
+    inputSchema: { type: "object", properties: { tenderId: { type: "string" } }, required: ["tenderId"] },
+  },
+  {
+    name: "prepare_contract_pack",
+    kind: "WRITES" as const,
+    description:
+      "Prepares the contract pack for the awarded supplier (standard form, performance security, milestone schedule, variation and payment rules) and raises the signature gate. The contract itself is signed by humans.",
+    inputSchema: { type: "object", properties: { tenderId: { type: "string" } }, required: ["tenderId"] },
+  },
+  {
+    name: "request_variation",
+    kind: "WRITES" as const,
+    description:
+      "Logs a contract variation. Variations at or above 10% of the contract value are held at an irreversible gate for the accounting officer; smaller ones are logged for the register.",
+    inputSchema: {
+      type: "object",
+      properties: { tenderId: { type: "string" }, description: { type: "string" }, valueDelta: { type: "number" } },
+      required: ["tenderId", "description", "valueDelta"],
+    },
+  },
+  {
+    name: "log_complaint",
+    kind: "WRITES" as const,
+    description: "Logs a bidder complaint (a standstill-window complaint is marked as such) with its statutory response clock.",
+    inputSchema: {
+      type: "object",
+      properties: { tenderId: { type: "string" }, complainant: { type: "string" }, subject: { type: "string" }, body: { type: "string" } },
+      required: ["tenderId", "complainant", "subject"],
+    },
+  },
+  {
+    name: "log_clarification",
+    kind: "WRITES" as const,
+    description: "Logs a bidder's clarification question on a live tender; the buyer's answer is recorded against it and read by every bidder.",
+    inputSchema: {
+      type: "object",
+      properties: { tenderId: { type: "string" }, question: { type: "string" }, askedBy: { type: "string" } },
+      required: ["tenderId", "question"],
+    },
+  },
+  {
+    name: "issue_addendum",
+    kind: "WRITES" as const,
+    description:
+      "Issues a tender addendum. If issued inside the minimum-notice window before closing and no extension is given, the closing-extension requirement is flagged — the rule the register enforces.",
+    inputSchema: {
+      type: "object",
+      properties: { tenderId: { type: "string" }, summary: { type: "string" }, extendsClosingTo: { type: "string" } },
+      required: ["tenderId", "summary"],
+    },
+  },
+  {
+    name: "draft_specification",
+    kind: "WRITES" as const,
+    description:
+      "Drafts a specification / terms-of-reference skeleton with an evaluation-criteria table, from a short brief — the upstream half of the review desk's job. Template fallback when no model is configured.",
+    inputSchema: {
+      type: "object",
+      properties: { tenderId: { type: "string" }, brief: { type: "string" } },
+      required: ["tenderId", "brief"],
+    },
+  },
+  {
+    name: "draft_notice",
+    kind: "WRITES" as const,
+    description:
+      "Drafts a compliant tender notice from structured fields and checks it against the mandatory-field list (reference, buyer, method, closing, ceiling, required documents, contact).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tenderId: { type: "string" },
+        reference: { type: "string" },
+        buyer: { type: "string" },
+        method: { type: "string" },
+        subject: { type: "string" },
+        closingDate: { type: "string" },
+        ceiling: { type: "string" },
+        requiredDocs: { type: "array", items: { type: "string" } },
+        contact: { type: "string" },
+      },
+      required: ["tenderId", "reference", "buyer", "method", "subject", "contact"],
+    },
+  },
+  {
+    name: "add_pipeline_entry",
+    kind: "WRITES" as const,
+    description: "Adds a planned tender to the procurement pipeline; linking it to a live tender reference promotes the entry.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ref: { type: "string" },
+        title: { type: "string" },
+        office: { type: "string" },
+        budgetEstimate: { type: "number" },
+        currency: { type: "string" },
+        expectedPublication: { type: "string" },
+      },
+      required: ["ref", "title"],
     },
   },
 ] as const;
@@ -628,6 +796,22 @@ export function verifyFindingReason(f: Finding, sources: Record<string, string>)
       const ref = f.evidence.match(/Tender notice (\S+) names no buyer/)?.[1];
       return !!ref && text.includes(ref) ? null : "tender reference not found in cited notice";
     }
+    case "R-BID-SECURITY": {
+      if (text === undefined) return `cited document "${file}" is not in this tender`;
+      if (f.evidence.includes("states no bid security line"))
+        return /\*\*Bid security|^\s*[-*]\s*Bid security/im.test(text) ? "a bid-security line exists but the finding says none" : null;
+      if (f.evidence.includes("states nothing"))
+        return /\*\*Bid security|^\s*[-*]\s*Bid security/im.test(text) ? null : "security line not found in cited bid";
+      const amount = f.evidence.match(/[\d][\d,]*(?:\.\d+)?/)?.[0];
+      const date = f.evidence.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
+      if (amount && text.includes(amount)) return null;
+      if (date && text.includes(date)) return null;
+      return "security amount or validity not found in cited bid";
+    }
+    case "R-DEBARMENT-HIT":
+      /* The finding is about the bidder's identity on the register; the citation
+         names the bid it came from, and the register entry is quoted in the evidence. */
+      return text === undefined ? `cited document "${file}" is not in this tender` : null;
     default:
       return `rule "${f.rule}" has no self-check`;
   }
@@ -1038,12 +1222,16 @@ export function flagPack(
       }
     }
   }
+  const closing = pack.notices.map((n) => parseClosingDate(n.text)).find(Boolean);
+  const securityRequired = pack.notices.some((n) => /bid security/i.test(n.text));
   const all = [
     ...runRules(bids, "", "", guards),
     ...pack.notices.flatMap((n) => docMissingFindings(bids, n.text, n.file, guards.checklist === "STRICT")),
     ...pack.notices.filter((n) => n.file.endsWith(".md")).flatMap((n) => buyerMissingFindings(n.text, n.file)),
     ...supplierIdFindings(bids),
     ...runAwardRules(pack.records),
+    ...bidSecurityFindings(bids, closing, { required: securityRequired }),
+    ...debarmentFindings(bids, DEBARMENT_LIST),
     ...(guards.registryCrossCheck ? registryFindings(bids, obeys?.registry ?? []) : []),
     ...overBudget,
   ];
@@ -1088,6 +1276,13 @@ async function tenderSources(tenderId: string, runId?: string) {
   const sources: Record<string, string> = {};
   for (const f of files) sources[f] = await readTenderFile(`${tenderId}/${f}`, runId ?? "mcp-direct");
   return { files, sources };
+}
+
+/* The pack loader for the cycle tools: files, raw sources and the built pack
+   (bids with values, OCDS records, notices) in one call. */
+export async function loadPack(tenderId: string, runId?: string) {
+  const { files, sources } = await tenderSources(tenderId, runId);
+  return { files, sources, pack: buildPack(files, sources) };
 }
 
 /* extract_requirements (READ): the same clause pinning the review graph runs, over the tender's notices. */
@@ -1615,6 +1810,32 @@ export async function fetchRoster(fetchImpl: FetchLike = fetch, base = WEB_URL):
     if (!res.ok) return null;
     const data = (await res.json()) as { members?: RosterMember[] };
     return Array.isArray(data.members) ? data.members : null;
+  } catch {
+    return null;
+  }
+}
+
+/* ── Session verification through the web app ──────────────────────────────
+   Caddy forwards the browser's cookies straight to the sidecar, so a
+   mutation that arrives with a real session cookie can be trusted to the
+   same degree the web app trusts it — by ASKING the web app who the session
+   belongs to (server-to-server, never a client claim). Fail closed: any
+   error, timeout or empty user means "no identity". */
+export async function verifySessionActor(
+  cookieHeader: string | null,
+  fetchImpl: FetchLike = fetch,
+  base = WEB_URL,
+): Promise<string | null> {
+  if (!cookieHeader) return null;
+  try {
+    const res = await fetchImpl(`${base}/api/auth/me`, {
+      headers: { cookie: cookieHeader },
+      signal: AbortSignal.timeout(4_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { user?: { name?: string } | null };
+    const name = data.user?.name?.trim();
+    return name ? name : null;
   } catch {
     return null;
   }

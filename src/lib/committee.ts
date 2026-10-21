@@ -37,6 +37,7 @@ export interface CommitteeMemberView {
   role: string;
   isChair: boolean;
   status: "PRESENT" | "EXCUSED";
+  office?: "PROCUREMENT_UNIT" | "EVALUATION_COMMITTEE" | "ACCOUNTING_OFFICER" | "OVERSIGHT";
 }
 
 export interface SittingAttendanceView {
@@ -235,6 +236,7 @@ export async function getCommitteeState(user: AuthUser | null): Promise<Committe
     role: r.role,
     isChair: r.isChair,
     status: r.status === "EXCUSED" ? "EXCUSED" : "PRESENT",
+    office: r.office,
   }));
 
   /* The signed-in officer always sits — they hold the gavel. */
@@ -367,8 +369,15 @@ export async function mutateSitting(
 
 /* ── The register — registering members is what opens the door later ────── */
 
+const MEMBER_OFFICES = ["PROCUREMENT_UNIT", "EVALUATION_COMMITTEE", "ACCOUNTING_OFFICER", "OVERSIGHT"] as const;
+type MemberOffice = (typeof MEMBER_OFFICES)[number];
+
+function officeOf(v: unknown): MemberOffice | undefined {
+  return MEMBER_OFFICES.includes(v as MemberOffice) ? (v as MemberOffice) : undefined;
+}
+
 export async function addCommitteeMember(
-  input: { name?: unknown; role?: unknown; isChair?: unknown },
+  input: { name?: unknown; role?: unknown; isChair?: unknown; office?: unknown },
   actor: AuthUser | null,
 ): Promise<MutationResult> {
   await ensureCommittee();
@@ -379,18 +388,19 @@ export async function addCommitteeMember(
   }
   const role = String(input.role ?? "").trim().slice(0, 100) || "COMMITTEE MEMBER";
   const isChair = input.isChair === true;
+  const office = officeOf(input.office);
 
   if (isChair) {
     for (const m of listCommitteeMembers()) if (m.isChair) dbUpdateMember(m.id, { isChair: false });
   }
-  dbCreateMember({ name, role, isChair });
+  dbCreateMember({ name, role, isChair, ...(office ? { office } : {}) });
 
   return { ok: true, state: await getCommitteeState(actor) };
 }
 
 export async function updateCommitteeMemberById(
   id: string,
-  patch: { status?: unknown; isChair?: unknown; role?: unknown },
+  patch: { status?: unknown; isChair?: unknown; role?: unknown; office?: unknown },
   actor: AuthUser | null,
 ): Promise<MutationResult> {
   await ensureCommittee();
@@ -398,9 +408,11 @@ export async function updateCommitteeMemberById(
   const row = listCommitteeMembers().find((m) => m.id === id);
   if (!row) return { ok: false, code: 404, error: "member not found" };
 
-  const next: Partial<Pick<CommitteeMemberRow, "role" | "isChair" | "status">> = {};
+  const next: Partial<Pick<CommitteeMemberRow, "role" | "isChair" | "status" | "office">> = {};
   if (patch.status === "PRESENT" || patch.status === "EXCUSED") next.status = patch.status;
   if (typeof patch.role === "string" && patch.role.trim()) next.role = patch.role.trim().slice(0, 100);
+  const office = officeOf(patch.office);
+  if (office) next.office = office;
   if (typeof patch.isChair === "boolean") {
     next.isChair = patch.isChair;
     if (patch.isChair) {

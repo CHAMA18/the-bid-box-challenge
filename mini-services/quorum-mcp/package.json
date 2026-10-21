@@ -5,6 +5,7 @@
   "description": "Quorum's own MCP server (JSON-RPC 2.0, 5 tools) + LangGraph.js orchestration + the human gate. Port 3031.",
   "scripts": {
     "dev": "bun --hot index.ts",
-    "start": "bun index.ts"
+    "start": "bun index.ts",
+    "test": "bun test ."
   }
 }

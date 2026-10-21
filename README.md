@@ -187,7 +187,9 @@ Full detail: [`SUBMISSION/06-mcp-implementation.md`](SUBMISSION/06-mcp-implement
 
 ---
 
-## The five MCP tools
+## The MCP tool registry — five review tools, thirteen cycle tools
+
+The review desk's five tools are the original core; the tender-cycle build (waves 1-3) adds thirteen more, so the agent's hands now cover the full procurement cycle — opening, evaluation, award, standstill, contract, complaints — with every irreversible step behind a named-human gate that declares the office that must sign.
 
 | Tool | Kind | What it does |
 | --- | --- | --- |
@@ -197,7 +199,9 @@ Full detail: [`SUBMISSION/06-mcp-implementation.md`](SUBMISSION/06-mcp-implement
 | `draft_redline` | WRITES | Drafts a committee-ready redline for a flagged clause (configured LLM endpoint, template fallback) |
 | `file_gate_submission` | IRREVERSIBLE | Files the award submission. Execution is blocked until a named human signs the gate |
 
-Every call that executes is audit-logged (READ / WRITES / IRREVERSIBLE) to `data/tool-log.jsonl`. The three graph-only tools are logged by the review graph, not by a direct `/mcp` call.
+The cycle tools (`record_bid_opening`, `build_evaluation_matrix`, `open_alb_dossier`, `draft_award_report`, `publish_award_notice`, `prepare_contract_pack`, `request_variation`, `log_complaint`, `log_clarification`, `issue_addendum`, `draft_specification`, `draft_notice`, `add_pipeline_entry`) share the same cores with the REST surface the Cycle view calls — the agent's hands and the officer's desk act on identical code paths. The statutory gates (`record_bid_opening`, `certify_evaluation`, `sign_award_report`, `publish_award_notice`, `sign_contract_pack`, `approve_variation`, `certify_payment`, `record_contract_completion`, `respond_complaint`, `publish_notice`) declare `requiredOffice`, and the sidecar refuses an approval from a roster member who does not hold that office (the signed-in officer holds the gavel and may always sign).
+
+Every call that executes is audit-logged (READ / WRITES / IRREVERSIBLE) to `data/tool-log.jsonl`. The three graph-only tools are logged by the review graph, not by a direct `/mcp` call. The log chain now continues across restarts — boot reads the log back, so the next append points at the last line's hash, never at genesis.
 
 ---
 
@@ -298,13 +302,15 @@ curl -s localhost:3031/mcp -X POST -H 'content-type: application/json' \
 
 - MCP (JSON-RPC 2.0): `POST :3031/mcp` — `initialize` · `ping` · `tools/list` · `tools/call`
 - REST: `/api/health` · `/api/tools` · `/api/architecture` · `/api/log?limit=` · `GET|POST /api/runs` · `GET /api/runs/:id/report` (downloads the sourced report as `.md`) · `GET /api/gates` · `POST /api/gates/:id/decision` · `GET|POST|DELETE /api/team`
-- Web-app routes: `/api/auth/*` (register/login/logout/me) · `/api/committee` (+ `/summon`) · `/api/contact` · `/api/agent-status` · `/api/mcp-ensure`
+- Supplier marketplace (sidecar): `GET /api/marketplace` (the opportunities board) · `GET|POST /api/applications` (POST is org-attested only — late bids, duplicates and suspended suppliers are refused)
+- Web-app routes: `/api/auth/*` (register/login/logout/me) · `/api/org/auth/*` + `/api/org/profile` + `/api/org/tenders` + `/api/org/applications` (the organization portal — a separate account space with its own cookie) · `/api/committee` (+ `/summon`) · `/api/contact` · `/api/agent-status` · `/api/mcp-ensure`
 
 **Product surfaces:**
 
 - **Landing** (`/`) — product story, live stack console, film (also embedded in this README: [Demo film](#demo-film)).
 - **Auth** (`/#/login`, `/#/register`) — email/passphrase + Google Sign-In (Firebase project `public-tender`; identity mirror + document storage), with the optional workspace invite code field.
 - **Workspace** (`/#/dashboard`) — live stats, run register with start times and SOURCED REPORT downloads, human-gate queue with named sign-off, decision ledger, agent feed, portal sync, committee roll-call, settings with team members.
+- **Supplier portal** (`/org`) — the organization side's own door: a 4-step registration wizard that builds an organization PROFILE (legal identity, statutory registrations, capabilities — the fields the supplier register asks bidders to hold), then a console with Overview / Profile / Opportunities / Applications. Organizations browse every staged tender pack (closing date resolved from the cycle record first, the notice text second — an unstated closing is shown as unstated), file applications that are attested `org:<name>` into the same audit spine, and are refused honestly: late bids after the closing date, a second bid per tender, suspended/blacklisted register status. The officers' Opening tab shows the electronic applications as context — the register itself remains the officer's act.
 
 ---
 
@@ -313,18 +319,18 @@ curl -s localhost:3031/mcp -X POST -H 'content-type: application/json' \
 **Deliberate, product-level boundaries (these are the design):**
 
 - The agent cannot file an award by itself — by construction, not by policy. Everything irreversible is behind the named human gate.
-- Committee *roles* are stored and displayed but not yet enforced as permission levels: the workspace is currently flat (all members read the same runs/gates/ledger).
-- The compliance layer is deterministic rule-based (eight rule families), not a general reasoning engine — it catches what the rules cover, and it is honest about that.
-
+- Committee *offices* (procurement unit, evaluation committee, accounting officer, oversight) are stored on the register and enforced at the statutory gates — a member who does not hold a gate's office is refused (403). The workspace itself is still flat: every member reads the same runs/gates/ledger; office enforcement lives at the signature, not at page level.
+- The compliance layer is deterministic rule-based (**ten** rule families), not a general reasoning engine — it catches what the rules cover, and it is honest about that.
+- **Mutations carry identity, verified server-side.** Every state-changing request to the sidecar must arrive either sealed by the Next gateway (an HMAC over method, path, actor and timestamp — the gateway derives the actor from the verified session, never from the caller) or with a real web session cookie that the sidecar re-verifies against the web app, server-to-server. Anonymous mutations are refused with 401; the sidecar binds to loopback only, so the gateway is the only public door; `POST /mcp` stays the documented agent door (its irreversible steps halt behind the same named-human gates). A request whose declared identity disagrees with the verified one is refused with 403 and logged — impersonating an officer fails loud, not silent.
+- **The audit spine surfaces its own durability.** `GET /api/health` reports an `auditSpine` block (log-write failures, state-save failures, corrupt-state quarantine) — "nothing happens silently" includes the spine itself. A state file that exists but cannot be parsed is quarantined (renamed, never deleted) and flagged, instead of being silently treated as first boot.
 **Current state of the deployment:**
-
-- **CI badges are empty, on purpose, for now.** The workflow files ship valid and enabled (`.github/workflows/`), and the full suite is proven to pass — 72 sidecar tests, the evaluation harness, lint, and a 26-check end-to-end sweep — but this account's GitHub Actions is currently unable to schedule runners at all (an account-level block, reproduced with a one-step echo workflow on a public repo). Until the account unblock lands, the honest substitute is running the suite locally: `bun test` in `mini-services/quorum-mcp`, `bun eval.ts --runs 3` there too, `bun run lint` at the root.
 
 - With no `LLM_BASE_URL` configured, redline drafting runs on the deterministic template fallback rather than a live model — capabilities are unaffected; prose quality is. Wire an in-region endpoint to upgrade that layer.
 - Run-to-run variance and cost are measured for **both** paths (`SUBMISSION/10-cost-and-audit.md`): the deterministic rule path (identical findings across repeats; 0 tokens → 0 USD) and, since 2026-10-17, the live-model path on an in-region open-weights endpoint (Ollama, `llama3.2:3b`) — 4 runs audited: findings stable, draft texts distinct run-to-run, 668–988 tokens/run, 7.7 s median per model call, 0 USD marginal cost. `bun live-audit.ts` regenerates the artifact at any time from the append-only log; a hosted endpoint's cost is the published formula (tokens × price), never a guessed number.
 - **The gold labels are single-labeller** — one human, one pass, written before the engine ran; not independently double-labelled (stated verbatim in `data/eval/report.json`). The mitigations are structural, not cosmetic: labels were pre-registered, every post-hoc addition is flagged `postHoc` and reported separately, and mutation testing checks sensitivity independently of the labels. A second labeller on a 20% overlap sample with disagreement review is the first hire of the evaluation layer (`Future improvements`).
 - With a small planner, the model-led plan could disable deep-value parsing on packs whose bid values demand it — one such run was logged as evidence, and the engine now applies a planner **safety floor** (parsing may be added, never removed while bid values are present), pinned by a dedicated test. That trade-off is documented rather than hidden.
 - The e-GP portal receipt is labeled `egp-portal (simulated)` — sealing and receipts are real (sha-256, persisted), the transmission is a demo stub until wired to a live portal integration.
+- Organization accounts open their session immediately at registration — there is no email-verification loop on the supplier door. That is deliberate: an organization's statutory verification (registration number, tax clearance) is the procurement desk's act on the supplier register, not a mail loop; the desk can suspend an organization (`SUSPENDED`), which blocks sign-in and new applications.
 - Beneficial-ownership / registry matching is exposed via the source-request queue as a pending source, not yet a live connector.
 - No HTTPS yet: the certbot step is staged but waits on the Route 53 A record for `quorum.chungu-chama.com` (blocked by the IAM permissions boundary on the deploying user; HTTP still works over the Elastic IP).
 - Emails for invites/reports are not sent — invite codes are copy-paste; report downloads happen in-browser. No email provider is configured.

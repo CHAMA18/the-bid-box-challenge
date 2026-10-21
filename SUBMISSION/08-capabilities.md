@@ -29,3 +29,31 @@ Each capability below is mapped to the exact place in the system that implements
 - **Planning is structural, not spontaneous.** The agent doesn't invent a plan per run — and we argue that's the *stronger* agentic claim for procurement: the graph makes the plan auditable and makes the missing-edge safety guarantee possible. Anything the model improvised could never promise "the edge to filing does not exist".
 - **The generative layer is currently the template fallback on the live deployment.** With no `LLM_BASE_URL` configured, `draft_redline` drafts from the deterministic template; capabilities and agency are unaffected, prose quality is. Wiring an in-region open-weights endpoint upgrades that layer only.
 - **"Recommendation generation" never crosses into "decision".** Every recommendation stops at the gate — the agent frames the decision; the named human makes it.
+
+---
+
+## The tender-cycle build (waves 1-3) — capabilities across the full cycle
+
+The ten capabilities above are demonstrated by the review desk. The cycle build
+extends the same architecture across the procurement cycle, with the same
+discipline: deterministic rules make the compliance calls, the model drafts
+prose, and nothing irreversible happens without a named human whose office
+matches the gate.
+
+| Cycle phase | What the agent does | Where the human signs |
+| --- | --- | --- |
+| Pipeline & authoring | `add_pipeline_entry`, `draft_specification` (LLM/template), `draft_notice` + mandatory-field check | `publish_notice` (procurement unit, simulated portal) |
+| Solicitation fairness | `log_clarification`, `issue_addendum` — an addendum inside the 7-day window must move the closing, or it is flagged | — (logged, rule-enforced) |
+| Bid opening | `record_bid_opening` — late bids rejected unopened, statutory minutes composed | `record_bid_opening` gate (procurement unit) |
+| Evaluation | `build_evaluation_matrix` (weights must sum to 100, financial formula lowest-price-100), `open_alb_dossier` (5-working-day clock) | COI declarations (all PRESENT members) + `certify_evaluation` gate (evaluation committee) |
+| Award | `draft_award_report` (statutory composer from the certified matrix), `publish_award_notice` | `sign_award_report` + `publish_award_notice` gates (accounting officer) |
+| Standstill & debrief | standstill clock (10 working days), `draft_debrief` per unsuccessful bidder — qualitative, no confidential prices | `issue_debrief` gate (accounting officer) |
+| Contract | `prepare_contract_pack`, variations (≥10% of contract value hits the gate), `certify_payment`, `record_contract_completion` | `sign_contract_pack`, `approve_variation`, `certify_payment`, `record_contract_completion` gates (accounting officer) |
+| Complaints | `log_complaint` (standstill-window marked), 14-working-day response clock | `respond_complaint` gate (accounting officer) |
+| Oversight read-side | analytics computed from the append-only log; the consolidated procurement file (every artifact, hash, signature, chain verdict) | — (read-only) |
+
+New integrity rules joined the review set: `R-BID-SECURITY` (floor % of bid value,
+validity margin beyond closing), `R-DEBARMENT-HIT` (bidder names screened against
+the seeded debarment register at flag time). The workspace gained the **Tender
+cycle** view: eight phase tabs, the gate queue renders every gate kind with the
+office that must sign, and the committee register carries each member's office.
