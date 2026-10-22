@@ -58,7 +58,7 @@ function deriveName(email: string): string {
 }
 
 const inputCls =
-  "h-11 w-full rounded-xl border border-ink-200 bg-white px-3.5 text-[14px] text-ink-950 outline-none transition-all placeholder:text-ink-300 focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 dark:border-ink-800 dark:bg-night-2 dark:text-white dark:placeholder:text-ink-500";
+  "h-11 w-full rounded-xl border border-ink-200 bg-white px-3.5 text-[14px] text-ink-950 outline-none transition-all placeholder:text-ink-300 focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 dark:bg-night-2 dark:text-white dark:placeholder:text-ink-500";
 
 function Field({ label, error, children, hint }: { label: string; error?: string; children: React.ReactNode; hint?: string }) {
   return (
@@ -327,7 +327,7 @@ function VerifyPanel({
         then come back here to continue.
       </p>
       {note && (
-        <p role="status" className="mt-4 rounded-xl border border-ink-200 bg-sand px-3.5 py-2.5 text-[12.5px] font-medium leading-snug text-ink-700 dark:border-ink-800 dark:bg-ink-900/40 dark:text-ink-200">
+        <p role="status" className="mt-4 rounded-xl border border-ink-200 bg-sand px-3.5 py-2.5 text-[12.5px] font-medium leading-snug text-ink-700 dark:bg-ink-900/40 dark:text-ink-200">
           {note}
         </p>
       )}
@@ -344,7 +344,7 @@ function VerifyPanel({
         type="button"
         onClick={onResend}
         disabled={busy}
-        className="mt-2.5 inline-flex h-11 w-full items-center justify-center rounded-xl border border-ink-200 text-[13.5px] font-semibold text-ink-700 transition-colors hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-ink-700 dark:text-ink-200 dark:hover:bg-ink-900"
+        className="mt-2.5 inline-flex h-11 w-full items-center justify-center rounded-xl border border-ink-200 text-[13.5px] font-semibold text-ink-700 transition-colors hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-ink-200 dark:hover:bg-ink-900"
       >
         Resend verification email
       </button>
@@ -467,7 +467,7 @@ function SuccessPanel({
           Back to the site
         </button>
 
-        <dl className="mx-auto mt-7 grid max-w-sm grid-cols-3 divide-x divide-ink-100 rounded-2xl border border-ink-100 bg-white py-4 dark:divide-ink-800 dark:border-ink-800 dark:bg-night-2">
+        <dl className="mx-auto mt-7 grid max-w-sm grid-cols-3 divide-x divide-ink-100 rounded-2xl border border-ink-100 bg-white py-4 dark:bg-night-2">
           {[
             ["SESSION", "HTTPONLY"],
             ["PASSWORD", "SCRYPT"],
@@ -848,7 +848,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
               <span className="font-code text-[9.5px] font-semibold tracking-[0.2em] text-brand-700 dark:text-brand-400">OFFICER PORTAL · /</span>
             </div>
 
-            <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_16px_48px_rgba(11,12,15,0.08)] sm:p-8 dark:border-ink-800 dark:bg-night-2">
+            <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_16px_48px_rgba(11,12,15,0.08)] sm:p-8 dark:bg-night-2">
               <AnimatePresence mode="wait">
                 {status === "success" && granted ? (
                   <SuccessPanel
@@ -931,7 +931,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                         type="button"
                         onClick={signInWithGoogle}
                         disabled={status === "sending"}
-                        className="inline-flex h-11 w-full items-center justify-center gap-3 rounded-xl border border-ink-200 bg-white text-[14px] font-semibold text-ink-900 transition-all hover:border-ink-300 hover:bg-ink-50 focus-visible:ring-2 focus-visible:ring-brand-600/15 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-ink-800 dark:bg-night-2 dark:text-white dark:hover:border-ink-700 dark:hover:bg-ink-900"
+                        className="inline-flex h-11 w-full items-center justify-center gap-3 rounded-xl border border-ink-200 bg-white text-[14px] font-semibold text-ink-900 transition-all hover:border-ink-300 hover:bg-ink-50 focus-visible:ring-2 focus-visible:ring-brand-600/15 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:bg-night-2 dark:text-white dark:hover:bg-ink-900"
                       >
                         {status === "sending" && googleFlow ? (
                           <>
@@ -1153,7 +1153,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                                       ? "border-brand-600 bg-brand-600 text-white"
                                       : errors.terms
                                         ? "border-brand-500 bg-white dark:bg-night-2"
-                                        : "border-ink-300 bg-white dark:border-ink-700 dark:bg-night-2"
+                                        : "border-ink-300 bg-white dark:bg-night-2"
                                   )}
                                 >
                                   <svg
@@ -1196,7 +1196,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                                       "grid h-5 w-5 place-items-center rounded-md border transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600/30",
                                       remember
                                         ? "border-brand-600 bg-brand-600 text-white"
-                                        : "border-ink-300 bg-white dark:border-ink-700 dark:bg-night-2"
+                                        : "border-ink-300 bg-white dark:bg-night-2"
                                     )}
                                   >
                                     <svg
@@ -1238,7 +1238,7 @@ export function AuthScreen({ mode, onModeChange, onSuccess, onEnterWorkspace, on
                                     className="overflow-hidden"
                                   >
                                     <div
-                                      className="mt-3 rounded-xl border border-ink-200 bg-sand px-4 py-3.5 dark:border-ink-800 dark:bg-ink-900/40"
+                                      className="mt-3 rounded-xl border border-ink-200 bg-sand px-4 py-3.5 dark:bg-ink-900/40"
                                       role="note"
                                     >
                                       <p className="font-code text-[9px] font-semibold tracking-[0.2em] text-ink-500 dark:text-ink-400">

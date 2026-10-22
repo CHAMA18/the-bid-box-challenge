@@ -61,6 +61,7 @@ import type { AuthUser } from "@/lib/auth-types";
 import { uploadTenderDocument } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 import { ThemeModeRow } from "@/components/quorum/theme-toggle";
+import { gateFact, type GateInputs } from "@/components/quorum/gate-facts";
 
 /**
  * Quorum — Workspace.
@@ -103,7 +104,13 @@ type GateItem = {
   tender: string;
   title: string;
   supplier: string;
-  value: string;
+  /* The one fact the card states below the supplier: a contract value, the
+     bid register, or the record the gate acts on. */
+  factLabel: string;
+  factText: string;
+  /* A contract always has a contract value — set when this gate would open
+     one without a stated value. */
+  valueMissing: boolean;
   flags: number;
   ago: string;
   tool: string;
@@ -132,7 +139,7 @@ type BackendGate = {
   status: "PENDING" | "APPROVED" | "REJECTED" | "EXECUTED";
   tool?: string;
   requiredOffice?: string;
-  inputs: { bidder?: string; value?: string; findings?: string[] };
+  inputs: GateInputs;
   createdAt: string;
   decidedAt?: string;
   approver?: string;
@@ -283,17 +290,23 @@ function useMissionData() {
     () =>
       rawGates
         .filter((g) => g.status === "PENDING")
-        .map((g) => ({
-          id: g.id,
-          tender: g.tenderId,
-          title: registry[g.tenderId]?.title ?? g.tenderId,
-          supplier: g.inputs.bidder ?? "—",
-          value: g.inputs.value ?? "—",
-          flags: g.inputs.findings?.length ?? 0,
-          ago: clockOf(g.createdAt),
-          tool: g.tool ?? "file_gate_submission",
-          ...(g.requiredOffice ? { requiredOffice: g.requiredOffice } : {}),
-        })),
+        .map((g) => {
+          const tool = g.tool ?? "file_gate_submission";
+          const fact = gateFact(tool, g.inputs, g.id);
+          return {
+            id: g.id,
+            tender: g.tenderId,
+            title: registry[g.tenderId]?.title ?? g.tenderId,
+            supplier: g.inputs.bidder ?? "—",
+            factLabel: fact.label,
+            factText: fact.text,
+            valueMissing: fact.missing,
+            flags: g.inputs.findings?.length ?? 0,
+            ago: clockOf(g.createdAt),
+            tool,
+            ...(g.requiredOffice ? { requiredOffice: g.requiredOffice } : {}),
+          };
+        }),
     [rawGates, registry]
   );
 
@@ -2128,7 +2141,7 @@ function RunRegister({
 
 /* ── Human gate queue ────────────────────────────────────────────────────── */
 
-function GateQueue({
+export function GateQueue({
   queue,
   ledger,
   firstName,
@@ -2214,15 +2227,23 @@ function GateQueue({
                     <dd className="mt-0.5 font-semibold text-ink-800">{g.supplier}</dd>
                   </div>
                   <div>
-                    <dt className="text-ink-300">CONTRACT VALUE</dt>
-                    <dd className="mt-0.5 font-semibold text-ink-800">{g.value}</dd>
+                    <dt className="text-ink-300">{g.factLabel}</dt>
+                    <dd className={cn("mt-0.5 font-semibold", g.valueMissing ? "text-brand-700" : "text-ink-800")}>
+                      {g.factText}
+                    </dd>
                   </div>
                 </dl>
                 <div data-tour="gate-actions" className="mt-4 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => act(g, "AWARDED")}
-                    className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-[12.5px] font-bold tracking-[0.02em] text-white transition-all hover:bg-brand-700"
+                    disabled={g.valueMissing}
+                    title={
+                      g.valueMissing
+                        ? "A contract always has a contract value — record the award value before this is signed."
+                        : undefined
+                    }
+                    className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-[12.5px] font-bold tracking-[0.02em] text-white transition-all hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Stamp className="h-3.5 w-3.5" aria-hidden="true" />
                     Award

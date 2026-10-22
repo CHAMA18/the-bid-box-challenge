@@ -135,7 +135,7 @@ export function SiteHeader({
             <>
               <Link
                 href="/org/dashboard"
-                className="inline-flex h-10 items-center rounded-full px-5 text-[13.5px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-600/10 hover:text-emerald-800 dark:text-emerald-400"
+                className="inline-flex h-10 items-center rounded-full bg-brand-600 px-5 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700 hover:shadow-[0_10px_26px_rgba(217,38,22,0.36)]"
               >
                 Supplier
               </Link>
@@ -233,7 +233,7 @@ export function SiteHeader({
                   <Link
                     href="/org"
                     onClick={() => setOpen(false)}
-                    className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-emerald-600/40 bg-emerald-600/10 text-[15px] font-semibold text-emerald-800 dark:text-emerald-300"
+                    className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 text-[15px] font-semibold text-white shadow-[0_8px_20px_rgba(217,38,22,0.28)] transition-all hover:bg-brand-700 hover:shadow-[0_10px_26px_rgba(217,38,22,0.36)]"
                   >
                     Supplier portal — for organizations
                     <ArrowUpRight className="h-4 w-4" aria-hidden="true" />

@@ -29,30 +29,6 @@ import type { AuthMode, AuthUser } from "@/lib/auth-types";
  * the committee awards the tender.
  */
 
-/* Local identity mirror — keeps a signed-in session alive across reloads
-   when no httpOnly cloud session exists. */
-const IDENTITY_KEY = "quorum.identity";
-
-function readLocalIdentity(): AuthUser | null {
-  try {
-    const raw = window.localStorage.getItem(IDENTITY_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as AuthUser;
-    return parsed && typeof parsed.email === "string" ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeLocalIdentity(user: AuthUser | null) {
-  try {
-    if (user) window.localStorage.setItem(IDENTITY_KEY, JSON.stringify(user));
-    else window.localStorage.removeItem(IDENTITY_KEY);
-  } catch {
-    /* private mode — the session simply won't survive reloads */
-  }
-}
-
 /* The URL hash is the single source of truth for the active view. */
 function subscribeHash(onChange: () => void) {
   window.addEventListener("popstate", onChange);
@@ -84,16 +60,20 @@ export default function Home() {
   const prevViewRef = useRef<"landing" | "auth" | "dashboard">("landing");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* Restore session on boot — cloud first, local identity mirror second */
+  /* The server-verified httpOnly session is the sole source of identity. */
   useEffect(() => {
     let alive = true;
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d: { user: AuthUser | null }) => {
-        if (!alive) return;
-        setUser(d.user ?? readLocalIdentity());
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error("Session check failed");
+        return r.json();
       })
-      .catch(() => undefined)
+      .then((d: { user?: AuthUser | null }) => {
+        if (alive) setUser(d.user ?? null);
+      })
+      .catch(() => {
+        if (alive) setUser(null);
+      })
       .finally(() => {
         if (alive) setAuthReady(true);
       });
@@ -150,7 +130,6 @@ export default function Home() {
 
   const handleAuthSuccess = useCallback((u: AuthUser) => {
     setUser(u);
-    writeLocalIdentity(u);
   }, []);
 
   const enterWorkspace = useCallback(() => {
@@ -174,7 +153,6 @@ export default function Home() {
       .catch(() => undefined)
       .finally(() => {
         setUser(null);
-        writeLocalIdentity(null);
         showToast("SESSION CLOSED — SEE YOU AT THE NEXT RUN");
       });
   }, [showToast]);

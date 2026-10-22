@@ -21,7 +21,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 /**
  * Labeled dark/light switch row for the dark sidebar.
  */
-export function ThemeModeRow({ className }: { className?: string }) {
+export function ThemeModeRow({ className, collapsed = false }: { className?: string; collapsed?: boolean }) {
   const { resolvedTheme, setTheme } = useTheme();
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -36,33 +36,44 @@ export function ThemeModeRow({ className }: { className?: string }) {
       role="switch"
       aria-checked={isDark}
       onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label={collapsed ? (isDark ? "Switch to light mode" : "Switch to dark mode") : undefined}
+      title={collapsed ? (isDark ? "Switch to light mode" : "Switch to dark mode") : undefined}
       className={cn(
-        "flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2.5 transition-colors hover:bg-white/5",
+        "flex w-full items-center rounded-xl border px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50",
+        collapsed
+          ? "h-11 justify-center border-ink-200 bg-white text-ink-600 hover:bg-ink-50 dark:border-white/10 dark:bg-white/[0.03] dark:text-ink-300 dark:hover:bg-white/5"
+          : "justify-between gap-3 border-ink-200 bg-white/70 hover:bg-ink-50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/5",
         className
       )}
     >
-      <span className="flex items-center gap-2.5">
+      <span className={cn("flex items-center", collapsed ? "justify-center" : "gap-2.5")}>
         {isDark ? (
-          <Moon className="h-4 w-4 text-ink-400" aria-hidden="true" />
+          <Moon className="h-4 w-4 text-ink-500 dark:text-ink-300" aria-hidden="true" />
         ) : (
-          <Sun className="h-4 w-4 text-ink-400" aria-hidden="true" />
+          <Sun className="h-4 w-4 text-ink-500 dark:text-ink-300" aria-hidden="true" />
         )}
-        <span className="font-code text-[9px] font-semibold tracking-[0.22em] text-ink-300">DARK / LIGHT MODE</span>
+        {!collapsed ? (
+          <span className="font-code text-[9px] font-semibold tracking-[0.22em] text-ink-600 dark:text-ink-300">
+            DARK / LIGHT MODE
+          </span>
+        ) : null}
       </span>
-      <span
-        className={cn(
-          "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-          isDark ? "bg-brand-600" : "bg-ink-600"
-        )}
-        aria-hidden="true"
-      >
+      {!collapsed ? (
         <span
           className={cn(
-            "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
-            isDark ? "translate-x-[18px]" : "translate-x-0.5"
+            "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+            isDark ? "bg-brand-600" : "bg-ink-300 dark:bg-ink-600"
           )}
-        />
-      </span>
+          aria-hidden="true"
+        >
+          <span
+            className={cn(
+              "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+              isDark ? "translate-x-[18px]" : "translate-x-0.5"
+            )}
+          />
+        </span>
+      ) : null}
     </button>
   );
 }
