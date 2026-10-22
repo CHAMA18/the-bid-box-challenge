@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  ArrowRight,
   ArrowUpRight,
   Building2,
   Check,
@@ -14,7 +15,13 @@ import {
   FileText,
   LayoutGrid,
   Loader2,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  RotateCw,
   ScrollText,
+  Search,
   Stamp,
   UserRound,
   X,
@@ -25,6 +32,10 @@ import { COUNTRIES, SUGGESTED_COUNTRIES, findCountry, type Country } from "@/lib
 import { LEGAL_FORMS, LEGAL_FORM_GROUPS, LEGAL_FORM_OTHER } from "@/lib/legal-forms";
 import type { PublicOrg } from "@/lib/org-auth";
 import { cn } from "@/lib/utils";
+import { ThemeModeRow } from "@/components/quorum/theme-toggle";
+import { ApplicationTable } from "./application-table";
+import { SupplierOverview } from "./supplier-overview";
+import { completeness, fmtDate, money, type Application, type Tender } from "./supplier-data";
 
 /**
  * The organization console — the supplier's desk. Four surfaces: Overview
@@ -35,32 +46,6 @@ import { cn } from "@/lib/utils";
  */
 
 const EASE = [0.22, 1, 0.36, 1] as const;
-
-type Tender = {
-  ref: string;
-  title: string;
-  buyer: string;
-  sector: string;
-  currency: string;
-  budget: string;
-  format: string;
-  closingDate?: string;
-  closingKnown: boolean;
-  status: "OPEN" | "CLOSED";
-  daysLeft?: number;
-  applications: number;
-};
-
-type Application = {
-  id: string;
-  tenderId: string;
-  orgName: string;
-  amount: number;
-  currency?: string;
-  coverNote?: string;
-  receivedAt: string;
-  status: string;
-};
 
 type Tab = "overview" | "profile" | "opportunities" | "applications";
 
@@ -77,46 +62,321 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function money(amount: number, currency?: string): string {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: currency && currency.length === 3 ? "currency" : "decimal",
-      currency: currency && currency.length === 3 ? currency : undefined,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  } catch {
-    return `${currency ?? ""} ${amount.toLocaleString()}`.trim();
-  }
+/* ── Sidebar (desktop rail + mobile drawer) ─────────────────────────────── */
+
+type ConsoleTab = { id: Tab; label: string; icon: typeof LayoutGrid; badge?: number };
+
+function ConsoleSidebar({
+  orgName,
+  orgStatus,
+  registrationNo,
+  tabs,
+  active,
+  onNavigate,
+  onSignOut,
+  collapsed = false,
+  onToggleCollapse,
+}: {
+  orgName: string;
+  orgStatus: string;
+  registrationNo: string;
+  tabs: ConsoleTab[];
+  active: Tab;
+  onNavigate: (t: Tab) => void;
+  onSignOut: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
+  const live = orgStatus === "ACTIVE";
+  return (
+    <div className={cn("relative flex h-full flex-col overflow-hidden py-5", collapsed ? "px-2" : "px-3")}>
+      <div aria-hidden="true" className="bg-grid-light pointer-events-none absolute inset-0 opacity-30 dark:opacity-40" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-24 left-1/2 h-44 w-56 -translate-x-1/2 rounded-full bg-brand-500/[0.06] blur-3xl dark:bg-brand-500/[0.10]"
+      />
+      <div className={cn("relative mb-2 flex items-center", collapsed ? "justify-center" : "justify-between px-3")}>
+        {!collapsed ? <p className="font-code text-[8px] font-semibold tracking-[0.3em] text-ink-500 dark:text-ink-600">CONSOLE</p> : null}
+        {onToggleCollapse ? (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 dark:text-ink-400 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" aria-hidden="true" /> : <PanelLeftClose className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        ) : null}
+      </div>
+      <nav aria-label="Supplier console sections" className="relative min-h-0 flex-1 overflow-y-auto">
+        <ul className="space-y-1">
+          {tabs.map((t) => {
+            const isActive = active === t.id;
+            return (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => onNavigate(t.id)}
+                  aria-current={isActive ? "page" : undefined}
+                  title={collapsed ? t.label : undefined}
+                  aria-label={collapsed ? `${t.label}${t.badge ? `, ${t.badge}` : ""}` : undefined}
+                  className={cn(
+                    "group relative flex w-full items-center rounded-xl py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50",
+                    collapsed ? "justify-center px-2" : "gap-3 px-3",
+                    isActive
+                      ? "bg-brand-500/10 text-brand-700 dark:bg-white/10 dark:text-white"
+                      : "text-ink-600 hover:bg-ink-100/80 hover:text-ink-950 dark:text-ink-400 dark:hover:bg-white/5 dark:hover:text-ink-100",
+                  )}
+                >
+                  {isActive ? (
+                    <motion.span
+                      layoutId="org-nav-rail"
+                      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-brand-500"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <t.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className={cn("text-[12.5px] font-semibold tracking-[-0.005em]", collapsed ? "sr-only" : "flex-1")}>
+                    {t.label}
+                  </span>
+                  {t.badge !== undefined && t.badge > 0 ? (
+                    <span
+                      className={cn(
+                        "grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-code text-[9px] font-bold",
+                        collapsed
+                          ? "absolute right-1 top-1 h-4 min-w-4 border border-paper bg-brand-600 px-1 text-[8px] text-white dark:border-night"
+                          : "bg-ink-100 text-ink-700 dark:bg-white/10 dark:text-ink-200",
+                      )}
+                    >
+                      {t.badge}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      <div className="relative mt-4 space-y-2 border-t border-ink-200 pt-3 dark:border-white/[0.06]">
+        <div
+          title={collapsed ? `${orgStatus} · org:${orgName} · REG ${registrationNo}` : undefined}
+          className={cn("rounded-xl border border-ink-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.03]", collapsed && "flex justify-center")}
+        >
+          <p className={cn("flex items-center gap-2 font-code text-[8.5px] font-semibold tracking-[0.18em] text-ink-700 dark:text-ink-300", collapsed && "justify-center")}>
+            <span className="relative flex h-1.5 w-1.5" aria-hidden="true">
+              {live ? (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-70" />
+              ) : null}
+              <span
+                className={cn("relative inline-flex h-1.5 w-1.5 rounded-full", live ? "bg-emerald-500" : "bg-amber-500")}
+              />
+            </span>
+            {!collapsed ? orgStatus : <span className="sr-only">{orgStatus}</span>}
+          </p>
+          {!collapsed ? (
+            <>
+              <p className="mt-1.5 truncate font-code text-[8px] leading-[1.7] tracking-[0.12em] text-ink-500">
+                ATTESTED AS org:{orgName}
+              </p>
+              <p className="mt-0.5 truncate font-code text-[8px] leading-[1.7] tracking-[0.12em] text-ink-500">
+                REG · {registrationNo}
+              </p>
+            </>
+          ) : null}
+        </div>
+
+        <ThemeModeRow collapsed={collapsed} />
+
+        <Link
+          href="/"
+          aria-label={collapsed ? "Officer desk" : undefined}
+          title={collapsed ? "Officer desk" : undefined}
+          className={cn(
+            "flex w-full items-center rounded-xl py-2 text-[11.5px] font-semibold text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-950 dark:text-ink-400 dark:hover:bg-white/5 dark:hover:text-white",
+            collapsed ? "justify-center px-2" : "justify-between gap-2 px-3",
+          )}
+        >
+          {!collapsed ? "Officer desk" : <span className="sr-only">Officer desk</span>}
+          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </Link>
+        <button
+          type="button"
+          onClick={onSignOut}
+          aria-label={collapsed ? "Sign out" : undefined}
+          title={collapsed ? "Sign out" : undefined}
+          className={cn(
+            "flex w-full items-center rounded-xl py-2 text-[11.5px] font-semibold text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-950 dark:text-ink-400 dark:hover:bg-white/5 dark:hover:text-white",
+            collapsed ? "justify-center px-2" : "gap-2 px-3",
+          )}
+        >
+          <LogOut className="h-3.5 w-3.5" aria-hidden="true" /> {!collapsed ? "Sign out" : null}
+        </button>
+      </div>
+    </div>
+  );
 }
 
-function fmtDate(iso: string | Date | undefined): string {
-  if (!iso) return "—";
-  const d = iso instanceof Date ? iso : new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+/* ── Search palette ──────────────────────────────────────────────────────── */
+
+const QUICK_LINKS: { id: Tab; label: string; hint: string; icon: typeof LayoutGrid }[] = [
+  { id: "opportunities", label: "Opportunities", hint: "The open tender board", icon: ScrollText },
+  { id: "applications", label: "Applications", hint: "Everything you have filed", icon: FileText },
+  { id: "profile", label: "Profile", hint: "The identity the desk verifies", icon: Building2 },
+];
+
+function SearchPalette({
+  tenders,
+  applications,
+  onClose,
+  onBrowseTender,
+  onTab,
+}: {
+  tenders: Tender[] | null;
+  applications: Application[] | null;
+  onClose: () => void;
+  onBrowseTender: (t: Tender) => void;
+  onTab: (tab: Tab) => void;
+}) {
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+
+  const tenderHits = (tenders ?? [])
+    .filter((t) => !needle || `${t.ref} ${t.title} ${t.buyer} ${t.sector}`.toLowerCase().includes(needle))
+    .slice(0, 4);
+  const appHits = (applications ?? [])
+    .filter((a) => !needle || `${a.id} ${a.tenderId} ${a.status} ${a.orgName}`.toLowerCase().includes(needle))
+    .slice(0, 4);
+  const nothing = needle.length > 0 && tenderHits.length === 0 && appHits.length === 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[80] bg-ink-950/55 p-4 backdrop-blur-sm"
+    >
+      <button type="button" aria-label="Close search" onClick={onClose} className="absolute inset-0 h-full w-full cursor-default" />
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search the supplier portal"
+        initial={{ opacity: 0, y: -8, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -8, scale: 0.985 }}
+        transition={{ duration: 0.2, ease: EASE }}
+        className="relative mx-auto mt-[9vh] w-full max-w-xl overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_40px_100px_rgba(0,0,0,0.45)] dark:border-white/10 dark:bg-night-2"
+      >
+        <div className="flex items-center gap-2.5 border-b border-ink-100 px-4 dark:border-white/10">
+          <Search className="h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search tender refs, buyers, applications…"
+            aria-label="Search tenders and applications"
+            className="h-12 w-full bg-transparent text-[13.5px] text-ink-950 outline-none placeholder:text-ink-400 dark:text-white"
+          />
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded border border-ink-200 px-1.5 py-0.5 font-code text-[9px] font-semibold tracking-[0.08em] text-ink-500 transition-colors hover:text-ink-900 dark:border-white/15 dark:hover:text-white"
+          >
+            ESC
+          </button>
+        </div>
+
+        <div className="max-h-[52vh] overflow-y-auto p-2">
+          {needle.length === 0 ? (
+            <div className="space-y-0.5">
+              <p className="px-2 pb-1 pt-1.5 font-code text-[9px] font-semibold uppercase tracking-[0.18em] text-ink-400">
+                Jump to
+              </p>
+              {QUICK_LINKS.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => {
+                    onTab(l.id);
+                    onClose();
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-ink-50 dark:hover:bg-white/[0.05]"
+                >
+                  <span className="grid h-7 w-7 place-items-center rounded-md border border-ink-100 bg-sand/70 text-ink-500 dark:border-white/10 dark:bg-white/[0.04]">
+                    <l.icon className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-semibold text-ink-900 dark:text-ink-800">{l.label}</span>
+                    <span className="block text-[11px] text-ink-400">{l.hint}</span>
+                  </span>
+                  <ArrowRight className="ml-auto h-3.5 w-3.5 text-ink-300" aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          ) : nothing ? (
+            <p className="px-2 py-8 text-center text-[12.5px] text-ink-500">
+              Nothing matches “{q.trim()}”. Search a tender reference, a buyer, or an application id.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {tenderHits.length > 0 ? (
+                <div>
+                  <p className="px-2 pb-1 font-code text-[9px] font-semibold uppercase tracking-[0.18em] text-ink-400">
+                    Tenders
+                  </p>
+                  {tenderHits.map((t) => (
+                    <button
+                      key={t.ref}
+                      type="button"
+                      onClick={() => {
+                        onBrowseTender(t);
+                        onClose();
+                      }}
+                      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-ink-50 dark:hover:bg-white/[0.05]"
+                    >
+                      <span className="font-code text-[10px] font-semibold text-brand-700 dark:text-brand-300">{t.ref}</span>
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-800 dark:text-ink-800">{t.title}</span>
+                      <span className="shrink-0 font-code text-[9px] uppercase tracking-[0.1em] text-ink-400">
+                        {t.status}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {appHits.length > 0 ? (
+                <div>
+                  <p className="px-2 pb-1 font-code text-[9px] font-semibold uppercase tracking-[0.18em] text-ink-400">
+                    Applications
+                  </p>
+                  {appHits.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => {
+                        onTab("applications");
+                        onClose();
+                      }}
+                      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-ink-50 dark:hover:bg-white/[0.05]"
+                    >
+                      <span className="font-code text-[10px] font-semibold text-ink-600 dark:text-ink-600">{a.tenderId}</span>
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-800 dark:text-ink-800">
+                        {money(a.amount, a.currency)}
+                      </span>
+                      <span className="shrink-0 font-code text-[9px] uppercase tracking-[0.1em] text-ink-400">{a.status}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
 }
 
-function completeness(o: PublicOrg): { filled: number; total: number; missing: string[] } {
-  const checks: [string, unknown][] = [
-    ["legal name", o.name],
-    ["registration no", o.registrationNo],
-    ["country", o.country],
-    ["legal form", o.legalForm],
-    ["tax PIN", o.taxPin],
-    ["tax clearance", o.taxClearanceNo],
-    ["clearance expiry", o.taxClearanceExpiry],
-    ["sector regulator", o.regulator],
-    ["contact person", o.contactName],
-    ["phone", o.phone],
-    ["address", o.address],
-    ["description", o.description],
-    ["categories", o.categories.length > 0],
-  ];
-  const missing = checks.filter(([, v]) => !v).map(([k]) => k);
-  return { filled: checks.length - missing.length, total: checks.length, missing };
-}
-
-/* ── Apply dialog ────────────────────────────────────────────────────────── */
+/* ── Apply dialog ──────────────────────────────────────────────────────────── */
 
 function ApplyDialog({
   tender,
@@ -271,7 +531,7 @@ const LEGAL_FORM_OPTIONS: SelectOption[] = [
   { value: LEGAL_FORM_OTHER, group: "Other" },
 ];
 
-function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOrg) => void }) {
+function ProfileEditor({ org, onSaved, focusField }: { org: PublicOrg; onSaved: (o: PublicOrg) => void; focusField: string | null }) {
   const [form, setForm] = useState({
     name: org.name,
     country: org.country,
@@ -291,6 +551,7 @@ function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOr
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [categoryDraft, setCategoryDraft] = useState("");
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
   /* A listed legal form selects directly; a value saved outside the list
      (or "Other") opens the specify field. */
   const [legalFormChoice, setLegalFormChoice] = useState(() =>
@@ -317,6 +578,20 @@ function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOr
   const selectedCountry = form.country ? findCountry(form.country) : undefined;
   const phonePlaceholder = selectedCountry ? `${selectedCountry.dial} …` : "+ country code …";
 
+  useEffect(() => {
+    if (!focusField) return;
+    const fallbackId =
+      focusField === "country"
+        ? "profile-country"
+        : focusField === "legal form"
+          ? "profile-legal-form"
+          : null;
+    const target = fieldRefs.current[focusField] ?? (fallbackId ? document.getElementById(fallbackId) : null);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.focus({ preventScroll: true });
+  }, [focusField]);
+
   const save = async () => {
     setStatus("saving");
     setError(null);
@@ -342,117 +617,167 @@ function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOr
   };
 
   return (
-    <div className="space-y-5">
-      <div className="space-y-3.5">
-        <Field label="Legal name">
-          <input className={inputCls} value={form.name} onChange={(e) => set("name", e.target.value)} />
-        </Field>
-        <Field label="Country of registration">
-          <SearchSelect
-            value={form.country}
-            onChange={(v) => set("country", v)}
-            options={COUNTRY_OPTIONS}
-            placeholder="Select the country…"
-            searchPlaceholder={`Search ${COUNTRIES.length} countries…`}
-            emptyText="No country matches — try the ISO code or dial digits."
-            label="Country of registration"
-          />
-        </Field>
-      </div>
-
-      <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2">
-        <p className="mb-3.5 flex items-center gap-2 font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">
-          <FileText className="h-3.5 w-3.5" aria-hidden="true" /> LEGAL IDENTITY — FIXED
-        </p>
-        <div className="space-y-3.5">
+    <div className="space-y-4">
+      <section className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)] sm:p-6 dark:border-white/[0.07] dark:bg-night-2/80">
+        <div className="mb-5 flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-700 dark:text-brand-300">
+            <Building2 className="h-4 w-4" aria-hidden="true" />
+          </span>
           <div>
-            <p className="text-[12px] text-ink-500 dark:text-ink-500">Registration number</p>
-            <p className="font-code text-[13px] font-semibold text-ink-950 dark:text-white">{org.registrationNo}</p>
-          </div>
-          <div>
-            <p className="text-[12px] text-ink-500 dark:text-ink-500">Login email</p>
-            <p className="font-code text-[13px] font-semibold text-ink-950 dark:text-white">{org.email}</p>
+            <h2 className="text-[14px] font-bold text-ink-950 dark:text-white">Registered entity</h2>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">The name and jurisdiction used on every application.</p>
           </div>
         </div>
-        <p className="mt-3 text-[11.5px] leading-relaxed text-ink-400 dark:text-ink-500">
-          The registration number and login email are the account&apos;s identity — they cannot be edited here. Ask the
-          procurement desk if they must change.
-        </p>
-      </div>
-
-      <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">
-        STATUTORY RECORD — WHAT THE DESK VERIFIES
-      </p>
-      <div className="space-y-3.5">
-        <Field label="Tax PIN">
-          <input className={inputCls} value={form.taxPin} onChange={(e) => set("taxPin", e.target.value)} />
-        </Field>
-        <Field label="Tax clearance number">
-          <input className={inputCls} value={form.taxClearanceNo} onChange={(e) => set("taxClearanceNo", e.target.value)} />
-        </Field>
-        <Field label="Tax clearance expiry">
-          <input className={inputCls} type="date" value={form.taxClearanceExpiry} onChange={(e) => set("taxClearanceExpiry", e.target.value)} />
-        </Field>
-        <Field label="Legal form">
-          <SearchSelect
-            value={legalFormChoice}
-            onChange={setLegalForm}
-            options={LEGAL_FORM_OPTIONS}
-            placeholder="Select the legal form…"
-            searchPlaceholder="Search legal forms…"
-            emptyText="No legal form matches — choose Other (not listed)."
-            clearable
-            label="Legal form"
-          />
-          {legalFormChoice === LEGAL_FORM_OTHER ? (
-            <input
-              className={cn(inputCls, "mt-2")}
-              placeholder="Describe the legal form"
-              value={form.legalForm}
-              maxLength={80}
-              onChange={(e) => set("legalForm", e.target.value)}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Legal name">
+            <input ref={(node) => { fieldRefs.current["legal name"] = node; }} className={inputCls} value={form.name} onChange={(e) => set("name", e.target.value)} />
+          </Field>
+          <Field label="Country of registration">
+            <SearchSelect
+              value={form.country}
+              onChange={(v) => set("country", v)}
+              options={COUNTRY_OPTIONS}
+              placeholder="Select the country…"
+              searchPlaceholder={`Search ${COUNTRIES.length} countries…`}
+              emptyText="No country matches — try the ISO code or dial digits."
+              id="profile-country"
+              label="Country of registration"
             />
-          ) : null}
-        </Field>
-        <Field label="Sector regulator">
-          <input className={inputCls} placeholder="NCC · NHCC · ERB · ZPPA…" value={form.regulator} onChange={(e) => set("regulator", e.target.value)} />
-        </Field>
-        <Field label="Regulator registration no">
-          <input className={inputCls} value={form.regulatorNo} onChange={(e) => set("regulatorNo", e.target.value)} />
-        </Field>
-      </div>
+          </Field>
+        </div>
+      </section>
 
-      <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">
-        CONTACT &amp; PRESENCE — HOW THE DESK REACHES YOU
-      </p>
-      <div className="space-y-3.5">
-        <Field label="Contact person">
-          <input className={inputCls} value={form.contactName} onChange={(e) => set("contactName", e.target.value)} />
-        </Field>
-        <Field label="Phone">
-          <input className={inputCls} placeholder={phonePlaceholder} value={form.phone} onChange={(e) => set("phone", e.target.value)} />
-        </Field>
-        <Field label="Address">
-          <input className={inputCls} value={form.address} onChange={(e) => set("address", e.target.value)} />
-        </Field>
-        <Field label="Website">
-          <input className={inputCls} value={form.website} onChange={(e) => set("website", e.target.value)} />
-        </Field>
-      </div>
+      <section className="rounded-2xl border border-ink-100 bg-ink-50/70 p-5 sm:p-6 dark:border-white/[0.07] dark:bg-white/[0.025]">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-ink-500" aria-hidden="true" />
+              <h2 className="text-[14px] font-bold text-ink-950 dark:text-white">Legal identity</h2>
+            </div>
+            <p className="mt-1 text-[12px] text-ink-500">Your account identifiers are fixed and cannot be edited here.</p>
+          </div>
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1 font-code text-[9px] font-semibold tracking-[0.1em] text-ink-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-ink-400">
+            <FileText className="h-3 w-3" aria-hidden="true" /> FIXED
+          </span>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-ink-100 bg-white px-4 py-3 dark:border-white/[0.06] dark:bg-night-2">
+            <p className="font-code text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-500">Registration number</p>
+            <p ref={(node) => { fieldRefs.current["registration no"] = node; }} tabIndex={-1} className="mt-1.5 break-all font-code text-[13px] font-semibold text-ink-950 outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 dark:text-white">{org.registrationNo}</p>
+          </div>
+          <div className="rounded-xl border border-ink-100 bg-white px-4 py-3 dark:border-white/[0.06] dark:bg-night-2">
+            <p className="font-code text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-500">Login email</p>
+            <p className="mt-1.5 break-all text-[13px] font-semibold text-ink-950 dark:text-white">{org.email}</p>
+          </div>
+        </div>
+        <p className="mt-3 text-[11.5px] leading-relaxed text-ink-500">
+          These details anchor your organization&apos;s identity across the procurement record. Contact the desk if either must change.
+        </p>
+      </section>
 
-      <Field label="What the organization supplies">
-        <textarea
-          className={cn(inputCls, "h-24 resize-none py-2.5")}
-          value={form.description}
-          onChange={(e) => set("description", e.target.value)}
-          maxLength={1200}
-        />
-      </Field>
+      <section className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)] sm:p-6 dark:border-white/[0.07] dark:bg-night-2/80">
+        <div className="mb-5 flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-700 dark:text-brand-300">
+            <CircleCheck className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-[14px] font-bold text-ink-950 dark:text-white">Statutory record</h2>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">The credentials the procurement desk uses to verify your organization.</p>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Tax PIN">
+            <input ref={(node) => { fieldRefs.current["tax PIN"] = node; }} className={inputCls} value={form.taxPin} onChange={(e) => set("taxPin", e.target.value)} />
+          </Field>
+          <Field label="Tax clearance number">
+            <input ref={(node) => { fieldRefs.current["tax clearance"] = node; }} className={inputCls} value={form.taxClearanceNo} onChange={(e) => set("taxClearanceNo", e.target.value)} />
+          </Field>
+          <Field label="Tax clearance expiry">
+            <input ref={(node) => { fieldRefs.current["clearance expiry"] = node; }} className={inputCls} type="date" value={form.taxClearanceExpiry} onChange={(e) => set("taxClearanceExpiry", e.target.value)} />
+          </Field>
+          <Field label="Legal form">
+            <SearchSelect
+              value={legalFormChoice}
+              onChange={setLegalForm}
+              options={LEGAL_FORM_OPTIONS}
+              placeholder="Select the legal form…"
+              searchPlaceholder="Search legal forms…"
+              emptyText="No legal form matches — choose Other (not listed)."
+              clearable
+              id="profile-legal-form"
+              label="Legal form"
+            />
+            {legalFormChoice === LEGAL_FORM_OTHER ? (
+              <input
+                ref={(node) => { fieldRefs.current["legal form"] = node; }}
+                className={cn(inputCls, "mt-2")}
+                placeholder="Describe the legal form"
+                value={form.legalForm}
+                maxLength={80}
+                onChange={(e) => set("legalForm", e.target.value)}
+              />
+            ) : null}
+          </Field>
+          <Field label="Sector regulator">
+            <input ref={(node) => { fieldRefs.current["sector regulator"] = node; }} className={inputCls} placeholder="NCC · NHCC · ERB · ZPPA…" value={form.regulator} onChange={(e) => set("regulator", e.target.value)} />
+          </Field>
+          <Field label="Regulator registration no">
+            <input className={inputCls} value={form.regulatorNo} onChange={(e) => set("regulatorNo", e.target.value)} />
+          </Field>
+        </div>
+      </section>
 
-      <Field label="Supply categories">
+      <section className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)] sm:p-6 dark:border-white/[0.07] dark:bg-night-2/80">
+        <div className="mb-5 flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-700 dark:text-brand-300">
+            <UserRound className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-[14px] font-bold text-ink-950 dark:text-white">Contact &amp; presence</h2>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">How the desk can reach your team and understand what you supply.</p>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Contact person">
+            <input ref={(node) => { fieldRefs.current["contact person"] = node; }} className={inputCls} value={form.contactName} onChange={(e) => set("contactName", e.target.value)} />
+          </Field>
+          <Field label="Phone">
+            <input ref={(node) => { fieldRefs.current.phone = node; }} className={inputCls} placeholder={phonePlaceholder} value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+          </Field>
+          <Field label="Address">
+            <input ref={(node) => { fieldRefs.current.address = node; }} className={inputCls} value={form.address} onChange={(e) => set("address", e.target.value)} />
+          </Field>
+          <Field label="Website">
+            <input className={inputCls} value={form.website} onChange={(e) => set("website", e.target.value)} />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="What the organization supplies">
+              <textarea
+                ref={(node) => { fieldRefs.current.description = node; }}
+                className={cn(inputCls, "h-24 resize-none py-2.5")}
+                value={form.description}
+                onChange={(e) => set("description", e.target.value)}
+                maxLength={1200}
+              />
+            </Field>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-ink-100 bg-white p-5 shadow-[0_1px_2px_rgba(11,12,15,0.04)] sm:p-6 dark:border-white/[0.07] dark:bg-night-2/80">
+        <div className="mb-5 flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-700 dark:text-brand-300">
+            <LayoutGrid className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-[14px] font-bold text-ink-950 dark:text-white">Supply categories</h2>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">Help the desk match your capabilities to relevant opportunities.</p>
+          </div>
+        </div>
         <div className="space-y-2">
           <div className="flex gap-2">
             <input
+              ref={(node) => { fieldRefs.current.categories = node; }}
               className={inputCls}
               placeholder="Type a category and press Enter"
               value={categoryDraft}
@@ -497,27 +822,34 @@ function ProfileEditor({ org, onSaved }: { org: PublicOrg; onSaved: (o: PublicOr
             ))}
           </div>
         </div>
-      </Field>
+      </section>
 
       {error ? (
-        <div className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5 text-[13px] text-brand-800 dark:border-brand-900 dark:bg-brand-950/40 dark:text-brand-200">
+        <div role="alert" className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5 text-[13px] text-brand-800 dark:border-brand-500/25 dark:bg-brand-500/10 dark:text-brand-200">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </div>
       ) : null}
 
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={save} disabled={status === "saving"} className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink-950 px-5 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(11,12,15,0.18)] transition-all hover:bg-brand-600 disabled:opacity-60">
-          {status === "saving" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
-          Save profile
+      <div className="sticky bottom-3 z-20 flex flex-col gap-3 rounded-2xl border border-ink-200/80 bg-paper/95 p-3 shadow-[0_12px_36px_rgba(11,12,15,0.12)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:px-4 dark:border-white/10 dark:bg-night/90 dark:shadow-[0_12px_36px_rgba(0,0,0,0.35)]">
+        <div className="min-h-9">
+          <p className="text-[12px] font-semibold text-ink-800 dark:text-ink-200">Keep your supplier record current</p>
+          <AnimatePresence mode="wait">
+            {status === "saved" ? (
+              <motion.p key="saved" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} role="status" className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                <CircleCheck className="h-3.5 w-3.5" aria-hidden="true" /> Profile saved and register updated.
+              </motion.p>
+            ) : (
+              <motion.p key="hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-0.5 text-[11px] text-ink-500">
+                Changes are reflected in the register after saving.
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
+        <button type="button" onClick={save} disabled={status === "saving"} aria-busy={status === "saving"} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(217,38,22,0.22)] transition-all hover:bg-brand-700 hover:shadow-[0_10px_26px_rgba(217,38,22,0.3)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25 disabled:cursor-wait disabled:opacity-70">
+          {status === "saving" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : status === "saved" ? <CircleCheck className="h-4 w-4" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+          {status === "saving" ? "Saving profile…" : status === "saved" ? "Saved" : "Save profile"}
         </button>
-        <AnimatePresence>
-          {status === "saved" ? (
-            <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-950 dark:text-white">
-              <CircleCheck className="h-4 w-4 text-brand-600" aria-hidden="true" /> Saved
-            </motion.span>
-          ) : null}
-        </AnimatePresence>
       </div>
     </div>
   );
@@ -529,12 +861,17 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
   const router = useRouter();
   const [org, setOrg] = useState<PublicOrg>(initialOrg);
   const [tab, setTab] = useState<Tab>("overview");
+  const [profileFocus, setProfileFocus] = useState<string | null>(null);
   const [tenders, setTenders] = useState<Tender[] | null>(null);
   const [applications, setApplications] = useState<Application[] | null>(null);
   const [applicationsError, setApplicationsError] = useState<string | null>(null);
   const [tenderError, setTenderError] = useState<string | null>(null);
   const [applying, setApplying] = useState<Tender | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [spotlight, setSpotlight] = useState<string | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const loadTenders = useCallback(async () => {
     try {
@@ -592,6 +929,29 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
     return () => clearTimeout(t);
   }, [applications]);
 
+  useEffect(() => {
+    /* ⌘K / Ctrl-K opens the palette anywhere on the console; Escape closes it. */
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      } else if (e.key === "Escape") {
+        setPaletteOpen(false);
+        setNavOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  /* Body scroll lock while the mobile drawer is open. */
+  useEffect(() => {
+    document.body.style.overflow = navOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [navOpen]);
+
   const signOut = async () => {
     await fetch("/api/org/auth/logout", { method: "POST" }).catch(() => undefined);
     router.push("/org");
@@ -602,10 +962,21 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
   const openTenders = useMemo(() => (tenders ?? []).filter((t) => t.status === "OPEN"), [tenders]);
   const profile = useMemo(() => completeness(org), [org]);
 
-  const titleOf = useCallback(
-    (ref: string) => (tenders ?? []).find((t) => t.ref === ref)?.title ?? ref,
-    [tenders],
-  );
+  const viewTender = useCallback((ref: string) => {
+    setProfileFocus(null);
+    setTab("opportunities");
+    setSpotlight(ref);
+    setTimeout(() => {
+      document.getElementById(`tender-${ref}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 90);
+    setTimeout(() => setSpotlight((cur) => (cur === ref ? null : cur)), 3200);
+  }, []);
+
+  const openProfileField = (field: string) => {
+    setProfileFocus(field);
+    setTab("profile");
+    setNavOpen(false);
+  };
 
   const TABS: { id: Tab; label: string; icon: typeof LayoutGrid; badge?: number }[] = [
     { id: "overview", label: "Overview", icon: LayoutGrid },
@@ -622,86 +993,159 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
   };
 
   return (
-    <div className="min-h-screen bg-paper dark:bg-night">
+    <div className="relative isolate flex min-h-screen flex-col overflow-x-clip bg-paper dark:bg-night">
+      {/* ambient light — two soft signal washes, decorative only */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-48 left-1/2 h-[440px] w-[760px] -translate-x-1/2 rounded-full bg-brand-500/[0.04] blur-[120px] dark:bg-brand-500/[0.09]" />
+        <div className="absolute -right-44 top-1/3 h-[380px] w-[380px] rounded-full bg-brand-500/[0.03] blur-[110px] dark:bg-brand-500/[0.05]" />
+      </div>
+
       {/* header */}
-      <header className="sticky top-0 z-40 border-b border-ink-100 bg-paper/85 backdrop-blur-xl dark:border-white/10 dark:bg-night/85">
-        <div className="mx-auto flex h-[68px] w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-          <div className="flex items-center gap-4">
-            <span className="hidden dark:inline-flex">
-              <QuorumLogo variant="light" tagline={false} />
-            </span>
-            <span className="dark:hidden">
-              <QuorumLogo tagline={false} />
-            </span>
-            <span className="hidden h-7 w-px bg-ink-200 sm:block dark:bg-white/10" />
-            <div className="hidden sm:block">
-              <p className="font-code text-[9px] font-semibold tracking-[0.2em] text-brand-700 dark:text-brand-400">SUPPLIER PORTAL</p>
-              <p className="max-w-[260px] truncate text-[14px] font-bold text-ink-950 dark:text-white">{org.name}</p>
+      <header className="sticky top-0 z-40 border-b border-ink-100/80 bg-paper/85 backdrop-blur-xl dark:border-white/[0.06] dark:bg-night/80">
+        <div className="mx-auto flex h-16 w-full max-w-[1560px] items-center justify-between gap-3 px-4 sm:h-[76px] sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => setNavOpen(true)}
+              aria-label="Open console menu"
+              aria-expanded={navOpen}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-ink-100 text-ink-600 transition-colors hover:text-ink-900 lg:hidden dark:border-white/[0.08] dark:text-ink-600 dark:hover:text-white"
+            >
+              <Menu className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <Link href="/" aria-label="Quorum home" className="shrink-0 rounded-xl transition-opacity hover:opacity-85">
+              <span className="hidden dark:inline-flex">
+                <QuorumLogo variant="light" tagline={false} />
+              </span>
+              <span className="dark:hidden">
+                <QuorumLogo tagline={false} />
+              </span>
+            </Link>
+            <span className="hidden h-8 w-px bg-ink-200 sm:block dark:bg-white/10" />
+            <div className="hidden min-w-0 sm:block">
+              <p className="font-code text-[8.5px] font-semibold tracking-[0.22em] text-brand-700 dark:text-brand-400">
+                SUPPLIER PORTAL
+              </p>
+              <p className="flex items-center gap-1.5 truncate text-[13.5px] font-bold text-ink-950 dark:text-white">
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 shrink-0 rounded-full",
+                    org.status === "ACTIVE" ? "bg-emerald-500" : "bg-amber-500",
+                  )}
+                  aria-hidden="true"
+                />
+                {org.name}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2.5">
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="hidden h-9 items-center gap-2 rounded-lg border border-ink-100 bg-white/70 px-3 text-left text-[12px] text-ink-500 transition-colors hover:border-ink-200 hover:text-ink-900 md:flex dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-ink-500 dark:hover:border-white/20 dark:hover:text-white"
+            >
+              <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>Search tenders, applications…</span>
+              <kbd className="ml-5 rounded border border-ink-100 bg-sand px-1.5 py-0.5 font-code text-[9px] font-semibold text-ink-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-ink-500">
+                ⌘K
+              </kbd>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Search the portal"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-ink-100 text-ink-500 transition-colors hover:text-ink-900 md:hidden dark:border-white/[0.08] dark:hover:text-white"
+            >
+              <Search className="h-4 w-4" aria-hidden="true" />
+            </button>
+
             <span
               className={cn(
-                "rounded-full px-2.5 py-1 font-code text-[9px] font-bold tracking-[0.16em]",
-                org.status === "ACTIVE" ? "bg-ink-100 text-ink-700 dark:bg-white/10 dark:text-ink-700" : "bg-brand-600/10 text-brand-700 dark:text-brand-300",
+                "hidden items-center gap-1.5 rounded-full border px-2.5 py-1 font-code text-[9px] font-bold tracking-[0.16em] sm:inline-flex",
+                org.status === "ACTIVE"
+                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "border-brand-500/25 bg-brand-500/10 text-brand-700 dark:text-brand-300",
               )}
             >
+              <span className="relative flex h-1.5 w-1.5" aria-hidden="true">
+                <span
+                  className={cn(
+                    "absolute inline-flex h-full w-full animate-ping rounded-full opacity-70",
+                    org.status === "ACTIVE" ? "bg-emerald-500" : "bg-brand-500",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "relative inline-flex h-1.5 w-1.5 rounded-full",
+                    org.status === "ACTIVE" ? "bg-emerald-500" : "bg-brand-500",
+                  )}
+                />
+              </span>
               {org.status}
             </span>
-            <Link href="/" className="hidden h-9 items-center rounded-full border border-ink-200 px-3.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700 sm:inline-flex dark:border-white/15 dark:text-ink-600">
-              Officer desk <ArrowUpRight className="ml-1 h-3 w-3" aria-hidden="true" />
+
+            <Link
+              href="/"
+              className="hidden h-9 items-center gap-1 rounded-lg border border-ink-100 bg-white px-3 text-[12px] font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-700 sm:inline-flex lg:hidden dark:border-white/10 dark:bg-white/[0.04] dark:text-ink-700 dark:hover:border-brand-500/40 dark:hover:text-brand-300"
+            >
+              Officer desk
+              <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
             </Link>
+
             <button
               type="button"
               onClick={signOut}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-ink-200 px-3.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-700 dark:border-white/15 dark:text-ink-700"
+              title="Sign out of this session"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink-100 px-2.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-ink-200 hover:text-ink-900 lg:hidden dark:border-white/10 dark:text-ink-600 dark:hover:border-white/20 dark:hover:text-white sm:px-3"
             >
               <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
-              Sign out
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* tab rail */}
-      <div className="sticky top-[68px] z-30 border-b border-ink-100 bg-paper/90 backdrop-blur-lg dark:border-white/10 dark:bg-night/90">
-        <nav aria-label="Console sections" className="mx-auto flex w-full max-w-6xl gap-1 overflow-x-auto px-4 sm:px-6">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "relative flex items-center gap-2 whitespace-nowrap px-3.5 py-3.5 text-[13px] font-semibold transition-colors",
-                tab === t.id ? "text-ink-950 dark:text-white" : "text-ink-500 hover:text-ink-900 dark:hover:text-white",
-              )}
-            >
-              <t.icon className="h-4 w-4" aria-hidden="true" />
-              {t.label}
-              {t.badge !== undefined ? (
-                <span className="rounded-full bg-ink-100 px-1.5 py-0.5 font-code text-[9px] font-bold text-ink-700 dark:bg-white/10 dark:text-ink-700">{t.badge}</span>
-              ) : null}
-              {tab === t.id ? <motion.span layoutId="org-tab-underline" className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-500" transition={{ duration: 0.24, ease: EASE }} /> : null}
-            </button>
-          ))}
-        </nav>
-      </div>
+      {/* App shell: a dark section rail on desktop, the same rail in a drawer on mobile */}
+      <div className="mx-auto flex w-full max-w-[1560px] flex-1 items-stretch">
+        <aside
+          aria-label="Supplier console navigation"
+          className={cn(
+            "sticky top-[76px] hidden h-[calc(100vh-76px)] shrink-0 self-start border-r border-ink-200 bg-paper transition-[width] duration-300 ease-out lg:block dark:border-white/[0.06] dark:bg-night",
+            sidebarCollapsed ? "w-[76px]" : "w-[248px]",
+          )}
+        >
+          <ConsoleSidebar
+            orgName={org.name}
+            orgStatus={org.status}
+            registrationNo={org.registrationNo}
+            tabs={TABS}
+            active={tab}
+            onNavigate={(next) => {
+              setProfileFocus(null);
+              setTab(next);
+            }}
+            onSignOut={signOut}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed((current) => !current)}
+          />
+        </aside>
 
-      <AnimatePresence>
-        {flash ? (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mx-auto mt-4 flex w-full max-w-6xl items-center gap-2 rounded-xl border border-ink-950 bg-ink-950 px-4 py-2.5 text-[13px] font-semibold text-white dark:border-white dark:bg-white dark:text-night"
-          >
-            <CircleCheck className="h-4 w-4 shrink-0" aria-hidden="true" /> {flash}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+          <AnimatePresence>
+            {flash ? (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mb-5 flex w-full items-center gap-2 rounded-xl border border-ink-950 bg-ink-950 px-4 py-2.5 text-[13px] font-semibold text-white dark:border-white dark:bg-white dark:text-night"
+              >
+                <CircleCheck className="h-4 w-4 shrink-0" aria-hidden="true" /> {flash}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-        <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait">
           <motion.div
             key={tab}
             initial={{ opacity: 0, y: 10 }}
@@ -710,129 +1154,123 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
             transition={{ duration: 0.22, ease: EASE }}
           >
             {tab === "overview" ? (
-              <div className="grid gap-4 lg:grid-cols-3">
-                {/* profile completeness */}
-                <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2 lg:col-span-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-[15.5px] font-bold text-ink-950 dark:text-white">Profile completeness</h2>
-                    <span className="font-code text-[11px] font-bold text-ink-950 dark:text-white">
-                      {profile.filled}/{profile.total}
-                    </span>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink-100 dark:bg-white/10">
-                    <div className="h-full rounded-full bg-ink-950 transition-all duration-700" style={{ width: `${Math.round((profile.filled / profile.total) * 100)}%` }} />
-                  </div>
-                  {profile.missing.length > 0 ? (
-                    <>
-                      <p className="mt-3 text-[13px] text-ink-500 dark:text-ink-500">
-                        The desk reads a complete profile when your first application lands. Still missing:
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {profile.missing.map((m) => (
-                          <button key={m} type="button" onClick={() => setTab("profile")} className="rounded-full border border-dashed border-ink-300 px-2.5 py-1 text-[11.5px] text-ink-500 transition-colors hover:border-brand-600 hover:text-brand-700 dark:border-white/15 dark:text-ink-500">
-                            {m} — add
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="mt-3 flex items-center gap-1.5 text-[13px] font-semibold text-ink-950 dark:text-white">
-                      <CircleCheck className="h-4 w-4 text-brand-600" aria-hidden="true" /> Complete — the register sees everything it asks for.
-                    </p>
-                  )}
-                  <p className="mt-4 border-t border-ink-100 pt-3 text-[12px] leading-relaxed text-ink-400 dark:border-white/10 dark:text-ink-500">
-                    Registered {fmtDate(org.createdAt)} · applications are attested as{" "}
-                    <span className="font-code text-[11px] text-brand-700 dark:text-brand-300">org:{org.name}</span> and refused after each tender&apos;s closing date.
-                  </p>
-                </div>
-
-                {/* quick stats */}
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2">
-                    <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">OPEN OPPORTUNITIES</p>
-                    <p className="mt-1.5 text-[34px] font-black leading-none text-ink-950 dark:text-white">{tenders === null ? "…" : openTenders.length}</p>
-                    <button type="button" onClick={() => setTab("opportunities")} className="mt-2 text-[12.5px] font-semibold text-brand-700 hover:underline dark:text-brand-300">
-                      Browse the board →
-                    </button>
-                  </div>
-                  <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2">
-                    <p className="font-code text-[9.5px] font-semibold tracking-[0.18em] text-ink-500 dark:text-ink-500">APPLICATIONS ON RECORD</p>
-                    <p className="mt-1.5 text-[34px] font-black leading-none text-ink-950 dark:text-white">{applications === null ? "…" : applications.length}</p>
-                    <button type="button" onClick={() => setTab("applications")} className="mt-2 text-[12.5px] font-semibold text-brand-700 hover:underline dark:text-brand-300">
-                      Track them →
-                    </button>
-                  </div>
-                </div>
-
-                {/* recent applications */}
-                <div className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2 lg:col-span-3">
-                  <h2 className="text-[15.5px] font-bold text-ink-950 dark:text-white">Latest applications</h2>
-                  {applications === null ? (
-                    <p className="mt-3 text-[13px] text-ink-400">{applicationsError ?? "Loading…"}</p>
-                  ) : applications.length === 0 ? (
-                    <div className="mt-3 rounded-xl border border-dashed border-ink-200 px-4 py-6 text-center dark:border-white/15">
-                      <p className="text-[13.5px] font-semibold text-ink-700 dark:text-ink-700">Nothing filed yet</p>
-                      <p className="mt-1 text-[12.5px] text-ink-400">The first application lands on the register the moment you file it.</p>
-                      <button type="button" onClick={() => setTab("opportunities")} className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-xl bg-ink-950 px-4 text-[12.5px] font-semibold text-white transition-all hover:bg-brand-600">
-                        <ScrollText className="h-3.5 w-3.5" aria-hidden="true" /> Browse opportunities
-                      </button>
-                    </div>
-                  ) : (
-                    <ul className="mt-3 divide-y divide-ink-50 dark:divide-white/5">
-                      {applications.slice(0, 3).map((a) => (
-                        <li key={a.id} className="flex items-center justify-between gap-3 py-2.5">
-                          <div className="min-w-0">
-                            <p className="truncate text-[13.5px] font-semibold text-ink-950 dark:text-white">{titleOf(a.tenderId)}</p>
-                            <p className="font-code text-[10px] tracking-[0.1em] text-ink-400">
-                              {a.tenderId} · filed {fmtDate(a.receivedAt)} · {a.id}
-                            </p>
-                          </div>
-                          <p className="shrink-0 text-[13.5px] font-bold text-ink-950 dark:text-white">{money(a.amount, a.currency)}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
+              <SupplierOverview
+                orgName={org.name}
+                orgCreatedAt={org.createdAt}
+                profile={profile}
+                tenders={tenders}
+                applications={applications}
+                tendersError={tenderError}
+                applicationsError={applicationsError}
+                onTab={(next) => {
+                  setProfileFocus(null);
+                  setTab(next);
+                }}
+                onMissingField={openProfileField}
+                onBrowse={() => setTab("opportunities")}
+                onViewTender={viewTender}
+                onRetry={() => {
+                  void loadTenders();
+                  void loadApplications();
+                }}
+              />
             ) : null}
 
             {tab === "profile" ? (
-              <div className="mx-auto max-w-3xl space-y-4">
-                <div className="rounded-2xl border border-ink-100 bg-white p-6 dark:border-white/10 dark:bg-night-2">
-                  <h2 className="text-[15.5px] font-bold text-ink-950 dark:text-white">Organization profile</h2>
-                  <p className="mt-1 text-[13px] leading-relaxed text-ink-500 dark:text-ink-500">
-                    This is the profile the desk and the supplier register see. Keep it true — the statutory fields are
-                    what public procurement asks bidders to hold.
-                  </p>
-                  <div className="mt-5">
-                    <ProfileEditor
-                      org={org}
-                      onSaved={(o) => {
-                        setOrg(o);
-                        router.refresh();
-                      }}
-                    />
+              <div className="mx-auto max-w-5xl space-y-6">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="font-code text-[9px] font-semibold uppercase tracking-[0.22em] text-brand-700 dark:text-brand-400">
+                      The register&apos;s view
+                    </p>
+                    <h1 className="mt-2 text-[26px] font-bold tracking-[-0.03em] text-ink-950 dark:text-white sm:text-[30px]">
+                      Organization profile
+                    </h1>
+                    <p className="mt-2 max-w-[64ch] text-[13px] leading-relaxed text-ink-500 sm:text-[13.5px]">
+                      Keep your organization&apos;s record accurate. The procurement desk uses these details to verify your identity and match you with relevant opportunities.
+                    </p>
+                  </div>
+                  <div className="w-full shrink-0 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_1px_2px_rgba(11,12,15,0.04)] sm:w-[230px] dark:border-white/[0.07] dark:bg-night-2/80">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-code text-[9px] font-semibold uppercase tracking-[0.15em] text-ink-500">Record health</span>
+                      <span className="font-code text-[10px] font-bold tabular text-ink-700 dark:text-ink-200">{profile.filled}/{profile.total}</span>
+                    </div>
+                    <div
+                      role="progressbar"
+                      aria-label="Profile completeness"
+                      aria-valuemin={0}
+                      aria-valuemax={profile.total}
+                      aria-valuenow={profile.filled}
+                      className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-100 dark:bg-white/10"
+                    >
+                      <div
+                        className="h-full rounded-full bg-brand-500 transition-[width] duration-500"
+                        style={{ width: `${Math.round((profile.filled / profile.total) * 100)}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-[11px] text-ink-500">{profile.missing.length === 0 ? "All verification details are on file." : `${profile.missing.length} ${profile.missing.length === 1 ? "detail" : "details"} still to complete`}</p>
                   </div>
                 </div>
+                <ProfileEditor
+                  org={org}
+                  focusField={profileFocus}
+                  onSaved={(o) => {
+                    setOrg(o);
+                    router.refresh();
+                  }}
+                />
               </div>
             ) : null}
 
             {tab === "opportunities" ? (
               <div className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="font-code text-[9px] font-semibold uppercase tracking-[0.22em] text-brand-700 dark:text-brand-400">
+                      The board
+                    </p>
+                    <h1 className="mt-1.5 flex items-center gap-2.5 text-[22px] font-bold tracking-[-0.02em] text-ink-950 dark:text-white">
+                      Opportunities
+                      {tenders !== null ? (
+                        <span className="rounded-full border border-ink-100 bg-sand/80 px-2 py-0.5 font-code text-[9.5px] font-semibold text-ink-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-ink-600">
+                          {openTenders.length} open
+                        </span>
+                      ) : null}
+                    </h1>
+                    <p className="mt-1.5 max-w-[66ch] text-[13px] leading-relaxed text-ink-500">
+                      Every tender pack staged on the procurement desk. Closing dates are read from the cycle record first
+                      and the notice second — a bid is refused the moment the date passes.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadTenders()}
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-lg border border-ink-100 bg-white px-3 text-[12px] font-semibold text-ink-600 transition-colors hover:border-ink-200 hover:text-ink-900 sm:self-auto dark:border-white/10 dark:bg-white/[0.04] dark:text-ink-600 dark:hover:border-white/20 dark:hover:text-white"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" aria-hidden="true" /> Refresh
+                  </button>
+                </div>
+
                 {tenderError ? (
-                  <div className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 dark:border-brand-900 dark:bg-brand-950/40 dark:text-brand-200">
+                  <div className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 dark:border-brand-500/25 dark:bg-brand-500/10 dark:text-brand-200">
                     <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> {tenderError}
                   </div>
                 ) : null}
+
                 {tenders === null ? (
                   <div className="grid gap-4 sm:grid-cols-2">
                     {[0, 1, 2, 3].map((i) => (
-                      <div key={i} className="h-[172px] animate-pulse rounded-2xl border border-ink-100 bg-ink-50/60 dark:border-white/10 dark:bg-white/[0.04]" />
+                      <div
+                        key={i}
+                        className="h-[196px] animate-pulse rounded-2xl border border-ink-100 bg-ink-50/60 dark:border-white/[0.07] dark:bg-white/[0.03]"
+                      />
                     ))}
                   </div>
                 ) : tenders.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-ink-200 px-6 py-14 text-center dark:border-white/15">
-                    <p className="text-[14px] font-semibold text-ink-700 dark:text-ink-700">No tender packs are staged on the desk yet</p>
+                  <div className="rounded-2xl border border-dashed border-ink-200 px-6 py-16 text-center dark:border-white/15">
+                    <p className="text-[14px] font-semibold text-ink-700 dark:text-ink-700">
+                      No tender packs are staged on the desk yet
+                    </p>
                     <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-400">
                       Opportunities appear here the moment the procurement desk stages a tender pack. Nothing is invented
                       to fill this board — the empty state is the honest state.
@@ -844,19 +1282,39 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                       const applied = appliedTenderIds.has(t.ref);
                       const closed = t.status === "CLOSED";
                       return (
-                        <div key={t.ref} className={cn("flex flex-col rounded-2xl border bg-white p-5 transition-shadow hover:shadow-[0_12px_36px_rgba(11,12,15,0.1)] dark:bg-night-2", closed ? "border-ink-100 opacity-75 dark:border-white/10" : "border-ink-100 dark:border-white/10")}>
+                        <div
+                          key={t.ref}
+                          id={`tender-${t.ref}`}
+                          className={cn(
+                            "flex scroll-mt-40 flex-col rounded-2xl border bg-white p-5 transition-all duration-300 dark:bg-night-2/80",
+                            spotlight === t.ref
+                              ? "border-brand-500 shadow-[0_0_0_3px_rgba(232,56,42,0.14)] dark:border-brand-500/60"
+                              : "border-ink-100 hover:border-ink-200 dark:border-white/[0.07] dark:hover:border-white/15",
+                            closed && "opacity-70",
+                          )}
+                        >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="font-code text-[9.5px] font-semibold tracking-[0.16em] text-brand-700 dark:text-brand-400">{t.ref}</p>
-                              <h3 className="mt-1 text-[14.5px] font-bold leading-snug text-ink-950 dark:text-white">{t.title}</h3>
-                              <p className="mt-1 truncate text-[12.5px] text-ink-500 dark:text-ink-500">{t.buyer}</p>
+                              <p className="font-code text-[9.5px] font-semibold tracking-[0.16em] text-brand-700 dark:text-brand-400">
+                                {t.ref}
+                              </p>
+                              <h3 className="mt-1 text-[14.5px] font-bold leading-snug text-ink-950 dark:text-white">
+                                {t.title}
+                              </h3>
+                              <p className="mt-1 truncate text-[12.5px] text-ink-500">{t.buyer}</p>
                             </div>
                             <span
                               className={cn(
-                                "shrink-0 rounded-full px-2.5 py-1 font-code text-[9px] font-bold tracking-[0.14em]",
-                                closed ? "bg-ink-100 text-ink-500 dark:bg-white/10 dark:text-ink-500" : "bg-ink-950 text-white dark:bg-white dark:text-night",
+                                "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 font-code text-[9px] font-bold tracking-[0.14em]",
+                                closed
+                                  ? "border-ink-200 text-ink-500 dark:border-white/10 dark:text-ink-500"
+                                  : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
                               )}
                             >
+                              <span
+                                className={cn("h-1.5 w-1.5 rounded-full", closed ? "bg-ink-300" : "bg-emerald-500")}
+                                aria-hidden="true"
+                              />
                               {closed ? "CLOSED" : "OPEN"}
                             </span>
                           </div>
@@ -866,8 +1324,15 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                               <Clock className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
                               {t.closingKnown ? (
                                 <>
-                                  Closes <strong className="font-semibold text-ink-900 dark:text-white">{fmtDate(t.closingDate)}</strong>
-                                  {t.status === "OPEN" && t.daysLeft !== undefined ? <span className="text-ink-400">· {t.daysLeft} {t.daysLeft === 1 ? "day" : "days"} left</span> : null}
+                                  Closes{" "}
+                                  <strong className="font-semibold text-ink-900 dark:text-ink-800">
+                                    {fmtDate(t.closingDate)}
+                                  </strong>
+                                  {t.status === "OPEN" && t.daysLeft !== undefined ? (
+                                    <span className="text-ink-400">
+                                      · {t.daysLeft} {t.daysLeft === 1 ? "day" : "days"} left
+                                    </span>
+                                  ) : null}
                                 </>
                               ) : (
                                 <span className="italic text-ink-400">closing date not stated on the notice</span>
@@ -879,22 +1344,27 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
                             </p>
                             <p className="flex items-center gap-2 text-ink-600 dark:text-ink-600">
                               <Building2 className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden="true" />
-                              {t.sector} · {t.applications} {t.applications === 1 ? "application" : "applications"} on record
+                              {t.sector} · {t.applications} {t.applications === 1 ? "application" : "applications"} on
+                              record
                             </p>
                           </div>
 
                           <div className="mt-auto pt-4">
                             {applied ? (
-                              <div className="flex h-10 items-center justify-center gap-2 rounded-xl bg-ink-100 text-[13px] font-bold text-ink-900 dark:bg-white/10 dark:text-ink-900">
-                                <CircleCheck className="h-4 w-4 text-brand-600" aria-hidden="true" /> Application on record
+                              <div className="flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300">
+                                <CircleCheck className="h-4 w-4" aria-hidden="true" /> Application on record
                               </div>
                             ) : closed ? (
-                              <div className="flex h-10 items-center justify-center rounded-xl border border-ink-100 text-[12.5px] font-semibold text-ink-400 dark:border-white/10">
+                              <div className="flex h-10 items-center justify-center rounded-xl border border-ink-100 text-[12px] font-semibold text-ink-400 dark:border-white/10">
                                 Closed — late applications are refused
                               </div>
                             ) : (
-                              <button type="button" onClick={() => setApplying(t)} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-ink-950 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(11,12,15,0.18)] transition-all hover:bg-brand-600">
-                                <Stamp className="h-3.5 w-3.5" aria-hidden="true" /> Apply
+                              <button
+                                type="button"
+                                onClick={() => setApplying(t)}
+                                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-semibold text-white shadow-[0_10px_24px_-12px_rgba(232,56,42,0.9)] transition-colors hover:bg-brand-600"
+                              >
+                                <Stamp className="h-3.5 w-3.5" aria-hidden="true" /> Apply to this tender
                               </button>
                             )}
                           </div>
@@ -907,49 +1377,185 @@ export function OrgConsole({ initialOrg }: { initialOrg: PublicOrg }) {
             ) : null}
 
             {tab === "applications" ? (
-              <div className="space-y-3.5">
-                {applicationsError ? (
-                  <div className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 dark:border-brand-900 dark:bg-brand-950/40 dark:text-brand-200">
-                    <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> {applicationsError} The list retries every few seconds.
-                  </div>
-                ) : null}
-                {applications === null ? (
-                  applicationsError ? null : <div className="h-40 animate-pulse rounded-2xl border border-ink-100 bg-ink-50/60 dark:border-white/10 dark:bg-white/[0.04]" />
-                ) : applications.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-ink-200 px-6 py-14 text-center dark:border-white/15">
-                    <p className="text-[14px] font-semibold text-ink-700 dark:text-ink-700">No applications on record yet</p>
-                    <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-400">
-                      File one from the opportunities board. Every application carries your organization&apos;s attested
-                      identity and lands in the procurement audit log.
+              <div className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="font-code text-[9px] font-semibold uppercase tracking-[0.22em] text-brand-700 dark:text-brand-400">
+                      The record
+                    </p>
+                    <h1 className="mt-1.5 flex items-center gap-2.5 text-[22px] font-bold tracking-[-0.02em] text-ink-950 dark:text-white">
+                      Applications
+                      {applications !== null ? (
+                        <span className="rounded-full border border-ink-100 bg-sand/80 px-2 py-0.5 font-code text-[9.5px] font-semibold text-ink-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-ink-600">
+                          {applications.length} filed
+                        </span>
+                      ) : null}
+                    </h1>
+                    <p className="mt-1.5 max-w-[66ch] text-[13px] leading-relaxed text-ink-500">
+                      Every bid this organization has filed, attested as{" "}
+                      <span className="font-code text-[11.5px] text-brand-700 dark:text-brand-400">org:{org.name}</span>{" "}
+                      with the desk&apos;s receipt time. A receipt can be exported per row.
                     </p>
                   </div>
-                ) : (
-                  applications.map((a) => (
-                    <div key={a.id} className="rounded-2xl border border-ink-100 bg-white p-5 dark:border-white/10 dark:bg-night-2">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-code text-[9.5px] font-semibold tracking-[0.16em] text-brand-700 dark:text-brand-400">{a.tenderId}</p>
-                          <h3 className="mt-0.5 text-[14.5px] font-bold leading-snug text-ink-950 dark:text-white">{titleOf(a.tenderId)}</h3>
+                  <button
+                    type="button"
+                    onClick={() => setTab("opportunities")}
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-lg bg-brand-500 px-3.5 text-[12px] font-semibold text-white shadow-[0_10px_24px_-12px_rgba(232,56,42,0.9)] transition-colors hover:bg-brand-600 sm:self-auto"
+                  >
+                    <Stamp className="h-3.5 w-3.5" aria-hidden="true" /> New submission
+                  </button>
+                </div>
+
+                {applicationsError ? (
+                  <div className="flex flex-col items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 sm:flex-row sm:items-center sm:justify-between dark:border-brand-500/25 dark:bg-brand-500/10 dark:text-brand-200">
+                    <span className="flex items-start gap-2">
+                      <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>
+                        {applicationsError} The list retries every few seconds.
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void loadApplications()}
+                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-brand-300 px-2.5 text-[11.5px] font-semibold transition-colors hover:bg-brand-500/10 dark:border-brand-500/40"
+                    >
+                      <RotateCw className="h-3 w-3" aria-hidden="true" /> Retry now
+                    </button>
+                  </div>
+                ) : null}
+
+                <section className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_1px_2px_rgba(11,12,15,0.04)] dark:border-white/[0.07] dark:bg-night-2/80">
+                  <div className="flex items-center justify-between gap-3 border-b border-ink-100 px-5 py-3.5 dark:border-white/[0.06]">
+                    <p className="font-code text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-400">
+                      Filing times in UTC · newest first
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void loadApplications()}
+                      className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-900 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                    >
+                      <RotateCw className="h-3 w-3" aria-hidden="true" /> Refresh
+                    </button>
+                  </div>
+                  {applications === null ? (
+                    <div className="space-y-3 px-5 py-6" aria-hidden="true">
+                      {[0, 1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center gap-4">
+                          <div className="h-3 w-24 animate-pulse rounded bg-ink-100 dark:bg-white/[0.06]" />
+                          <div className="h-3 flex-1 animate-pulse rounded bg-ink-100/80 dark:bg-white/[0.04]" />
+                          <div className="h-3 w-20 animate-pulse rounded bg-ink-100 dark:bg-white/[0.06]" />
                         </div>
-                        <div className="text-right">
-                          <p className="text-[15px] font-black text-ink-950 dark:text-white">{money(a.amount, a.currency)}</p>
-                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-ink-100 px-2.5 py-0.5 font-code text-[9px] font-bold tracking-[0.14em] text-ink-700 dark:bg-white/10 dark:text-ink-700">
-                            {a.status}
-                          </span>
-                        </div>
-                      </div>
-                      {a.coverNote ? <p className="mt-3 border-t border-ink-50 pt-3 text-[13px] leading-relaxed text-ink-600 dark:border-white/5 dark:text-ink-600">{a.coverNote}</p> : null}
-                      <p className="mt-3 font-code text-[9.5px] tracking-[0.14em] text-ink-400">
-                        {a.id} · filed {fmtDate(a.receivedAt)} · attested as org:{a.orgName}
-                      </p>
+                      ))}
                     </div>
-                  ))
-                )}
+                  ) : (
+                    <ApplicationTable
+                      applications={applications}
+                      tenders={tenders ?? []}
+                      onViewTender={viewTender}
+                      onBrowse={() => setTab("opportunities")}
+                      filterable
+                      orgName={org.name}
+                    />
+                  )}
+                </section>
               </div>
             ) : null}
           </motion.div>
         </AnimatePresence>
-      </main>
+        </main>
+      </div>
+
+      <footer className="border-t border-ink-100/80 bg-paper/60 py-6 dark:border-white/[0.06] dark:bg-night/60">
+        <div className="mx-auto flex w-full max-w-[1560px] flex-col items-start justify-between gap-3 px-4 font-code text-[10px] text-ink-500 sm:flex-row sm:items-center sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold tracking-[0.16em] text-ink-600 dark:text-ink-600">QUORUM TENDER ENGINE</span>
+            <span className="text-ink-300 dark:text-ink-400">|</span>
+            <span>
+              Applications attested as <span className="text-ink-700 dark:text-ink-700">org:{org.name}</span> · filing
+              times in UTC
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" /> Portal online
+            </span>
+            <Link href="/" className="transition-colors hover:text-ink-900 dark:hover:text-white">
+              Officer desk ↗
+            </Link>
+          </div>
+        </div>
+      </footer>
+
+      {/* Mobile drawer — the same rail, off-canvas */}
+      <AnimatePresence>
+        {navOpen ? (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[60] bg-ink-950/60 backdrop-blur-sm lg:hidden"
+              onClick={() => setNavOpen(false)}
+              aria-hidden="true"
+            />
+            <motion.aside
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ duration: 0.3, ease: EASE }}
+              className="fixed inset-y-0 left-0 z-[61] flex w-[286px] flex-col border-r border-ink-200 bg-paper lg:hidden dark:border-white/10 dark:bg-night"
+              aria-label="Supplier console menu"
+            >
+              <div className="flex items-center justify-between px-4 pb-2 pt-4">
+                <Link href="/" aria-label="Quorum home" className="rounded-xl" onClick={() => setNavOpen(false)}>
+                  <span className="hidden dark:inline-flex">
+                    <QuorumLogo variant="light" tagline={false} />
+                  </span>
+                  <span className="dark:hidden">
+                    <QuorumLogo tagline={false} />
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setNavOpen(false)}
+                  aria-label="Close console menu"
+                  className="grid h-9 w-9 place-items-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 dark:text-ink-400 dark:hover:bg-white/10 dark:hover:text-white"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1">
+                <ConsoleSidebar
+                  orgName={org.name}
+                  orgStatus={org.status}
+                  registrationNo={org.registrationNo}
+                  tabs={TABS}
+                  active={tab}
+                  onNavigate={(next) => {
+                    setProfileFocus(null);
+                    setTab(next);
+                    setNavOpen(false);
+                  }}
+                  onSignOut={signOut}
+                />
+              </div>
+            </motion.aside>
+          </>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {paletteOpen ? (
+          <SearchPalette
+            tenders={tenders}
+            applications={applications}
+            onClose={() => setPaletteOpen(false)}
+            onBrowseTender={(t) => viewTender(t.ref)}
+            onTab={(next) => setTab(next)}
+          />
+        ) : null}
+      </AnimatePresence>
 
       {applying ? <ApplyDialog tender={applying} onClose={() => setApplying(null)} onFiled={onFiled} /> : null}
     </div>

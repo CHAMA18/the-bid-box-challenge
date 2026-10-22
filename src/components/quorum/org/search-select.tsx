@@ -37,6 +37,8 @@ type SearchSelectProps = {
   emptyText?: string;
   /** Shows a small clear affordance when a value is set (for optional fields). */
   clearable?: boolean;
+  /** Optional DOM id for external focus and label associations. */
+  id?: string;
   /** Accessible name when the visible label is rendered by the caller. */
   label: string;
 };
@@ -54,6 +56,7 @@ export function SearchSelect({
   searchPlaceholder = "Type to search…",
   emptyText = "No matches — check the spelling.",
   clearable = false,
+  id,
   label,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
@@ -154,6 +157,7 @@ export function SearchSelect({
     <div ref={rootRef} className="relative">
       <button
         ref={triggerRef}
+        id={id}
         type="button"
         onClick={() => (open ? close(false) : openList())}
         onKeyDown={onTriggerKeyDown}
