@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import LogRocket from "logrocket";
 import { initFirebaseAnalytics } from "@/lib/firebase";
 
 /**
@@ -10,6 +11,7 @@ import { initFirebaseAnalytics } from "@/lib/firebase";
  */
 export function FirebaseAnalytics() {
   useEffect(() => {
+    LogRocket.init("1bq4fh/support");
     void initFirebaseAnalytics();
   }, []);
   return null;
