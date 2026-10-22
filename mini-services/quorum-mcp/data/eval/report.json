@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-10-18T18:08:26.511Z",
+  "generatedAt": "2026-10-21T21:03:58.295Z",
   "labeller": "one human reviewer, one pass over the source documents, written before the engine was run on them. Not independently double-labelled.",
   "covered_means": "a rule in the engine is designed to raise this finding type. covered:false items measure what the rule set does not claim to catch. Coverage flags track the CURRENT rule set: when a rule lands (e.g. plan_review deep-value parsing of markdown bid values, 2026-10-16), the flags it covers flip to true — the labels themselves are never edited after their original single pass.",
   "summary": {
-    "runsPerTender": 2,
+    "runsPerTender": 3,
     "tenders": 7,
     "original": {
       "goldLabels": 42,
@@ -27,10 +27,10 @@
     "llmCallsPerRun": 0,
     "variance": {
       "findingsIdenticalAcrossRuns": "7/7 tenders",
-      "msMedianPerPack": 0.75,
+      "msMedianPerPack": 0.47,
       "msSpread": [
-        0.48,
-        14.4
+        0.33,
+        1
       ],
       "note": "Identical findings across repeated runs prove stability, not sensitivity — the mutation detection rates below are the sensitivity check. This report does NOT measure LLM run-to-run variance: no drafting endpoint runs in this loop. On a live endpoint the sidecar records per-draft usage in tool-log.jsonl and state.json, and the run register shows per-run draft variation."
     },
@@ -42,7 +42,7 @@
       "note": "The rule-path eval makes no model calls, so the measured cost of this report is 0 USD. On a live endpoint, cost per run = (prompt_tokens + completion_tokens) × the endpoint's published per-token price; usage per draft is recorded in tool-log.jsonl and on the run's usage block, so the figure is auditable from the append-only log."
     },
     "mutation": {
-      "repeatsPerMutation": 2,
+      "repeatsPerMutation": 3,
       "executed": 27,
       "skipped": 8,
       "overallDetectionRate": 100,
@@ -93,10 +93,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 14.4,
+      "medianMs": 0.65,
       "msRange": [
-        1.71,
-        27.1
+        0.53,
+        5.36
       ],
       "mutations": [
         {
@@ -159,10 +159,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 2.59,
+      "medianMs": 1,
       "msRange": [
-        1.71,
-        3.48
+        0.71,
+        6.14
       ],
       "mutations": [
         {
@@ -200,13 +200,13 @@
       "missed": [],
       "unlabelled": [],
       "rejectedUncited": 0,
-      "droppedBySelfCheck": 0,
+      "droppedBySelfCheck": 1,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.65,
+      "medianMs": 0.33,
       "msRange": [
-        0.52,
-        0.78
+        0.3,
+        0.53
       ],
       "mutations": [
         {
@@ -247,10 +247,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.69,
+      "medianMs": 0.46,
       "msRange": [
-        0.65,
-        0.73
+        0.45,
+        0.47
       ],
       "mutations": [
         {
@@ -300,10 +300,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.96,
+      "medianMs": 0.67,
       "msRange": [
-        0.91,
-        1.01
+        0.48,
+        0.69
       ],
       "mutations": [
         {
@@ -351,10 +351,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.75,
+      "medianMs": 0.47,
       "msRange": [
-        0.73,
-        0.76
+        0.43,
+        1.49
       ],
       "mutations": [
         {
@@ -395,10 +395,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.48,
+      "medianMs": 0.38,
       "msRange": [
-        0.43,
-        0.53
+        0.31,
+        0.4
       ],
       "mutations": [
         {
@@ -430,7 +430,7 @@
     }
   ],
   "data_quality_notes": [
-    "RW-UMUCYO: bid price tables are labelled RWF in the header but the cell values carry a KES prefix. Rule evidence text hard-codes KES, so RWF tender evidence is mislabelled.",
+    "RW-UMUCYO: bid price tables are labelled RWF in the header but the cell values carry a KES prefix (the publisher's mess, left as-is). The engine parses the currency each cell states and names the disagreement in the finding's evidence — it no longer hard-codes KES.",
     "KE-NCB sample brief says a bidder is short two REQUIRED documents; the documents show one missing.",
     "KE-MSA-2026-090 (added 2026-10-16): pack authored to carry the publishers' documented mess — the notice omits the buyer name entirely, and one bidder's KRA PIN fails the national scheme. Labels written from the documents and the rule definitions before the engine ran on the pack."
   ]

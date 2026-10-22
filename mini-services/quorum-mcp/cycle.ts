@@ -638,6 +638,29 @@ export function composeDebriefLetter(input: {
 
 /* ── Contract (G12/G13) ────────────────────────────────────────────────────── */
 
+/**
+ * A contract always has a contract value. The rule lives here so the pack
+ * composer, the signing gate and its executor all ask the same question: no
+ * path may open a contract at zero, because a zero-value contract cannot
+ * carry a variation percentage, a payment certificate or a meaningful award.
+ */
+export function contractValueCheck(
+  raw: unknown,
+): { ok: true; value: number } | { ok: false; reason: string } {
+  /* A gate may state the value as a number or as the line it was read from
+     ("RWF 2,150,000,000") — the digits are the value either way. */
+  const digits = String(raw ?? "").match(/-?\d[\d,]*(?:\.\d+)?/)?.[0];
+  const value = typeof raw === "number" ? raw : digits ? Number(digits.replace(/,/g, "")) : Number.NaN;
+  if (!Number.isFinite(value) || value <= 0) {
+    return {
+      ok: false,
+      reason:
+        "A contract always has a contract value — this award states no price. Record the winning bid's value before the contract pack is prepared or signed.",
+    };
+  }
+  return { ok: true, value };
+}
+
 export function variationPctOfContract(contractValue: number, valueDelta: number): number {
   if (!Number.isFinite(contractValue) || contractValue <= 0) return 0;
   return Math.round((Math.abs(valueDelta) / contractValue) * 1000) / 10;

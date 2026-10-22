@@ -44,6 +44,7 @@ import {
   composeProcurementFile,
   collectDeadlines,
   composeDebriefLetter,
+  contractValueCheck,
   cycleAnalytics,
   debarmentFindings,
   draftNoticeMd,
@@ -197,6 +198,10 @@ export function preApprovalCheck(
         return `The standstill window is ACTIVE until ${cycle.standstill.endsAt.slice(0, 10)} — the contract pack may be signed only after it lapses.`;
       }
       if (!cycle?.awardReport?.signedAt) return "The award report has not been signed — the contract pack follows the award.";
+      /* A contract without a value is not a contract. The pack carries the
+         winning bid's value; refuse to sign if it does not. */
+      const contractValue = contractValueCheck((gate.inputs as { value?: unknown })?.value);
+      if (!contractValue.ok) return contractValue.reason;
       return null;
     }
     case "certify_payment": {
@@ -287,11 +292,13 @@ export async function executeCycleGateAction(gate: Gate): Promise<Record<string,
       return { debriefId: letter.id, bidder: letter.bidder };
     }
     case "sign_contract_pack": {
-      const input = gate.inputs as { supplier?: string; value?: number; currency?: string; packMd?: string };
+      const input = gate.inputs as { supplier?: string; value?: unknown; currency?: string; packMd?: string };
+      const contractValue = contractValueCheck(input.value);
+      if (!contractValue.ok) throw new Error(contractValue.reason);
       cycle.contract = {
         tenderId: gate.tenderId,
         supplier: input.supplier ?? "—",
-        value: input.value ?? 0,
+        value: contractValue.value,
         currency: input.currency,
         openedAt: gate.decidedAt ?? new Date().toISOString(),
         openedFromGate: gate.id,
@@ -733,10 +740,17 @@ async function coreContractPack(tenderId: string) {
   if (!cycle?.awardReport?.signedAt) throw new Error("the award report must be signed before a contract pack is prepared");
   const winner = cycle.awardReport.recommendation;
   const winnerRow = cycle.matrix?.bids.find((b) => b.bidder === winner);
+  /* The contract is opened from the winner's evaluated price. No price, no
+     contract pack — a contract always has a contract value. */
+  const contractValue = contractValueCheck(winnerRow?.financial?.amount);
+  if (!contractValue.ok)
+    throw new Error(
+      `the recommended bid for ${tenderId} states no value — a contract cannot be prepared without a contract value. Record the winner's financial value on the evaluation matrix first.`,
+    );
   const packMd = composeContractPack({
     tenderId,
     ...(winner ? { supplier: winner } : {}),
-    ...(winnerRow?.financial ? { value: winnerRow.financial.amount } : {}),
+    value: contractValue.value,
     ...(winnerRow?.financial?.currency ? { currency: winnerRow.financial.currency } : {}),
   });
   const gate = raiseCycleGate({
@@ -745,7 +759,8 @@ async function coreContractPack(tenderId: string) {
     requiredOffice: "ACCOUNTING_OFFICER",
     inputs: {
       ...(winner ? { supplier: winner } : {}),
-      ...(winnerRow?.financial ? { value: winnerRow.financial.amount, currency: winnerRow.financial.currency } : {}),
+      value: contractValue.value,
+      ...(winnerRow?.financial?.currency ? { currency: winnerRow.financial.currency } : {}),
       packMd: packMd.slice(0, 120),
     },
     note: "Open the contract register from the signed pack",

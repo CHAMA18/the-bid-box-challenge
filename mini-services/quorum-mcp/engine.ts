@@ -617,6 +617,12 @@ interface LineItem {
   qty: number;
   unit: number;
   source: string;
+  /* The currency the price cell itself states — read, never assumed. Publishers
+     do mismatch it: the Rwanda pack's table is headed RWF while every cell
+     carries KES. */
+  currency?: string;
+  /* The currency the table's header declares, when it declares one. */
+  declaredCurrency?: string;
 }
 
 /* A bid as read from one tender file. `source` is the real filename it came from — the citation. */
@@ -732,18 +738,30 @@ export function parseOcdsBids(text: string, source: string): BidDoc[] {
 
 export function parseBid(text: string, bidder: string, source: string): LineItem[] {
   const items: LineItem[] = [];
+  /* Table state, read as the lines pass: the header names a currency and the
+     cells may name another. Both are kept so the finding can say what it saw. */
+  let declared: string | undefined;
   for (const line of text.split("\n")) {
-    const m = line.match(/^\|\s*([^|]+?)\s*\|\s*([\d,]+)\s*\|\s*KES\s*([\d,]+(?:\.\d+)?)\s*\|/);
+    const head = line.match(/\|\s*Unit price\s*\(([A-Z]{3})\)\s*\|/i);
+    if (head) {
+      declared = head[1].toUpperCase();
+      continue;
+    }
+    const m = line.match(/^\|\s*([^|]+?)\s*\|\s*([\d,]+)\s*\|\s*([A-Z]{3})\s*([\d,]+(?:\.\d+)?)\s*\|/);
     if (m) {
       items.push({
         bidder,
         source,
         item: m[1].trim(),
         qty: Number(m[2].replace(/,/g, "")),
-        unit: Number(m[3].replace(/,/g, "")),
+        unit: Number(m[4].replace(/,/g, "")),
+        currency: m[3],
+        ...(declared ? { declaredCurrency: declared } : {}),
       });
     }
   }
+  /* A table that declares no currency but states one in every cell is still
+     read; the header is simply absent from the finding. */
   return items;
 }
 
@@ -1051,12 +1069,19 @@ export function runRules(bids: BidDoc[], notice: string, noticeFile: string, gua
       const mid = Math.floor(peers.length / 2);
       const median = peers.length % 2 ? peers[mid] : (peers[mid - 1] + peers[mid]) / 2;
       if (median > 0 && li.unit > median * cutoff) {
+        /* The currency in the evidence is the one the cell stated, never a
+           default — and where the table header disagrees, the finding says so. */
+        const cur = li.currency ? `${li.currency} ` : "";
+        const mismatch =
+          li.currency && li.declaredCurrency && li.declaredCurrency !== li.currency
+            ? ` (price table headed ${li.declaredCurrency}; cells state ${li.currency})`
+            : "";
         findings.push({
           id: "",
           rule: "R-PRICE-OUTLIER",
           severity: "HIGH",
           item: `${li.item} × ${li.qty} — ${li.bidder}`,
-          evidence: `Unit price KES ${li.unit.toLocaleString()} vs peer median KES ${median.toLocaleString()} (${(li.unit / median).toFixed(1)}×) on line item "${key}".`,
+          evidence: `Unit price ${cur}${li.unit.toLocaleString()} vs peer median ${cur}${median.toLocaleString()} (${(li.unit / median).toFixed(1)}×) on line item "${key}"${mismatch}.`,
           citation: `${li.source}, price schedule`,
         });
       }
@@ -1683,6 +1708,12 @@ async function nodeDraft(s: typeof ReviewState.State) {
   return { drafts };
 }
 
+/* The value line a markdown bid states, in whatever currency it states it
+   ("**Bid value:** ZMW 3,900,000") — the gate records what the document says. */
+export function statedBidValueLine(text: string): string | undefined {
+  return text.match(/\*\*Bid value:\*\*\s*([A-Z]{3}\s*[\d][\d,]*(?:\.\d+)?)/)?.[1]?.trim();
+}
+
 async function nodeGate(s: typeof ReviewState.State) {
   const t0 = performance.now();
   const gateId = `gate_${Math.random().toString(36).slice(2, 8)}`;
@@ -1694,7 +1725,7 @@ async function nodeGate(s: typeof ReviewState.State) {
   const leadValue =
     lead0?.value !== undefined
       ? `${lead0.currency ?? ""} ${lead0.value.toLocaleString()}`.trim()
-      : (lead0?.text.match(/\*\*Bid value:\*\*\s*(KES[^\n]+)/)?.[1]?.trim() ?? undefined);
+      : (lead0 ? statedBidValueLine(lead0.text) : undefined);
   const gate: Gate = {
     id: gateId,
     runId: s.runId,

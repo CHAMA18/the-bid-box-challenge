@@ -12,6 +12,7 @@ import {
   collectDeadlines,
   composeAwardReport,
   composeProcurementFile,
+  contractValueCheck,
   cycleAnalytics,
   debarmentFindings,
   draftNoticeMd,
@@ -365,6 +366,24 @@ describe("notice authoring (G20)", () => {
     });
     const missing = noticeFieldCheck(md).filter((f) => !f.present).map((f) => f.field);
     expect(missing).toEqual(["Closing date", "Budget ceiling"]);
+  });
+});
+
+/* ── Contract value (G12) ──────────────────────────────────────────────────── */
+
+describe("contract value", () => {
+  test("a contract always carries a positive value", () => {
+    expect(contractValueCheck(2_150_000_000)).toEqual({ ok: true, value: 2_150_000_000 });
+    expect(contractValueCheck("2,150,000")).toEqual({ ok: true, value: 2_150_000 });
+    /* A gate that read the value off the pack states it with its currency. */
+    expect(contractValueCheck("RWF 2,150,000,000")).toEqual({ ok: true, value: 2_150_000_000 });
+  });
+  test("zero, negative, missing and unparseable values are refused", () => {
+    for (const bad of [0, -1, undefined, null, "", "  ", "not a number", Number.NaN, Number.POSITIVE_INFINITY]) {
+      const checked = contractValueCheck(bad);
+      expect(checked.ok).toBe(false);
+      if (!checked.ok) expect(checked.reason).toContain("contract value");
+    }
   });
 });
 

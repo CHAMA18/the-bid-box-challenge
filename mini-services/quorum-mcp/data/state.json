@@ -3022,6 +3022,24 @@
       "status": "ACTIVE",
       "addedBy": "org:E2E Probe Org 1792595886",
       "createdAt": "2026-10-21T15:18:06.915Z"
+    },
+    {
+      "id": "sup_c282efa9",
+      "name": "StackOne",
+      "registrationNo": "2324232323",
+      "regulatorNo": "dfdffdfdfdfdf",
+      "contactName": "Clivate Maiba",
+      "email": "chungu424@gmail.com",
+      "categories": [
+        "Medical supplies"
+      ],
+      "metadata": {
+        "source": "supplier-portal registration",
+        "orgId": "org_d86f8e92"
+      },
+      "status": "ACTIVE",
+      "addedBy": "org:StackOne",
+      "createdAt": "2026-10-21T20:44:16.341Z"
     }
   ],
   "applications": [
@@ -3191,6 +3209,19 @@
       "currency": "KES",
       "coverNote": "e2e probe application",
       "receivedAt": "2026-10-21T15:18:06.915Z",
+      "status": "RECEIVED"
+    },
+    {
+      "id": "app_6df8b5e7",
+      "tenderId": "KE-KCS-2026-042",
+      "orgId": "org_d86f8e92",
+      "orgName": "StackOne",
+      "actor": "org:StackOne",
+      "supplierId": "sup_c282efa9",
+      "registrationNo": "2324232323",
+      "amount": 543434343434,
+      "currency": "KES",
+      "receivedAt": "2026-10-21T20:44:16.344Z",
       "status": "RECEIVED"
     }
   ],
@@ -4233,5 +4264,5 @@
       "createdAt": "2026-10-21T15:18:06.532Z"
     }
   ],
-  "seq": 345
+  "seq": 347
 }

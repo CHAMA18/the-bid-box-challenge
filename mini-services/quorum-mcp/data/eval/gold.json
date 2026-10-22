@@ -317,7 +317,7 @@
   ],
   "heldOutNote": "Written after the rules were in place but before the engine was run on these two tenders. Labels were derived from the documents and the rule definitions only. Scored separately from the original set.",
   "data_quality_notes": [
-    "RW-UMUCYO: bid price tables are labelled RWF in the header but the cell values carry a KES prefix. Rule evidence text hard-codes KES, so RWF tender evidence is mislabelled.",
+    "RW-UMUCYO: bid price tables are labelled RWF in the header but the cell values carry a KES prefix (the publisher's mess, left as-is). The engine parses the currency each cell states and names the disagreement in the finding's evidence — it no longer hard-codes KES.",
     "KE-NCB sample brief says a bidder is short two REQUIRED documents; the documents show one missing.",
     "KE-MSA-2026-090 (added 2026-10-16): pack authored to carry the publishers' documented mess — the notice omits the buyer name entirely, and one bidder's KRA PIN fails the national scheme. Labels written from the documents and the rule definitions before the engine ran on the pack."
   ]

@@ -11,6 +11,7 @@ import {
   llmConfigFromEnv,
   llmPlanFromPack,
   type FetchLike,
+  parseBid,
   parseMarkdownBidValue,
   parseMarkdownCeiling,
   parseOcdsBids,
@@ -19,6 +20,7 @@ import {
   repairFinding,
   runAwardRules,
   runRules,
+  statedBidValueLine,
   supplierIdFindings,
   verifyFinding,
   verifyFindingReason,
@@ -74,6 +76,53 @@ describe("OCDS ingestion", () => {
 
   test("returns nothing for text that is not JSON", () => {
     expect(parseOcdsBids("not json", "x.json")).toEqual([]);
+  });
+});
+
+/* The publishers' documented mess: a price table headed in one currency whose
+   cells state another. The engine reads what the cell says and names the
+   disagreement instead of assuming a currency. */
+describe("price tables that state a currency", () => {
+  const RW_HEAD = "| Line item | Qty | Unit price (RWF) |\n| --- | --- | --- |\n";
+  const weza = `**Bidder:** Weza Technologies\n${RW_HEAD}| Solar tablet, 8-hour field rating | 7500 | KES 24,600 |\n`;
+  const ubumwe = `**Bidder:** Ubumwe Mobile\n${RW_HEAD}| Solar tablet, 8-hour field rating | 7500 | KES 92,400 |\n`;
+  const plainKes = "| Line item | Qty | Unit price |\n| --- | --- | --- |\n| Solar tablet | 7500 | KES 24,600 |\n";
+
+  test("reads the currency the cell states and the one the header declares", () => {
+    const items = parseBid(weza, "Weza Technologies", "02-bid-weza-technologies.md");
+    expect(items).toHaveLength(1);
+    expect(items[0].currency).toBe("KES");
+    expect(items[0].declaredCurrency).toBe("RWF");
+  });
+
+  test("a table with no declared currency still reads its cells", () => {
+    const items = parseBid(plainKes, "Acme", "02-bid-acme.md");
+    expect(items).toHaveLength(1);
+    expect(items[0].currency).toBe("KES");
+    expect(items[0].declaredCurrency).toBeUndefined();
+  });
+
+  test("the outlier finding states the cell's currency and names the mismatch", () => {
+    const findings = runRules(
+      [
+        { bidder: "Weza Technologies", text: weza, source: "02-bid-weza-technologies.md" },
+        { bidder: "Ubumwe Mobile", text: ubumwe, source: "03-bid-ubumwe-mobile.md" },
+      ],
+      "**Budget ceiling:** RWF 900,000,000\n",
+      "01-tender-notice.md",
+      { priceVariancePct: 100, checklist: "STANDARD", registryCrossCheck: false },
+    );
+    const outlier = findings.find((f) => f.rule === "R-PRICE-OUTLIER");
+    expect(outlier).toBeDefined();
+    expect(outlier?.evidence).toContain("Unit price KES 92,400");
+    expect(outlier?.evidence).toContain("price table headed RWF; cells state KES");
+    expect(outlier?.evidence).not.toContain("Unit price RWF");
+  });
+
+  test("a bid value in another currency still reaches the gate", () => {
+    expect(statedBidValueLine("**Bid value:** ZMW 3,900,000")).toBe("ZMW 3,900,000");
+    expect(statedBidValueLine("**Bid value:** RWF 2,150,000,000")).toBe("RWF 2,150,000,000");
+    expect(statedBidValueLine("**Bidder:** Acme\nno value stated")).toBeUndefined();
   });
 });
 
