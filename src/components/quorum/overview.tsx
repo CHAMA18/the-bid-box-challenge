@@ -101,6 +101,37 @@ export function Overview() {
                 </motion.div>
               </div>
 
+              {/* The two clocks, stated plainly */}
+              <div className="mt-4 flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-code text-[20px] font-extrabold leading-none tracking-[-0.02em] text-ink-950 tabular sm:text-[24px]">
+                    26<span className="ml-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">days</span>
+                  </p>
+                  <p className="mt-1.5 font-code text-[9.5px] tracking-[0.14em] text-ink-500">
+                    COMMITTEE WORK, BY HAND
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-code text-[20px] font-extrabold leading-none tracking-[-0.02em] text-brand-600 tabular sm:text-[24px]">
+                    ~20<span className="ml-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-600/70">min</span>
+                  </p>
+                  <p className="mt-1.5 font-code text-[9.5px] tracking-[0.14em] text-ink-500">
+                    WHAT YOUR AGENT SHOULD TAKE
+                  </p>
+                </div>
+              </div>
+
+              {/* Measured, not marketed — the bench behind the clock figures */}
+              <p className="mt-3 font-code text-[9.5px] leading-relaxed tracking-[0.12em] text-ink-400 sm:mt-4">
+                MEASURED, NOT CLAIMED — on the record's staged packs, the shipped
+                review graph (files → requirements → cited findings → human gate)
+                runs in 4–9 ms deterministic, 20–28 s on the configured model. The
+                read-and-flag pipeline scales to volume measured at ~0.9 s per MB
+                of pack text. The ~20 min stays the envelope for full real-world
+                packs — still two orders of magnitude inside 26 days, and the
+                gavel stays human either way.
+              </p>
+
               {/* Task chips over the committee segment */}
               <div className="mt-5 flex flex-wrap gap-2">
                 {TASKS.map((t, i) => (
@@ -120,7 +151,7 @@ export function Overview() {
                 ))}
               </div>
               <p className="mt-2.5 font-code text-[10px] tracking-[0.14em] text-ink-400">
-                ↑ WHAT THE COMMITTEE DOES BY HAND · THE RED SLICE — QUORUM&apos;S SHARE ↑
+                ↑ THE FIVE JOBS ABOVE ARE THE 26 DAYS · THE RED SLICE IS THE ~20 MIN ↑
               </p>
 
               {/* Human gate */}
