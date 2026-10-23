@@ -10,6 +10,7 @@ import { appendLog, shaOf, type Draft, type Finding, type Gate, type Requirement
 import { resolveDataDir } from "./paths";
 import { bidSecurityFindings, debarmentFindings, parseBidSecurity, parseClosingDate } from "./cycle";
 import { DEBARMENT_LIST } from "./debarment";
+import { TENDER_REF_RE } from "./marketplace";
 export type { Finding } from "./store";
 
 export type { ReviewPlan };
@@ -1268,7 +1269,7 @@ export function flagPack(
 
 /* ── 5. Direct MCP calls — the same checks as the review graph ───────────── */
 
-const SAFE_REF = /^[A-Za-z0-9._-]+$/;
+const SAFE_REF = TENDER_REF_RE;
 const SEVERITIES = ["HIGH", "MEDIUM", "LOW"];
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");

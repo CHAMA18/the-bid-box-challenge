@@ -75,6 +75,17 @@ export function marketplaceEntries(
 export type AdmissionCheck = { ok: true } | { ok: false; code: number; error: string };
 
 /** Shape checks that need no state: who is filing, and is the body a bid at all. */
+/**
+ * A tender reference is a single plain path segment. It must start and end
+ * with a letter or digit, so `.`, `..`, `..x` and `x..` never pass, and the
+ * reference can't climb out of TENDERS_DIR.
+ */
+export const TENDER_REF_RE = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+
+export function isSafeTenderRef(ref: unknown): ref is string {
+  return typeof ref === "string" && TENDER_REF_RE.test(ref);
+}
+
 export function validateApplicationRequest(args: {
   actor: string;
   tenderRef: unknown;
@@ -92,7 +103,7 @@ export function validateApplicationRequest(args: {
     };
   }
   const ref = typeof tenderRef === "string" ? tenderRef.trim() : "";
-  if (!ref || !/^[A-Za-z0-9._-]+$/.test(ref)) {
+  if (!isSafeTenderRef(ref)) {
     return { ok: false, code: 422, error: "tenderRef is required — name the tender you are applying to." };
   }
   const amt = Number(amount);

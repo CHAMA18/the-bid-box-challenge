@@ -24,7 +24,7 @@ import { NextRequest, NextResponse } from "next/server";
  *   3. every mutating forward carries an HMAC seal (x-quorum-attest over
  *      method|path|actor|ts) that the sidecar verifies — see
  *      src/lib/sidecar-attest.ts and mini-services store.attestVerify.
- * GET/HEAD stay open: the public dashboard reads are read-only by design.
+ * GET/HEAD stay open, except the applications list (officer session only).
  */
 
 import { getUserFromToken, SESSION_COOKIE } from "@/lib/auth";
@@ -52,6 +52,13 @@ async function proxy(req: NextRequest) {
   const actor = session?.name ?? "";
 
   const url = new URL(req.url);
+
+  /* The applications list names every bidder and its bid amount. It is an
+     officer-desk read only: suppliers reach their own rows through the
+     org-session routes, which attest directly to the sidecar. */
+  if (req.method === "GET" && url.pathname === "/api/applications" && !session) {
+    return NextResponse.json({ error: "Sign in to see the applications on the record." }, { status: 401 });
+  }
   url.searchParams.delete("XTransformPort");
   const search = url.searchParams.toString();
   const target = `http://${UPSTREAM_HOST}:${port}${url.pathname}${search ? `?${search}` : ""}`;

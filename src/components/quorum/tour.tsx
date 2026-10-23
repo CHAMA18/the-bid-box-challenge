@@ -30,6 +30,8 @@ export type TourStep = {
   target: string;
   title: string;
   body: string;
+  /** Host view tab to open before spotlighting the target (committee tabs). */
+  tab?: string;
   /** Preferred side of the target for the card; auto-chosen when omitted. */
   placement?: "top" | "bottom" | "left" | "right";
   /** Opaque action the host performs the moment the step opens. */

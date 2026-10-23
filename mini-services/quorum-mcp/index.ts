@@ -333,7 +333,7 @@ Bun.serve({
         if (!sessionActor) {
           return json(
             {
-              error: `Unattested mutation refused — ${seal.reason} Sign in (a verified session is accepted) and retry.`,
+              error: `${seal.reason} Sign in (a verified session is accepted) and retry.`,
             },
             401,
           );
@@ -1128,7 +1128,7 @@ Bun.serve({
     }
 
     /* ── The tender cycle — solicitation to closure (waves 1-3) ───────── */
-    if (path.startsWith("/api/cycle") || path.startsWith("/api/procurement-file") || path.startsWith("/api/pipeline") || /^\/api\/tenders\/[A-Za-z0-9._-]+\/(closing|opening|coi|matrix|alb|award-report|award-notice|standstill|debrief|contract|complaints|clarifications|addenda|notices|specs)/.test(path)) {
+    if (path.startsWith("/api/cycle") || path.startsWith("/api/procurement-file") || path.startsWith("/api/pipeline") || /^\/api\/tenders\/[A-Za-z0-9._-]+\/(closing|opening|coi|matrix|alb|award-report|award-notice|standstill|debrief|contract|complaints|clarifications|addenda|notices|specs)/.test(path) || /^\/api\/tenders\/[A-Za-z0-9._-]+$/.test(path)) {
       const cycleBody = req.method === "POST" ? await readBody(req) : {};
       return (await handleCycleRoutes(path, req.method, cycleBody)) ?? json({ error: "not found" }, 404);
     }

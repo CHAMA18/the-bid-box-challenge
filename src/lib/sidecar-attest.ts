@@ -12,7 +12,11 @@ import { createHmac } from "crypto";
  * The formula MUST mirror store.ts (attestSignature / attestVerify) exactly.
  * GATE_SECRET overrides the shipped development default on real deployments.
  */
-export const ATTEST_SECRET = process.env.GATE_SECRET?.trim() || "quorum-dev-attest-secret";
+const DEV_ATTEST_SECRET = "quorum-dev-attest-secret";
+export const ATTEST_SECRET = process.env.GATE_SECRET?.trim() || DEV_ATTEST_SECRET;
+if (process.env.NODE_ENV === "production" && ATTEST_SECRET === DEV_ATTEST_SECRET) {
+  throw new Error("GATE_SECRET must be set to a real secret in production — refusing to run with the shipped default.");
+}
 
 export function attestSignature(method: string, path: string, actor: string, ts: number): string {
   return createHmac("sha256", ATTEST_SECRET).update(`${method}|${path}|${actor}|${ts}`).digest("hex");

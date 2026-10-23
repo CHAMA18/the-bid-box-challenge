@@ -1114,6 +1114,11 @@ export function CycleView({ onToast }: { user?: unknown; onToast: (m: string) =>
   const certifyMatrix = () =>
     act(`/api/tenders/${ref}/matrix/certify`, {}, "CERTIFICATION GATE RAISED — EVALUATION COMMITTEE SIGNS").then((ok) => ok && refreshCycle());
 
+  /* Same rule the sidecar enforces on signing: every PRESENT member must have a COI record. */
+  const outstandingCoi = cycle
+    ? members.filter((m) => !cycle.coi.some((x) => x.member.toLowerCase() === m.name.toLowerCase()))
+    : [];
+
   const EvaluationTab = cycle ? (
     <div className="grid gap-4">
       <Card title="Conflict-of-interest declarations" sub="EVERY PRESENT MEMBER DECLARES BEFORE THE MATRIX IS CERTIFIED — THE GATE ENFORCES IT">
@@ -1229,8 +1234,14 @@ export function CycleView({ onToast }: { user?: unknown; onToast: (m: string) =>
                   <FileSignature className="h-3.5 w-3.5" aria-hidden="true" /> Record MED session
                 </Btn>
               </div>
-              <div className="flex items-end">
-                <Btn onClick={certifyMatrix} disabled={busy}>
+              <div className="flex flex-col items-start gap-2">
+                {outstandingCoi.length ? (
+                  <p className="text-[12px] text-ink-600">
+                    <span className="font-semibold text-ink-900">Conflict-of-interest declarations outstanding:</span>{" "}
+                    {outstandingCoi.map((m) => m.name).join(", ")}
+                  </p>
+                ) : null}
+                <Btn onClick={certifyMatrix} disabled={busy || outstandingCoi.length > 0}>
                   <Stamp className="h-3.5 w-3.5" aria-hidden="true" /> Certify the matrix (gate)
                 </Btn>
               </div>

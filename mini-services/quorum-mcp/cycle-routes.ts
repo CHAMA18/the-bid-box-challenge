@@ -8,8 +8,9 @@
  * code paths, and every step lands in the append-only tool log.
  */
 
-import { randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import {
+  GATE_SECRET,
   appendLog,
   shaOf,
   saveState,
@@ -59,13 +60,14 @@ import {
   weightsSum,
 } from "./cycle";
 import { DEBARMENT_LIST } from "./debarment";
+import { TENDER_REF_RE } from "./marketplace";
 import { listSampleTenders } from "./samples";
 import { llmConfigFromEnv, callLlama } from "./engine";
 
 /* ── Small helpers ─────────────────────────────────────────────────────────── */
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
-const SAFE_REF = /^[A-Za-z0-9._-]+$/;
+const SAFE_REF = TENDER_REF_RE;
 
 function cycleFor(tenderId: string): TenderCycle {
   const existing = state.cycle.find((c) => c.tenderId === tenderId);
@@ -1265,6 +1267,28 @@ async function procurementFile(tenderId: string) {
   return { md, logVerified: { ok: log.ok, checked: log.checked } };
 }
 
+/* ── Signed procurement bundle — the auditors' single, verifiable package ──
+   Wraps the procurement file (Markdown + log-chain verdict) in a manifest
+   that records a SHA-256 for every artifact, then seals the manifest with an
+   HMAC over the canonical JSON using GATE_SECRET. An auditor recomputes the
+   hashes and the HMAC to confirm nothing was altered after sealing. */
+async function procurementBundle(tenderId: string) {
+  const file = await procurementFile(tenderId);
+  const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+  const generatedAt = new Date().toISOString();
+  const artifacts = [
+    { name: `procurement-file-${tenderId}.md`, mediaType: "text/markdown", sha256: sha(file.md) },
+    {
+      name: `log-chain-verdict-${tenderId}.json`,
+      mediaType: "application/json",
+      sha256: sha(JSON.stringify(file.logVerified)),
+    },
+  ];
+  const manifest = { tenderId, generatedAt, logVerified: file.logVerified, artifacts };
+  const signature = createHmac("sha256", GATE_SECRET).update(JSON.stringify(manifest)).digest("hex");
+  return { manifest, signature, signatureAlgorithm: "HMAC-SHA256", content: { [artifacts[0].name]: file.md, [artifacts[1].name]: file.logVerified } };
+}
+
 /* ── REST surface ──────────────────────────────────────────────────────────── */
 
 export const json = (data: unknown, code = 200) =>
@@ -1291,9 +1315,30 @@ export async function handleCycleRoutes(path: string, method: string, body: Reco
   if (path === "/api/cycle/deadlines" && method === "GET") {
     return json({ deadlines: collectDeadlines(state.cycle) });
   }
+  const tenderGet = path.match(/^\/api\/tenders\/([A-Za-z0-9._-]+)$/);
+  if (tenderGet && method === "GET") {
+    const tenderId = decodeURIComponent(tenderGet[1]);
+    const cycle = state.cycle.find((c) => c.tenderId === tenderId);
+    const pipeline = state.pipeline.find((p) => p.ref === tenderId || p.linkedTenderId === tenderId);
+    if (!cycle && !pipeline) return json({ error: `no tender "${tenderId}" on record` }, 404);
+    return json({
+      tenderId,
+      ...(pipeline ? { pipeline } : {}),
+      ...(cycle ? { cycle } : {}),
+      runs: state.runs.filter((r) => r.tenderId === tenderId).map((r) => ({ id: r.id, status: r.status, startedAt: r.startedAt })),
+      gates: state.gates.filter((g) => g.tenderId === tenderId).map((g) => ({ id: g.id, tool: g.tool, status: g.status })),
+    });
+  }
   if (/^\/api\/procurement-file\/[A-Za-z0-9._-]+$/.test(path) && method === "GET") {
     try {
       return json(await procurementFile(tenderRef(/^\/api\/procurement-file\/([A-Za-z0-9._-]+)$/)));
+    } catch (err) {
+      return json({ error: (err as Error).message }, 422);
+    }
+  }
+  if (/^\/api\/procurement-file\/[A-Za-z0-9._-]+\/bundle$/.test(path) && method === "GET") {
+    try {
+      return json(await procurementBundle(tenderRef(/^\/api\/procurement-file\/([A-Za-z0-9._-]+)\/bundle$/)));
     } catch (err) {
       return json({ error: (err as Error).message }, 422);
     }

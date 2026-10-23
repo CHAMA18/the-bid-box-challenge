@@ -229,7 +229,11 @@ export async function verifyToolLogFile(): Promise<{ ok: boolean; brokenAt: numb
    identity can no longer be typed by the caller — it is attested by the
    process that verified the session. GATE_SECRET overrides the shipped
    development default on real deployments. */
-export const GATE_SECRET = process.env.GATE_SECRET?.trim() || "quorum-dev-attest-secret";
+const DEV_GATE_SECRET = "quorum-dev-attest-secret";
+export const GATE_SECRET = process.env.GATE_SECRET?.trim() || DEV_GATE_SECRET;
+if (process.env.NODE_ENV === "production" && GATE_SECRET === DEV_GATE_SECRET) {
+  throw new Error("GATE_SECRET must be set to a real secret in production — refusing to run with the shipped default.");
+}
 export const ATTEST_SKEW_MS = 5 * 60 * 1000;
 
 export function attestSignature(method: string, path: string, actor: string, ts: number, secret = GATE_SECRET): string {

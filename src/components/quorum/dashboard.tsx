@@ -82,6 +82,8 @@ type McRun = {
   /* Backend run identity (`run_…`) — unique even when the same tender is
      reviewed twice. React keys use this; `id` stays the human-facing ref. */
   uid?: string;
+  /* 1-based attempt number for this tender (review 2 of 3, …). */
+  attempt?: number;
   title: string;
   buyer: string;
   bids: number | null;
@@ -131,6 +133,8 @@ type BackendRun = {
   gateId?: string;
   seal?: string | null;
   sealedBy?: string | null;
+  /* Set once the review plan is decided; pack.bids is the bids staged for the run. */
+  plan?: { pack?: { bids?: number } } | null;
 };
 
 type BackendGate = {
@@ -263,17 +267,25 @@ function useMissionData() {
     };
   }, [pullRegistry]);
 
-  const runs = useMemo<McRun[]>(
-    () =>
-      rawRuns.map((r) => {
+  const runs = useMemo<McRun[]>(() => {
+    /* rawRuns arrives newest-first; count attempts oldest-first per tender. */
+    const seen = new Map<string, number>();
+    const attemptOf = new Map<string, number>();
+    for (const r of [...rawRuns].reverse()) {
+      const n = (seen.get(r.tenderId) ?? 0) + 1;
+      seen.set(r.tenderId, n);
+      attemptOf.set(r.id, n);
+    }
+    return rawRuns.map((r) => {
         const citations = r.findings.filter((f) => f.citation).length;
         const known = registry[r.tenderId];
         return {
           id: r.tenderId,
           uid: r.id,
+          attempt: attemptOf.get(r.id),
           title: known?.title ?? r.tenderId,
           buyer: known?.buyer ?? "",
-          bids: null,
+          bids: r.plan?.pack?.bids ?? null,
           findings: r.findings.length,
           citations,
           unsourced: r.findings.length - citations,
@@ -282,14 +294,15 @@ function useMissionData() {
           seal: r.seal ?? null,
           sealedBy: r.sealedBy ?? null,
         };
-      }),
-    [rawRuns, registry]
-  );
+      });
+  }, [rawRuns, registry]);
 
   const queue = useMemo<GateItem[]>(
     () =>
       rawGates
         .filter((g) => g.status === "PENDING")
+        /* Oldest first: the longest-waiting decision is at the top. */
+        .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
         .map((g) => {
           const tool = g.tool ?? "file_gate_submission";
           const fact = gateFact(tool, g.inputs, g.id);
@@ -1776,42 +1789,7 @@ function SidebarContent({
       </div>
 
       <div className="px-3 pb-5 pt-4">
-        <div className="rounded-xl border border-white/10 bg-night-2 px-3.5 py-3">
-          <p className="flex items-center gap-2 font-code text-[9px] font-semibold tracking-[0.18em] text-ink-200">
-            <span className="relative flex h-1.5 w-1.5">
-              {agentModeOf(agent) === "online" && (
-                <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-brand-500" aria-hidden="true" />
-              )}
-              <span
-                className={cn(
-                  "relative inline-flex h-1.5 w-1.5 rounded-full",
-                  agentModeOf(agent) === "online" && "bg-brand-500",
-                  agentModeOf(agent) === "offline" && "bg-ink-600",
-                  agentModeOf(agent) === "linking" && "animate-pulse bg-ink-400"
-                )}
-                aria-hidden="true"
-              />
-            </span>
-            {agentModeOf(agent) === "online"
-              ? "AGENT · ONLINE"
-              : agentModeOf(agent) === "offline"
-                ? "AGENT · OFFLINE"
-                : "AGENT · LINKING"}
-          </p>
-          <p className="mt-1.5 font-code text-[7.5px] leading-[1.8] tracking-[0.16em] text-ink-500">
-            {agent.health
-              ? `MCP · ${agent.health.fsMcp.tools.length} FS TOOLS · LLM DRAFTING`
-              : "MCP · LLM DRAFTING"}
-            <br />
-            {agent.health
-              ? `${agent.health.counts.toolCalls} TOOL CALLS LOGGED · ${agent.health.counts.pendingGates} GATE${
-                  agent.health.counts.pendingGates === 1 ? "" : "S"
-                } PENDING`
-              : "AWAITING SIDECAR TELEMETRY"}
-          </p>
-        </div>
-
-        <div className="mt-3">
+        <div>
           <ThemeModeRow />
         </div>
 
@@ -1979,7 +1957,14 @@ function RunRegister({
                       aria-label={`${run.id} — ${run.title}. Toggle run details.`}
                     >
                       <td className="py-3.5 pl-5 pr-4">
-                        <p className="font-code text-[10px] font-bold tracking-[0.08em] text-ink-950">{run.id}</p>
+                        <p className="font-code text-[10px] font-bold tracking-[0.08em] text-ink-950">
+                          {run.id}
+                          {run.attempt && run.attempt > 1 ? (
+                            <span className="ml-2 rounded bg-ink-100 px-1.5 py-0.5 text-[8.5px] tracking-[0.14em] text-ink-500">
+                              REVIEW {run.attempt}
+                            </span>
+                          ) : null}
+                        </p>
                         <p className="mt-0.5 max-w-[240px] truncate text-[12.5px] font-medium text-ink-600">{run.title}</p>
                       </td>
                       <td className="px-4 py-3.5 text-[13px] font-semibold text-ink-800 tabular">
@@ -4193,8 +4178,8 @@ function AwardLedgerView({
       title="Award history"
       sub="Every decision made at a gate — who signed, what they signed, and when. The agent writes everything else; only this page carries the gavel."
     >
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-        <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-2">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6">
+        <div className="min-w-0 space-y-4 sm:space-y-6">
           <div data-tour="ledger-stats" className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
             {[
               { label: "DECISIONS LOGGED", value: ledger.length },
@@ -4275,7 +4260,7 @@ function AwardLedgerView({
           </div>
         </div>
 
-        <div className="grid content-start gap-4 sm:gap-6">
+        <div className="grid content-start gap-4 sm:gap-6 lg:grid-cols-2">
           <div className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
             <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
             <div className="relative">
@@ -4427,10 +4412,37 @@ function downloadText(filename: string, text: string): void {
   URL.revokeObjectURL(url);
 }
 
+type CommitteeTab = "roll" | "quorum" | "desk";
+
+const COMMITTEE_TABS: { id: CommitteeTab; label: string }[] = [
+  { id: "roll", label: "The roll" },
+  { id: "quorum", label: "Quorum" },
+  { id: "desk", label: "Sitting room" },
+];
+
+/* Tab badges: the number each tab is about, so the bar reads at a glance. */
+function committeeTabCount(id: CommitteeTab, data: CommitteeData | null, live: boolean): string | null {
+  if (!data) return null;
+  if (id === "roll") return String(data.seats);
+  if (id === "quorum") return `${data.present}/${data.required}`;
+  return live ? "LIVE" : null;
+}
+
 function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: string) => void }) {
   const [data, setData] = useState<CommitteeData | null>(null);
   const [loadErr, setLoadErr] = useState(false);
   const [summoning, setSummoning] = useState(false);
+  const [tab, setTab] = useState<CommitteeTab>("roll");
+
+  /* The guided tour opens the tab each step spotlights. */
+  useEffect(() => {
+    const onTab = (e: Event) => {
+      const t = (e as CustomEvent<CommitteeTab>).detail;
+      if (t === "roll" || t === "quorum" || t === "desk") setTab(t);
+    };
+    window.addEventListener("mc-committee-tab", onTab);
+    return () => window.removeEventListener("mc-committee-tab", onTab);
+  }, []);
 
   /* The sitting room — desk state */
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -4512,6 +4524,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
           : "A SITTING IS ALREADY OPEN — ITS ROOM IS ON THE DESK"
       );
       if (d.minted) {
+        setTab("desk");
         window.setTimeout(() => {
           deskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 180);
@@ -4738,8 +4751,13 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
         </button>
       }
     >
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-span-2">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6">
+        <div
+          id="committee-pane-roll"
+          role="tabpanel"
+          aria-labelledby="committee-tab-roll"
+          className={cn("min-w-0", tab !== "roll" && "hidden")}
+        >
           {loadErr ? (
             <div className="rounded-2xl border border-dashed border-ink-200 p-8 text-center">
               <p className="font-code text-[10px] font-bold tracking-[0.22em] text-ink-500">
@@ -4763,7 +4781,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
               ))}
             </div>
           ) : (
-            <div data-tour="committee-roll" className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+            <div data-tour="committee-roll" className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
               {roll.map((m, i) => (
                 <motion.div
                   key={m.name}
@@ -4815,12 +4833,12 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
                     )}
                   </span>
                   {!m.you && m.id && (
-                    <div className="mt-3 flex items-center gap-2.5 border-t border-ink-100 pt-2.5">
+                    <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-2 border-t border-ink-100 pt-2.5">
                       <select
                         value={m.office ?? ""}
                         onChange={(e) => void setMemberFlag(m.id!, { office: e.target.value || undefined })}
                         aria-label={`Office of ${m.name}`}
-                        className="h-7 rounded-lg border border-ink-200 bg-white px-1.5 font-code text-[7.5px] font-bold tracking-[0.12em] text-ink-600"
+                        className="h-7 min-w-0 flex-1 rounded-lg border border-ink-200 bg-white px-1.5 font-code text-[7.5px] font-bold tracking-[0.12em] text-ink-600"
                       >
                         <option value="">OFFICE…</option>
                         {MEMBER_OFFICES.map((o) => (
@@ -4832,7 +4850,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
                       <button
                         type="button"
                         onClick={() => void setMemberFlag(m.id!, { status: m.excused ? "PRESENT" : "EXCUSED" })}
-                        className="font-code text-[7px] font-bold tracking-[0.16em] text-ink-400 transition-colors hover:text-ink-950"
+                        className="whitespace-nowrap font-code text-[7px] font-bold tracking-[0.16em] text-ink-400 transition-colors hover:text-ink-950"
                       >
                         {m.excused ? "RETURN TO THE ROLL" : "EXCUSE"}
                       </button>
@@ -4841,7 +4859,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
                         type="button"
                         onClick={() => void removeMember(m.id!)}
                         className={cn(
-                          "font-code text-[7px] font-bold tracking-[0.16em] transition-colors",
+                          "whitespace-nowrap font-code text-[7px] font-bold tracking-[0.16em] transition-colors",
                           armRemove === m.id ? "text-brand-600" : "text-ink-400 hover:text-brand-600"
                         )}
                       >
@@ -4869,7 +4887,12 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
           )}
         </div>
 
-        <div className="grid content-start gap-4 sm:gap-6">
+        <div
+          id="committee-pane-quorum"
+          role="tabpanel"
+          aria-labelledby="committee-tab-quorum"
+          className={cn("grid content-start gap-4 sm:gap-6", tab === "quorum" && "max-w-xl", tab !== "quorum" && "hidden")}
+        >
           <div data-tour="committee-quorum" className="relative overflow-hidden rounded-2xl border border-ink-950 bg-night p-5 text-white shadow-[0_22px_55px_rgba(11,12,15,0.3)]">
             <div className="bg-grid-dark pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
             <div className="relative">
@@ -4933,6 +4956,12 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
              source; no accounts, nothing installed), the committee register
              becomes the door list, and the minutes are written from this
              desk straight into the record. ──────────────────────────────── */}
+      <div
+        id="committee-pane-desk"
+        role="tabpanel"
+        aria-labelledby="committee-tab-desk"
+        className={cn(tab !== "desk" && "hidden")}
+      >
       <div id="mc-sitting-desk" ref={deskRef} className="mt-4 scroll-mt-24 sm:mt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="flex items-center gap-2.5 font-code text-[9px] font-bold uppercase tracking-[0.26em] text-ink-500">
@@ -5324,6 +5353,7 @@ function CommitteeView({ user, onToast }: { user: AuthUser | null; onToast: (m: 
             )}
           </>
         )}
+      </div>
       </div>
 
       {/* Register-a-member dialog — the register is what opens the door */}
@@ -6071,16 +6101,19 @@ const WALKTHROUGH: WalkthroughChapter[] = [
     tour: [
       {
         target: "committee-roll",
+        tab: "roll",
         title: "The roll, in reading order",
         body: "The chair opens, the gavel seat follows, then the members — excused seats close the roll. Every card is a stored record, not a hardcoded name.",
       },
       {
         target: "committee-quorum",
+        tab: "quorum",
         title: "The mark on the door",
         body: "Seats present against seats required. Quorum is the threshold an award must clear before the sitting can decide.",
       },
       {
         target: "committee-summon",
+        tab: "quorum",
         title: "Summon the sitting",
         body: "A summons mints a fresh Jitsi room, opens the minutes and admits only names on this register. One sitting is open at a time.",
       },
@@ -8191,6 +8224,7 @@ export function Dashboard({
     if (!tour) return;
     const s = WALKTHROUGH[tour.ch]?.tour?.[i];
     if (s?.action === "open-wizard") setModalOpen(true);
+    if (s?.tab) window.dispatchEvent(new CustomEvent("mc-committee-tab", { detail: s.tab }));
     setTour({ ...tour, step: i });
   };
 

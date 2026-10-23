@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T21:03:58.295Z",
+  "generatedAt": "2026-10-23T16:37:32.934Z",
   "labeller": "one human reviewer, one pass over the source documents, written before the engine was run on them. Not independently double-labelled.",
   "covered_means": "a rule in the engine is designed to raise this finding type. covered:false items measure what the rule set does not claim to catch. Coverage flags track the CURRENT rule set: when a rule lands (e.g. plan_review deep-value parsing of markdown bid values, 2026-10-16), the flags it covers flip to true — the labels themselves are never edited after their original single pass.",
   "summary": {
@@ -27,10 +27,10 @@
     "llmCallsPerRun": 0,
     "variance": {
       "findingsIdenticalAcrossRuns": "7/7 tenders",
-      "msMedianPerPack": 0.47,
+      "msMedianPerPack": 0.67,
       "msSpread": [
-        0.33,
-        1
+        0.48,
+        0.94
       ],
       "note": "Identical findings across repeated runs prove stability, not sensitivity — the mutation detection rates below are the sensitivity check. This report does NOT measure LLM run-to-run variance: no drafting endpoint runs in this loop. On a live endpoint the sidecar records per-draft usage in tool-log.jsonl and state.json, and the run register shows per-run draft variation."
     },
@@ -93,10 +93,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.65,
+      "medianMs": 0.94,
       "msRange": [
-        0.53,
-        5.36
+        0.65,
+        7.46
       ],
       "mutations": [
         {
@@ -159,10 +159,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 1,
+      "medianMs": 0.92,
       "msRange": [
-        0.71,
-        6.14
+        0.73,
+        3.57
       ],
       "mutations": [
         {
@@ -203,10 +203,10 @@
       "droppedBySelfCheck": 1,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.33,
+      "medianMs": 0.64,
       "msRange": [
-        0.3,
-        0.53
+        0.43,
+        0.85
       ],
       "mutations": [
         {
@@ -247,10 +247,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.46,
+      "medianMs": 0.69,
       "msRange": [
-        0.45,
-        0.47
+        0.48,
+        0.79
       ],
       "mutations": [
         {
@@ -302,8 +302,8 @@
       "identicalAcrossRuns": true,
       "medianMs": 0.67,
       "msRange": [
-        0.48,
-        0.69
+        0.64,
+        0.92
       ],
       "mutations": [
         {
@@ -351,10 +351,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.47,
+      "medianMs": 0.51,
       "msRange": [
-        0.43,
-        1.49
+        0.48,
+        0.72
       ],
       "mutations": [
         {
@@ -395,10 +395,10 @@
       "droppedBySelfCheck": 0,
       "ruleCapHit": false,
       "identicalAcrossRuns": true,
-      "medianMs": 0.38,
+      "medianMs": 0.48,
       "msRange": [
-        0.31,
-        0.4
+        0.37,
+        0.85
       ],
       "mutations": [
         {

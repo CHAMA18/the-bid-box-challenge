@@ -81,6 +81,20 @@ describe("validateApplicationRequest — shape and identity", () => {
     }
   });
 
+  test("dot-only and traversal refs are refused — they resolve to the tenders folder itself or its parent", () => {
+    for (const tenderRef of [".", "..", "...", "..x", "x..", ".hidden", "a/../b", "a\\b"]) {
+      const out = validateApplicationRequest({ actor: "org:Rift Pumps Ltd", tenderRef, amount: 1 });
+      expect(out.ok).toBe(false);
+      if (!out.ok) expect(out.code).toBe(422);
+    }
+  });
+
+  test("a plain tender reference with dots, dashes and underscores still passes", () => {
+    for (const tenderRef of ["KE-WRA-2026-058", "ZM.2026_01", "T1"]) {
+      expect(validateApplicationRequest({ actor: "org:Rift Pumps Ltd", tenderRef, amount: 1 }).ok).toBe(true);
+    }
+  });
+
   test("currency must look like a code and the note is capped", () => {
     const badCurrency = validateApplicationRequest({ actor: "org:Rift Pumps Ltd", tenderRef: "T1", amount: 1, currency: "KES!!" });
     expect(badCurrency.ok).toBe(false);
