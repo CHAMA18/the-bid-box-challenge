@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[69274,["/the-bid-box-challenge/_next/static/chunks/334d8a3b4ee68e91.js","/the-bid-box-challenge/_next/static/chunks/8d0e680d5be99195.js","/the-bid-box-challenge/_next/static/chunks/efc40cc86a0163d2.js","/the-bid-box-challenge/_next/static/chunks/bab67a296e9099da.js","/the-bid-box-challenge/_next/static/chunks/5bed5f8198a1530f.js","/the-bid-box-challenge/_next/static/chunks/60d685e185cbd4bf.js"],"OrgAuthScreen"]
+3:I[97367,["/the-bid-box-challenge/_next/static/chunks/ff1a16fafef87110.js","/the-bid-box-challenge/_next/static/chunks/694836347d1e5ef3.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+0:{"buildId":"G0p9PElQTa_r04JXQ7dBN","rsc":["$","$1","c",{"children":[["$","$L2",null,{}],[["$","script","script-0",{"src":"/the-bid-box-challenge/_next/static/chunks/bab67a296e9099da.js","async":true}],["$","script","script-1",{"src":"/the-bid-box-challenge/_next/static/chunks/5bed5f8198a1530f.js","async":true}],["$","script","script-2",{"src":"/the-bid-box-challenge/_next/static/chunks/60d685e185cbd4bf.js","async":true}]],["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"loading":null,"isPartial":false}
+5:null
