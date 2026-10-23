@@ -16,6 +16,9 @@ concurrency:
 
 jobs:
   build:
+    # Static docs site only exists on the public repo that hosts Pages;
+    # the quorum repo is private with no Pages entitlement on this plan.
+    if: github.repository == 'CHAMA18/the-bid-box-challenge'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
