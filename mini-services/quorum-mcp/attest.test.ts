@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ATTEST_SKEW_MS, GATE_SECRET, appendLog, attestSignature, attestVerify, auditHealth, state } from "./store";
+import { ATTEST_SKEW_MS, appendLog, attestSignature, attestVerify, auditHealth, gateSecret, state } from "./store";
+
+const GATE_SECRET = gateSecret();
 import { handleCycleRoutes, preApprovalCheck } from "./cycle-routes";
 import type { Gate, RosterMemberForGate, TenderCycle } from "./store";
 

@@ -10,7 +10,7 @@
 
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import {
-  GATE_SECRET,
+  gateSecret,
   appendLog,
   shaOf,
   saveState,
@@ -1285,7 +1285,7 @@ async function procurementBundle(tenderId: string) {
     },
   ];
   const manifest = { tenderId, generatedAt, logVerified: file.logVerified, artifacts };
-  const signature = createHmac("sha256", GATE_SECRET).update(JSON.stringify(manifest)).digest("hex");
+  const signature = createHmac("sha256", gateSecret()).update(JSON.stringify(manifest)).digest("hex");
   return { manifest, signature, signatureAlgorithm: "HMAC-SHA256", content: { [artifacts[0].name]: file.md, [artifacts[1].name]: file.logVerified } };
 }
 

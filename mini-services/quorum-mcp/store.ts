@@ -230,13 +230,23 @@ export async function verifyToolLogFile(): Promise<{ ok: boolean; brokenAt: numb
    process that verified the session. GATE_SECRET overrides the shipped
    development default on real deployments. */
 const DEV_GATE_SECRET = "quorum-dev-attest-secret";
-export const GATE_SECRET = process.env.GATE_SECRET?.trim() || DEV_GATE_SECRET;
-if (process.env.NODE_ENV === "production" && GATE_SECRET === DEV_GATE_SECRET) {
-  throw new Error("GATE_SECRET must be set to a real secret in production — refusing to run with the shipped default.");
+
+/**
+ * GATE_SECRET resolves lazily, per signature, and then fails closed: the
+ * guard lives at the first use, not at module evaluation. Production builds
+ * import this module with no runtime secrets in scope and must still load;
+ * a production PROCESS without a real GATE_SECRET still refuses to sign.
+ */
+export function gateSecret(): string {
+  const secret = process.env.GATE_SECRET?.trim() || DEV_GATE_SECRET;
+  if (process.env.NODE_ENV === "production" && secret === DEV_GATE_SECRET) {
+    throw new Error("GATE_SECRET must be set to a real secret in production — refusing to run with the shipped default.");
+  }
+  return secret;
 }
 export const ATTEST_SKEW_MS = 5 * 60 * 1000;
 
-export function attestSignature(method: string, path: string, actor: string, ts: number, secret = GATE_SECRET): string {
+export function attestSignature(method: string, path: string, actor: string, ts: number, secret = gateSecret()): string {
   return createHmac("sha256", secret).update(`${method}|${path}|${actor}|${ts}`).digest("hex");
 }
 
