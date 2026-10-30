@@ -1,5 +1,7 @@
 # Quorum — agentic tender review for public procurement
 
+[![M8ven Verified](https://m8ven.ai/badge/mcp/chama18-quorum-5uxqrc?variant=verified&v=af20baa4bb1f5d01b367572d01a455d7)](https://m8ven.ai/mcp/chama18-quorum-5uxqrc?s=readme)
+
 **The agent prepares the file. The committee awards the tender.**
 
 Built by **CHAMA18** · Deployed at `quorum.chungu-chama.com` (AWS `af-south-1`, hosted on EC2) · Stack: Next.js 16 · Bun · LangGraph.js · MCP
